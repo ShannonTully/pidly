@@ -93,10 +93,17 @@ pidly agents          # writes a section into AGENTS.md, CLAUDE.md, ...
 pidly agents -f docs/AGENTS.md
 ```
 
-The section sits between `<!-- pidly:begin -->` and `<!-- pidly:end -->`, so
-re-running updates it in place and leaves the rest of the file alone. It
-explains the format first and the commands second, so it still works for an
-agent in a checkout where pidly isn't installed.
+This writes two things: a ~50 line summary into `AGENTS.md`, between
+`<!-- pidly:begin -->` and `<!-- pidly:end -->` so re-running updates it in
+place and leaves the rest of the file alone; and `.pidly/README.md`, a fuller
+reference the summary points at.
+
+The split is by reading frequency. The summary is in every agent's context,
+so it is kept to a budget the tests enforce. The reference is read when a rule
+is actually needed. Both explain the format before the commands, so they still
+work for an agent in a checkout where pidly isn't installed — and both ship
+inside the tracker, since a project using pidly doesn't have this repo's
+design document.
 
 ## Reading the tracker
 

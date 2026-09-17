@@ -1,7 +1,7 @@
 claim:
 needs: 7
 title: pidly list / tree / check
-desc:18
+desc:19
 Read-only views. list defaults to takeable work — unclaimed and unblocked —
 which it can determine from the first two lines of each ticket plus a
 number-to-path map, without reading a single body. tree renders the hierarchy
@@ -13,8 +13,9 @@ measurably so: 26.5s against 2.0s on a 2003-ticket tree.
 check validates every ticket against schema.md, confirms desc: points at the
 real last line of the body, resolves every needs entry to a real ticket,
 detects cycles in the needs graph, reports claims and locks whose holder is
-dead, reports an AGENTS.md block that no longer matches the current one, and
-confirms no number appears twice. It never modifies anything and exits
-nonzero on problems, so it can run in CI.
+dead, confirms no number appears twice, and regenerates both installed
+documents — the AGENTS.md block and .pidly/README.md — to report either
+having gone stale. It never modifies anything and exits nonzero on problems,
+so it can run in CI.
 effort: L
 area: cli

@@ -30,10 +30,10 @@ rm AGENTS.md
 printf '# Project\n\nKEEP BEFORE\n' > AGENTS.md
 $PIDLY agents >/dev/null
 printf '\n## After\n\nKEEP AFTER\n' >> AGENTS.md
-sed -i 's|^Work is tracked in.*|STALE|' AGENTS.md
+sed -i 's|^Work lives in.*|STALE|' AGENTS.md
 $PIDLY agents >/dev/null
 check "stale block content is replaced" "$(count STALE AGENTS.md)" "0"
-check "the current block is present" "$(count 'Work is tracked in' AGENTS.md)" "1"
+check "the current block is present" "$(count 'Work lives in' AGENTS.md)" "1"
 check "text before the block survives" "$(count 'KEEP BEFORE' AGENTS.md)" "1"
 check "text after the block survives" "$(count 'KEEP AFTER' AGENTS.md)" "1"
 check "still exactly one block" "$(count '<!-- pidly:begin -->' AGENTS.md)" "1"
@@ -49,10 +49,30 @@ check "-f targets an explicit file" "$(count '<!-- pidly:begin -->' custom.md)" 
 out=$($PIDLY agents -f 2>&1) && rc=0 || rc=$?
 check "-f without a filename is rejected" "$rc" "1"
 
+echo "the shipped reference"
+check "README.md is written into .pidly" "$([ -f .pidly/README.md ] && echo yes)" "yes"
+check "the block points at it" "$(count '.pidly/README.md' CLAUDE.md)" "1"
+for topic in "State is location" "cannot close while it has children" \
+             "Never delete a ticket" "cascades upward" "unverifiable" \
+             "highest number anywhere in the tracker plus one"; do
+	if [ "$(count "$topic" .pidly/README.md)" -ge 1 ]
+	then ok "reference covers: $topic"
+	else no "reference does not mention: $topic"; fi
+done
+before=$(cat .pidly/README.md)
+$PIDLY agents >/dev/null
+check "regenerating leaves it byte-identical" "$(cat .pidly/README.md)" "$before"
+printf 'clobbered\n' > .pidly/README.md
+$PIDLY agents >/dev/null
+check "and a damaged copy is restored" "$(count 'State is location' .pidly/README.md)" "1"
+
 echo "content"
 check "the block explains state is location" "$(count 'State is location' CLAUDE.md)" "1"
 check "it documents the lease path for cloud agents" "$(count 'PIDLY_LEASE' CLAUDE.md)" "1"
 check "it tells agents not to delete tickets" "$(count 'Never delete a ticket' CLAUDE.md)" "1"
+lines=$(awk '/pidly:begin/,/pidly:end/' CLAUDE.md | wc -l)
+if [ "$lines" -le 60 ]; then ok "the block stays small ($lines lines)"
+else no "the block has grown to $lines lines; move detail to .pidly/README.md"; fi
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
