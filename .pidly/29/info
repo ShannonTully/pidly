@@ -4,7 +4,7 @@ title: Ship pidly as a package: licence, version, release, tap
 effort: L
 area: cli
 created: 2026-09-17T06:43:08Z
-updated: 2026-09-17T06:43:08Z
+updated: 2026-09-17T22:23:10Z
 handoff:
 
 Someone clones a repo that uses pidly, or wants to start one, and installs
@@ -73,3 +73,10 @@ Done when a clean machine can install pidly from a tap and from the AUR, run
 pidly init in a fresh repo, and pidly --version reports what was installed —
 and when the documents still tell an agent in an uninstalled checkout how to
 do everything by hand.
+
+
+From 30: the licence is MIT, SPDX-License-Identifier MIT, copyright 2026
+Shannon Tully. LICENSE is at the repo root and bin/pidly carries the SPDX
+line itself, so a vendored copy still says what it is. That is the value a
+Homebrew formula's license field wants, and what Debian's copyright file
+would record.

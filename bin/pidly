@@ -1,6 +1,13 @@
 #!/bin/sh
 # pidly — a file-based issue tracker
 #
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Shannon Tully
+#
+# This line rides along with the script. pidly is meant to be copied into a
+# repository that wants it, and a copy that leaves the LICENSE file behind
+# still says what it is and who wrote it.
+#
 # Every command here is something a person could do with mkdir, mv and an
 # editor, leaving the repository byte-identical. The exception is claiming,
 # which needs the lock to be safe while other agents are running.

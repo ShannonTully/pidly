@@ -15,7 +15,7 @@ carry a lease with an expiry instead.
 
 ```
 .pidly/
-  schema.md
+  schema
   1/
     info          # ticket 1 itself
     3/            # an open child
@@ -97,7 +97,7 @@ pidly init            # creates .pidly/, seeds a schema, installs the docs
 pidly new "The first thing to do"
 ```
 
-Re-running `init` refreshes what it generates and leaves `schema.md` alone
+Re-running `init` refreshes what it generates and leaves `.pidly/schema` alone
 once the project owns it, so it is safe after an upgrade. Ignore rules go in
 `.pidly/.gitignore` rather than the repo root, so the tracker is
 self-contained.
@@ -181,3 +181,9 @@ Claiming is the one thing not safe to do by hand while other agents are
 running: rewriting a line is read-modify-write, so two agents can both take a
 free ticket and the loser never finds out. `pidly claim` serializes it behind a
 lock directory. Everything else above is exactly what the script does.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). `bin/pidly` carries an `SPDX-License-Identifier`
+line of its own, so a copy vendored into another repository still says what it
+is.
