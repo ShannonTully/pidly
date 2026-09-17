@@ -33,8 +33,8 @@ carry a lease with an expiry instead.
 What's known about a ticket lives in the file `info` inside its directory. Not
 `ticket` — the *directory* is the ticket, and it carries the identity, the
 position, the children and the state; the file just holds the information. No
-extension either, since the content is four header lines, a body, then fields,
-which no renderer understands. `info` can't be mistaken for a ticket number, so
+extension either, since the content is three header lines, then fields, then a
+body, which no renderer understands. `info` can't be mistaken for a ticket number, so
 `find .pidly -name info` lists every ticket and `find .pidly -name 8` finds
 exactly one.
 

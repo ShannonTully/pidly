@@ -943,8 +943,8 @@ files and leaves `schema.md` alone.
 
 The next number is the **highest number anywhere in the tracker plus one**,
 counting closed tickets. There is no counter file. Make the directory inside
-the parent, or in `.pidly/` for a top-level ticket, and write the four header
-lines:
+the parent, or in `.pidly/` for a top-level ticket, and write the three
+header lines, and the stamps:
 
 ```sh
 mkdir .pidly/7/14
@@ -1083,7 +1083,7 @@ ones in that container's `c/`. Closing is a move.
 .pidly/7/c/13/info   ticket 13, finished
 ```
 
-`info` is four header lines, then the body, then project fields:
+`info` is three header lines, then project fields, then the body:
 
 ```
 claim:                1  empty, or who holds it
@@ -1322,7 +1322,7 @@ ignore_text() {
 IGNORE
 }
 
-# The starting schema. The four header lines are structural and always
+# The starting schema. The three header lines are structural and always
 # present, so they are documented rather than declared; the table below them
 # is the project's own, and starts with just the handoff field.
 schema_text() {

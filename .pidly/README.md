@@ -169,8 +169,8 @@ files and leaves `schema.md` alone.
 
 The next number is the **highest number anywhere in the tracker plus one**,
 counting closed tickets. There is no counter file. Make the directory inside
-the parent, or in `.pidly/` for a top-level ticket, and write the four header
-lines:
+the parent, or in `.pidly/` for a top-level ticket, and write the three
+header lines, and the stamps:
 
 ```sh
 mkdir .pidly/7/14

@@ -15,7 +15,7 @@ ones in that container's `c/`. Closing is a move.
 .pidly/7/c/13/info   ticket 13, finished
 ```
 
-`info` is four header lines, then the body, then project fields:
+`info` is three header lines, then project fields, then the body:
 
 ```
 claim:                1  empty, or who holds it

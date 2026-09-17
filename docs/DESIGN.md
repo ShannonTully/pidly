@@ -58,8 +58,8 @@ ticket. It has the identity, the position in the tree, the children and the
 state, none of which live in the file. What the file holds is the ticket's
 information, so that is what it is called.
 
-`info` has no extension because the content isn't any established format: four
-header lines, a markdown body, then fields. Calling it `.md` would promise a
+`info` has no extension because the content isn't any established format:
+three header lines, project fields, then a markdown body. Calling it `.md` would promise a
 rendering that turns the header into one mangled paragraph, which is worse than
 no rendering at all.
 
@@ -842,7 +842,7 @@ from each other.
 
 **The summary is a budget, not a document.** It sits in the context of every
 agent that touches the repo, so the test suite fails if it grows past 60
-lines. It carries the shape, the four header lines, how to find and claim
+lines. It carries the shape, the three header lines, how to find and claim
 work, the handful of rules that cause damage when broken, and a pointer to
 the reference. Everything else is a link away.
 
