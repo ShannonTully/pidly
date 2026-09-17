@@ -1,0 +1,58 @@
+claim:
+needs:
+title: Investigate how beads is actually used in ../idol
+effort: M
+area: format
+created: 2026-09-17T06:54:13Z
+updated: 2026-09-17T06:54:13Z
+
+idol is the most mature project on beads and clockwork-city, so it is the
+only evidence available about which bd concepts are load-bearing in
+practice rather than in bd's feature list. 6 cannot be planned honestly
+without it.
+
+What is there, from a shallow look:
+
+  .beads/issues.jsonl        342 issues
+  .beads/interactions.jsonl  455 interactions
+  .beads/embeddeddolt/       an embedded Dolt database
+  .beads/                    94M total
+
+The 94M is worth stating plainly, since pidly's premise is that the
+repository is the interface: the whole of pidly's own tracker is 37 tickets
+of plain text, and the comparison belongs in the design rather than in a
+sales pitch.
+
+An issue carries: _type, assignee, close_reason, closed_at, comment_count,
+created_at, created_by, dependency_count, dependent_count, description, id,
+issue_type, owner, priority, started_at, status, title, updated_at.
+
+Questions to answer from the data, not from opinion:
+
+- Which fields are actually populated across the 342, and how often. A field
+  every issue leaves at its default is not a requirement pidly has to meet.
+- assignee, owner and created_by are three identities. Are they ever
+  different from each other? pidly has one, and it means "who holds it now".
+- status: how many distinct values are used, and do any of them mean
+  something other than open or closed? pidly has two, by location.
+- priority: is it used, and is it used to sort, or set once and ignored?
+  That is the trigger 34 is waiting on, and this is the place to test it.
+- issue_type: what values, and would they be a project field, a parent
+  ticket, or nothing.
+- dependency_count and dependent_count are derived. Is the graph shallow
+  enough that pidly's needs: covers it, and are there relation types beyond
+  blocking — bd has relates-to, duplicates, supersedes, discovered-from,
+  which the design rules out on principle 3.
+- close_reason and the 455 interactions: what is in them, and where would
+  that land in pidly — the body, handoff, or nowhere. This is the one that
+  could argue for something pidly does not have.
+- Are issues ever reopened, and are they ever re-parented.
+
+Then: what a migration would produce. 342 tickets is small enough to convert
+in a script — id to number, title to title, status to location, assignee to
+claim, dependencies to needs, description plus comments to the body — and
+the interesting part is what has no home, not what maps cleanly.
+
+Done when the answers are written into this ticket's body, 6 can be planned
+against them, and anything that argues for a change in pidly is its own
+ticket rather than a paragraph here.

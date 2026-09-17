@@ -1,0 +1,53 @@
+claim:
+needs:
+title: Audit what still has to be done by hand
+effort: M
+area: cli
+created: 2026-09-17T06:54:30Z
+updated: 2026-09-17T06:54:30Z
+
+Two properties, and they are not the same one:
+
+- Everything must be possible without pidly installed. A checkout handed to
+  someone else is navigable with find, sed, mv and an editor. This is
+  principle 1 and it is already true.
+- Nothing should require it. With the package installed, a human or an agent
+  should never have to reach past the CLI to get ordinary work done. This is
+  not true today and nobody has ever listed the gaps.
+
+The audit is the inverse of the reference: every hand idiom documented in
+.pidly/README.md is a claim about what the format can do, so each one should
+have a command beside it, or a written reason it does not.
+
+Known gaps, as a starting list rather than the answer:
+
+- needs: is edited by hand. There is no command to add or drop a
+  dependency, and it is line 2 — the line the takeable scan depends on.
+- Re-parenting is a mv. Nothing stops that mv landing an open ticket inside
+  a closed tree; check reports it afterwards, which is the wrong end.
+- The title is line 3, edited in the editor or with sed. No pidly title.
+- A field cannot be set from the CLI at all (25).
+- There is no pidly show. Reading one ticket is cat, or the awk idiom for a
+  bounded read, which is exactly the kind of thing a command should own.
+- list is open-only. There is no way to ask what closed, or what closed
+  recently, without find or git.
+- Nothing searches bodies. bd has search; pidly has grep -r, which is fine
+  until an agent has to know to exclude c/.
+- Bulk anything: closing several tickets, or setting a field across a
+  selection, is a shell loop.
+- Moving a ticket between two trackers is a mv plus a registry entry by
+  hand, and the numbers will collide.
+
+Three outcomes per item, and the third is a real answer: a command exists, a
+command should exist and here is its ticket, or this stays manual on
+purpose. Deleting a ticket is the model for the third — it is deliberately
+not a command and never will be.
+
+Where a command is added, the reference must keep documenting the hand form
+beside it. The commands are the convenient path; find, sed and mv are the
+guaranteed one, and a command that quietly becomes the only way to do
+something breaks the first property while satisfying the second.
+
+Done when every operation in the reference and every gap above has one of
+the three answers, the gaps worth closing are child tickets of this one, and
+the reference and the command set agree with each other.
