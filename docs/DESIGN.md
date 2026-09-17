@@ -931,16 +931,22 @@ section is where reasoning goes and the tracker is where work does.
   `.md` suffix invites an editor to reflow them. What it costs is the
   rendered table.
 
-  Two portability facts constrain the implementation, both measured here.
-  **`awk` cannot evaluate the patterns**: `[0-9]{4}` matches `2026` under
-  `grep -E` and not under this machine's `awk`, which has no interval
-  expressions — so validation goes through `grep -Eq`, never through one of
-  `check`'s existing `awk` passes. And **a permissive `grep` hides dialect
-  errors**: `grep` here is ugrep, which accepted `\d` where GNU `grep -E`
-  would not, so `check` lints patterns for `\d \w \s \b` and `(?...)`
-  rather than trusting whatever is installed. A pattern the local `grep`
-  cannot compile exits 2 rather than 1, which is what lets a broken schema be
-  a finding instead of a crash.
+  Two portability facts constrain the implementation, found on 2026-09-17
+  with mawk 1.3.4 20200120 and ugrep 7.8.4 on aarch64 Linux. **`awk` cannot
+  evaluate the patterns**: `[0-9]{4}` matches `2026` under `grep -E` and not
+  under mawk, which has no interval expressions in a literal `/re/` or a
+  dynamic `$0 ~ p`, while gawk does — so a pattern's meaning would depend on
+  which `awk` a machine happens to have, and validation goes through
+  `grep -Eq` instead, never through one of `check`'s existing `awk` passes.
+  And **a permissive `grep` hides dialect errors**: ugrep accepted `\d`
+  where GNU `grep -E` treats it as undefined, so a pattern written against
+  whichever tool is installed can behave differently on the next machine.
+  `check` therefore lints patterns for `\d \w \s \b` and `(?...)` rather
+  than trusting what is there. A pattern the local `grep` cannot compile
+  exits 2 rather than 1, which is what lets a broken schema be a finding
+  instead of a crash. These are facts about the tools, not about this
+  checkout: `awk -W version` and `grep --version` say what is in front of
+  you.
 - **Padded multi-line field values** (ruled out; no ticket)**.** Proposed as a way to keep every
   ticket's lines at fixed positions: a field declares a maximum line count
   and is padded up to it. Two things rule it out. Fields end at the first
