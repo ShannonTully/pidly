@@ -1,0 +1,74 @@
+claim:
+needs:
+title: Ship pidly as a package: licence, version, release, tap
+effort: L
+area: cli
+created: 2026-09-17T06:43:08Z
+updated: 2026-09-17T06:43:08Z
+
+Someone clones a repo that uses pidly, or wants to start one, and installs
+the CLI from their package manager. One file goes into their bin; nothing
+else is needed, because there is nothing else.
+
+Packaging is convenience and discoverability, never capability. The format
+stays readable with find, sed and mv, both generated documents keep saying
+so, and no instruction anywhere may come to assume pidly is installed. That
+is principle 1 and this ticket must not erode it. The honest fallback, which
+already works and should be documented whatever else happens, is:
+
+  curl -o ~/.local/bin/pidly <raw url> && chmod +x ~/.local/bin/pidly
+
+Two things block every route, both found while writing this ticket:
+
+- There is no LICENSE file. Homebrew will not take a formula without one and
+  Debian will not either. Nothing about the project says how anyone may use
+  it. Pick one — MIT, ISC, 0BSD and Apache-2.0 are the plausible set for a
+  single shell script — and that is an owner's decision, not an
+  implementation detail.
+- There is no version. The script carries no VERSION and has no --version,
+  so a package has nothing to name and a user has no way to say what they
+  are running. A line at the top of the script and a flag that prints it.
+
+Then releases: a tag, a tarball with a stable URL, and a checksum. No build
+step, no compilation, no dependencies beyond a POSIX shell, the usual
+coreutils and an optional git.
+
+Routes, in the order they are worth doing:
+
+- A Homebrew tap. Immediate, no gatekeeping, works on Linux as well as
+  macOS, and the formula is about ten lines ending in bin.install "bin/pidly".
+- The AUR. A PKGBUILD for a single script is a few lines and is what an Arch
+  user expects.
+- homebrew-core later, if the project earns it. Core has notability and
+  maintenance requirements a new project will not meet, and being rejected
+  there costs nothing if the tap already works.
+- Distro-native .deb, .rpm and nixpkgs are a maintenance treadmill, each
+  with its own review and cadence. Defer until someone asks.
+
+21 already checked the name: the Homebrew formula and cask names are free
+and so is Debian. PyPI and RubyGems are permanently taken by dead projects,
+which matters only if a wrapper ever wants them.
+
+The design question underneath: what a version means for a tracker on disk.
+The tracker records nothing about versions and should not start — that would
+be state that can disagree with the files. But check is version-sensitive in
+a way the rest is not: an older pidly reading a newer tracker flags fields it
+has never heard of, so any pidly older than 17 would call created and updated
+undeclared, and after 28 an older one will not find .pidly/schema at all.
+Decide whether check should be lenient about what it does not recognise, or
+whether release notes naming format changes are enough. Everything else —
+reading, claiming, closing — degrades gracefully, because it is files.
+
+Also decide whether a man page is worth generating from the usage text.
+Debian's guidelines want one; a tap and the AUR do not care.
+
+Sequencing: a 0.x release can go out now. Do not call anything 1.0 before 28
+lands, because it changes the schema file on disk.
+
+Worth splitting into children when it is picked up: licence, version and
+releases, the tap, the AUR.
+
+Done when a clean machine can install pidly from a tap and from the AUR, run
+pidly init in a fresh repo, and pidly --version reports what was installed —
+and when the documents still tell an agent in an uninstalled checkout how to
+do everything by hand.
