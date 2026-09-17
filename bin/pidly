@@ -1263,6 +1263,13 @@ A claim resolves to one of:
 | `dead` | same runtime, process positively is not |
 | `unverifiable` | another runtime, lease still good |
 
+`pidly list` agrees with all of this as far as it can without asking the
+process table: an **expired** lease is offered as ready — it is takeable, and
+a listing that hid it was hiding work — and `list -a` says whose lease ran
+out. A **dead** claim still reads `claimed` there, because telling a dead pid
+from a live one is a process per ticket, and `claim` refuses it anyway until
+`reap` clears it. So the two never disagree about what you can take.
+
 Only `free` and `expired` can be claimed. Only `dead` can be cleared:
 
 ```sh
@@ -2186,7 +2193,7 @@ schema_faults() {
 # read. state is ready, blocked or claimed.
 survey() {
 	_sv_r=$1
-	map "$_sv_r" | awk -v root="$_sv_r" '
+	map "$_sv_r" | awk -v root="$_sv_r" -v now="$(now_iso)" '
 		# Relative to root, for the reason in in_closed().
 		{ closed[$1] = (substr($2, length(root) + 2) ~ /(^|\/)c\//)
 		  path[$1] = $2 }
@@ -2214,6 +2221,26 @@ survey() {
 				sub(/^claim:/, "", claim)
 				sub(/^needs:[ ]?/, "", needs)
 				sub(/^title:[ ]?/, "", title)
+
+				# A lease that has run out is takeable, and claim
+				# grants it. This view said "claimed" and offered
+				# nothing, which is ready work no listing showed.
+				#
+				# Deciding it here costs nothing: the expiry is
+				# on the line and ISO-8601 sorts lexically, so it
+				# is a string comparison. Judging a pid is the
+				# other half of claim_state and needs the process
+				# table — a process per ticket — so this pass
+				# leaves a dead claim reading as claimed, which
+				# is what claim says about it too: reap clears it.
+				lapsed = ""
+				sp = index(claim, " ")
+				if (sp > 0 && substr(claim, sp + 1) <= now) {
+					who = substr(claim, 1, sp - 1)
+					at = index(who, "@")
+					lapsed = at > 1 ? substr(who, 1, at - 1) : who
+					claim = ""
+				}
 				blockers = ""
 				k = split(needs, d, " ")
 				for (i = 1; i <= k; i++)
@@ -2229,7 +2256,8 @@ survey() {
 				# "-" rather than empty: tab is IFS whitespace, so a
 				# shell read collapses two tabs into one and every
 				# later field shifts left.
-				why = blockers ? blockers : (defer ? defer : "-")
+				why = blockers ? blockers : \
+					(defer ? defer : (lapsed ? lapsed : "-"))
 				printf "%s\t%s\t%s\t%s\n", n, state, why, title
 			}
 		}'
@@ -2280,6 +2308,9 @@ cmd_list() {
 			printf '%-5s %-8s %s (needs %s)\n' "$_n" "$_st" "$_ti" "$_bl"
 		elif [ "$_st" = deferred ]; then
 			printf '%-5s %-8s %s (until %s)\n' "$_n" "$_st" "$_ti" "$_bl"
+		elif [ "$_st" = ready ] && [ "$_bl" != - ]; then
+			printf '%-5s %-8s %s (%s left a lease that ran out)\n' \
+				"$_n" "$_st" "$_ti" "$_bl"
 		else
 			printf '%-5s %-8s %s\n' "$_n" "$_st" "$_ti"
 		fi

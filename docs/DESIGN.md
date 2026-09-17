@@ -780,6 +780,22 @@ takes the same durations a lease does, lists the oldest first, and includes
 tickets with no `updated` line at all: an undated ticket cannot be shown to
 be fresh, and the question being asked is what has been forgotten.
 
+**`list` resolves what it can without a process.** It decided a ticket was
+claimed because line 1 was not empty, while `claim` resolved the same line
+through `claim_state` — free, expired, live, dead, unverifiable. They
+disagreed about exactly one case, and it was the expensive one to get wrong:
+an expired lease is takeable, `claim` grants it, and no listing offered it.
+
+The two halves of `claim_state` cost differently. An expiry is on the line
+and ISO-8601 sorts lexically, so the single awk pass decides it against a
+`now` passed in with `-v` — a string comparison, no process. A pid needs the
+process table, which is a process per ticket, the shape every query here is
+built to avoid. So `survey` does the first and not the second: a dead claim
+still reads `claimed` in `list`, which is also what `claim` says about it —
+it refuses until `reap` clears it. The two now agree about everything a
+caller can act on, which is the property that was missing rather than
+completeness for its own sake.
+
 **`defer` is the fourth state, and it is a field rather than a location.**
 `list` was the one view an agent could trust without opening anything: every
 line it printed was something to pick up. Four deferred design questions —

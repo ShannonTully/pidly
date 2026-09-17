@@ -60,6 +60,30 @@ mv .pidly/c/2 .pidly/; rmdir .pidly/c
 $PIDLY field >/dev/null 2>&1 && rc=0 || rc=$?
 check "a name is required" "$rc" "1"
 
+echo "claims list can and cannot verify"
+# list used to call anything with a non-empty line 1 claimed, while claim
+# resolved it properly. The two disagreed about an expired lease, which is
+# takeable: ready work no listing offered.
+sedi '1s/.*/claim:cloud-1@- 2020-01-01T00:00:00Z/' .pidly/2/info
+out=$($PIDLY list)
+has "an expired lease is offered as ready" "$out" "root two"
+out=$($PIDLY list -a)
+has "and -a says whose lease ran out" "$out" "(cloud-1 left a lease that ran out)"
+check "which is what claim says too" "$($PIDLY claim 2 >/dev/null && echo taken)" "taken"
+
+out=$($PIDLY list -a)
+has "a live claim still reads claimed" "$out" "2     claimed"
+# A dead claim: same runtime, a pid that is not there. list leaves it as
+# claimed, because judging a pid needs the process table and that is a
+# process per ticket — and claim agrees, refusing it until reap.
+sedi '1s/^claim:[0-9]*\./claim:999999./' .pidly/2/info
+has "so does a dead one" "$($PIDLY list -a)" "2     claimed"
+out=$($PIDLY claim 2 2>&1) && rc=0 || rc=$?
+check "which claim refuses as well" "$rc" "1"
+has "pointing at reap" "$out" "reap"
+$PIDLY reap 2 >/dev/null
+has "and after reap both call it ready" "$($PIDLY list)" "root two"
+
 echo "deferred"
 # 34, 35, 36 and 37 in this tracker: open, unclaimed, unblocked, and nobody
 # should start any of them. Before defer: they were a quarter of what list

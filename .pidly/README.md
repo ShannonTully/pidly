@@ -259,6 +259,13 @@ A claim resolves to one of:
 | `dead` | same runtime, process positively is not |
 | `unverifiable` | another runtime, lease still good |
 
+`pidly list` agrees with all of this as far as it can without asking the
+process table: an **expired** lease is offered as ready — it is takeable, and
+a listing that hid it was hiding work — and `list -a` says whose lease ran
+out. A **dead** claim still reads `claimed` there, because telling a dead pid
+from a live one is a process per ticket, and `claim` refuses it anyway until
+`reap` clears it. So the two never disagree about what you can take.
+
 Only `free` and `expired` can be claimed. Only `dead` can be cleared:
 
 ```sh
