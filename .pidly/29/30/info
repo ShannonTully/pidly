@@ -5,6 +5,7 @@ effort: S
 area: docs
 created: 2026-09-17T06:46:51Z
 updated: 2026-09-17T06:46:51Z
+handoff:
 
 There is no LICENSE file, so nothing says how anyone may use pidly. Homebrew
 will not take a formula without one and Debian will not either, and a repo

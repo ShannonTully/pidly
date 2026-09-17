@@ -5,6 +5,7 @@ effort: M
 area: format
 created: 2026-09-17T06:47:11Z
 updated: 2026-09-17T06:47:11Z
+handoff:
 
 check is the only version-sensitive part of pidly. Everything else degrades
 gracefully because it is files: an older build can still read, claim, close

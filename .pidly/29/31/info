@@ -5,6 +5,7 @@ effort: S
 area: docs
 created: 2026-09-17T06:46:56Z
 updated: 2026-09-17T06:46:56Z
+handoff:
 
 Debian's guidelines want a man page for anything in bin. A Homebrew tap and
 the AUR do not care, and those are the routes 29 does first.

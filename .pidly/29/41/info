@@ -5,6 +5,7 @@ effort: M
 area: cli
 created: 2026-09-17T07:12:58Z
 updated: 2026-09-17T07:12:58Z
+handoff:
 
 map() is how every traversal in pidly works — list, tree, check, new, reap,
 init, and anything 25 or 27 adds — and it is written as:

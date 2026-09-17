@@ -233,8 +233,30 @@ refusal to install a saved file that is no longer a ticket: a missing header
 line, a field without a colon, a body that lost the blank line in front of
 it. A rejected edit is kept, and the path is printed.
 
-Fields are lines, so a one-off is `sed`; `pidly release -m` is the one that
-matters and it writes `handoff` for you.
+Fields are lines, so a one-off is `sed`, and the commands that write one for
+you are:
+
+```sh
+pidly set 7 effort M          # write a field
+pidly set 7 effort            # clear it, unless the schema requires a value
+pidly release -m "..." 7      # the one that matters: it writes handoff
+pidly fields                  # give every ticket a slot for every declared field
+```
+
+`fields` is the migration for a row added to `schema.md` after tickets
+already exist. It **adds keys and nothing else**: it never drops a field the
+schema stopped declaring, because that is data; it never moves a line that is
+already there, because a ticket written by hand may order its fields however
+it likes; and it does not bump `updated`, because a migration is not activity
+on the work and stamping every ticket would flatten `list --stale` on the day
+it ran. A missing key lands in schema order relative to the keys that are
+present. It is never part of `init`.
+
+`check` reports the same drift — `note: 12 ticket(s) have no 'area' line` —
+which is what `fields` would add, from the command that changes nothing. It
+is a **note**: printed, but it does not fail `check`. A ticket written by
+hand is a legal ticket and will not carry every slot, and the format's own
+promise is that mkdir and an editor are enough.
 
 ## Delegating to a subagent
 

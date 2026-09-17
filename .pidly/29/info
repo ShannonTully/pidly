@@ -5,6 +5,7 @@ effort: L
 area: cli
 created: 2026-09-17T06:43:08Z
 updated: 2026-09-17T06:43:08Z
+handoff:
 
 Someone clones a repo that uses pidly, or wants to start one, and installs
 the CLI from their package manager. One file goes into their bin; nothing

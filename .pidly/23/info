@@ -5,6 +5,7 @@ effort: M
 area: cli
 created: 2026-09-17T05:18:48Z
 updated: 2026-09-17T05:18:48Z
+handoff:
 
 Agents reach pidly through Bash today, with only the AGENTS.md block telling
 them it exists. That works and is the whole point of the format, but nothing

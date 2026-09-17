@@ -5,6 +5,7 @@ effort: M
 area: format
 created: 2026-09-17T06:47:32Z
 updated: 2026-09-17T06:47:32Z
+handoff:
 
 Leases stop a remote claim from wedging a ticket, but nothing can confirm a
 remote agent is alive right now — that would need a shared medium updating

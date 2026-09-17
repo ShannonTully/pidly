@@ -5,6 +5,7 @@ effort: M
 area: format
 created: 2026-09-17T04:39:14Z
 updated: 2026-09-17T04:39:14Z
+handoff:
 
 desc: was derived data a hand-edit could falsify, and only check would ever
 notice. It turned out not to be a necessary cost: it existed to serve one

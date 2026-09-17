@@ -5,6 +5,7 @@ effort: M
 area: docs
 created: 2026-09-17T03:43:35Z
 updated: 2026-09-17T04:39:14Z
+handoff:
 
 pidly agents writes a section into AGENTS.md, or whichever of CLAUDE.md,
 GEMINI.md or .cursorrules the project already has, between HTML comment

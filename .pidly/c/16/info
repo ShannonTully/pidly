@@ -5,6 +5,7 @@ effort: M
 area: format
 created: 2026-09-17T04:20:03Z
 updated: 2026-09-17T04:39:14Z
+handoff:
 
 Sequential numbers collided when two branches allocated at once: a branch
 creating .pidly/5 and another creating .pidly/7/5 merged cleanly and left two

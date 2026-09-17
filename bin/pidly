@@ -308,19 +308,22 @@ get_field() {
 	' "$1"
 }
 
-# Replace a field if present, otherwise append it to the field block.
+# Replace a field if present, otherwise append it to the field block. An
+# empty value writes a bare key — "handoff:", not "handoff: " — so a cleared
+# field is byte-identical to one new has never filled in.
 # Callers hold the lock.
 set_field() {
 	_sf_f=$1 _sf_k=$2 _sf_v=$3 _sf_t="$1.$$"
 	awk -v k="$_sf_k" -v v="$_sf_v" '
+		function slot() { return v == "" ? k ":" : k ": " v }
 		NR <= 3 { print; next }
 		!past && $0 == "" {
-			if (!hit) print k ": " v
+			if (!hit) print slot()
 			past = 1; print; next
 		}
-		!past && index($0, k ":") == 1 { print k ": " v; hit = 1; next }
+		!past && index($0, k ":") == 1 { print slot(); hit = 1; next }
 		{ print }
-		END { if (!past && !hit) print k ": " v }
+		END { if (!past && !hit) print slot() }
 	' "$_sf_f" > "$_sf_t"
 	mv "$_sf_t" "$_sf_f"
 }
@@ -726,6 +729,163 @@ open_children() {
 	done
 }
 
+# --- writing fields --------------------------------------------------------
+
+# The fields a ticket may carry, in the order schema.md gives them, minus
+# pidly's own stamps: created records one event and updated means "when pidly
+# last wrote here", so neither is a value anyone sets.
+settable_fields() {
+	known_fields "$1" | while read -r _st_f; do
+		case $_st_f in ''|created|updated) continue ;; esac
+		printf '%s\n' "$_st_f"
+	done
+}
+
+# One field on one ticket. The same write release makes for handoff, under
+# the same lock, for any field the schema declares.
+cmd_set() {
+	[ $# -ge 2 ] && [ $# -le 3 ] || die 'usage: pidly set <number> <field> [value]'
+	_sn=$1 _sk=$2 _sv=${3:-}
+	case $_sv in
+	*"
+"*) die 'a field value is one line' ;;
+	esac
+	_r=$(root)
+	settable_fields "$_r" | grep -qx "$_sk" || {
+		case $_sk in
+		created|updated) die "$_sk is pidly's own stamp, not a field to set" ;;
+		*) die "no field '$_sk' in schema.md" ;;
+		esac
+	}
+	# Clearing a required field writes exactly the state check reports, and
+	# edit already refuses to install a file it would reject. Refusing here
+	# keeps the CLI from being the thing that breaks the ticket.
+	if [ -z "$_sv" ] && schema_required "$_r" | grep -qx "$_sk"; then
+		die "$_sk is required: give it a value, or change the row in schema.md"
+	fi
+	_sd=$(ticket_dir "$_r" "$_sn")
+	lock "$_sd" 100 || die "$_sn is being modified by another process"
+	set_field "$_sd/info" "$_sk" "$_sv"
+	mark_updated "$_sd/info"
+	unlock "$_sd"
+	printf '%s %s %s\n' "$_sn" "$_sk" "${_sv:+set}${_sv:-cleared}"
+	return 0
+}
+
+# Declared fields one ticket has no line for, in schema order, space-separated.
+missing_fields() {
+	awk -v decl="$2" '
+		NR <= 3 { next }
+		$0 == "" { exit }
+		{ k = substr($0, 1, index($0, ":") - 1); seen[k] = 1 }
+		END {
+			n = split(decl, d, "\n")
+			for (i = 1; i <= n; i++)
+				if (d[i] != "" && !(d[i] in seen)) printf "%s ", d[i]
+		}' "$1"
+}
+
+# The migration: give every ticket a slot for every field the schema declares.
+#
+# It adds keys and nothing else. It never removes a field the schema has
+# dropped — that is data, and a tracker is the last place to delete data on a
+# guess — and it never moves a line that is already there, because a ticket
+# written by hand may put its fields in any order and nothing may depend on
+# where they sit. A missing key lands in schema order relative to the keys
+# that are present, which is the most it can do without moving anything.
+#
+# It does not bump updated. This is pidly writing, but it is not activity on
+# the work: a migration that stamped every ticket would flatten list --stale
+# to nothing on the day it ran. Same reasoning that keeps close and reopen
+# from touching it.
+#
+# Never part of init. init is what you run after an upgrade, and rewriting
+# every ticket in the tracker is not something that should happen because
+# someone refreshed the generated files.
+cmd_fields() {
+	[ $# -eq 0 ] || die 'usage: pidly fields'
+	_r=$(root)
+	_fdecl=$(settable_fields "$_r")
+	[ -n "$_fdecl" ] || { printf 'schema.md declares no fields\n'; return 0; }
+
+	_fout="${TMPDIR:-/tmp}/pidly.fields.$$"
+	: > "$_fout"
+	_fbusy=0
+	map "$_r" | sort -k1,1n | while read -r _fn _fp; do
+		[ -n "$_fn" ] || continue
+		case $_fn in *[!0-9]*) continue ;; esac
+		_ff="$_fp/info"
+		[ -f "$_ff" ] || continue
+		# A file too short to have a field block is broken, and check
+		# is where that is reported. A migration is not a repair.
+		[ "$(awk 'END { print NR }' "$_ff")" -ge 3 ] || continue
+		_fmiss=$(missing_fields "$_ff" "$_fdecl")
+		[ -n "$_fmiss" ] || continue
+		if ! lock "$_fp" 100; then
+			printf '%s\tbusy\n' "$_fn" >> "$_fout"
+			continue
+		fi
+		_ftmp="$_ff.$$"
+		awk -v decl="$_fdecl" '
+			{ line[NR] = $0 }
+			END {
+				if (NR < 3) { for (i = 1; i <= NR; i++) print line[i]; exit }
+				n = split(decl, d, "\n")
+				for (i = 1; i <= n; i++) if (d[i] != "") idx[d[i]] = i
+				# The field block: line 4 to the blank line that
+				# starts the body, or to the end of the file.
+				end = NR + 1
+				for (i = 4; i <= NR; i++)
+					if (line[i] == "") { end = i; break }
+				for (i = 4; i < end; i++) {
+					k = substr(line[i], 1, index(line[i], ":") - 1)
+					if (k in idx) have[idx[k]] = 1
+				}
+				for (i = 1; i <= 3; i++) print line[i]
+				# A cursor, not a sort: an existing line is printed
+				# where it already sits, and a missing key is
+				# printed just before the first declared field that
+				# comes after it and is present.
+				nd = 1
+				for (i = 4; i < end; i++) {
+					k = substr(line[i], 1, index(line[i], ":") - 1)
+					if (k in idx) {
+						while (nd < idx[k]) {
+							if (!have[nd] && d[nd] != "") print d[nd] ":"
+							nd++
+						}
+						nd = idx[k] + 1
+					}
+					print line[i]
+				}
+				while (nd <= n) {
+					if (!have[nd] && d[nd] != "") print d[nd] ":"
+					nd++
+				}
+				for (i = end; i <= NR; i++) print line[i]
+			}' "$_ff" > "$_ftmp"
+		mv "$_ftmp" "$_ff"
+		unlock "$_fp"
+		printf '%s\t%s\n' "$_fn" "${_fmiss% }" >> "$_fout"
+	done
+
+	if [ ! -s "$_fout" ]; then
+		rm -f "$_fout"
+		printf 'every ticket already has every declared field\n'
+		return 0
+	fi
+	while IFS='	' read -r _fn _fwhat; do
+		case $_fwhat in
+		busy) printf '%-5s skipped: being modified by another process\n' "$_fn"
+		      _fbusy=1 ;;
+		*)    printf '%-5s + %s\n' "$_fn" "$_fwhat" ;;
+		esac
+	done < "$_fout"
+	printf '%s ticket(s) changed\n' "$(grep -vc '	busy$' "$_fout" || true)"
+	rm -f "$_fout"
+	[ "$_fbusy" -eq 0 ]
+}
+
 cmd_close() {
 	[ $# -eq 1 ] || die 'usage: pidly close <number>'
 	_r=$(root); _d=$(ticket_dir "$_r" "$1")
@@ -1023,8 +1183,30 @@ refusal to install a saved file that is no longer a ticket: a missing header
 line, a field without a colon, a body that lost the blank line in front of
 it. A rejected edit is kept, and the path is printed.
 
-Fields are lines, so a one-off is `sed`; `pidly release -m` is the one that
-matters and it writes `handoff` for you.
+Fields are lines, so a one-off is `sed`, and the commands that write one for
+you are:
+
+```sh
+pidly set 7 effort M          # write a field
+pidly set 7 effort            # clear it, unless the schema requires a value
+pidly release -m "..." 7      # the one that matters: it writes handoff
+pidly fields                  # give every ticket a slot for every declared field
+```
+
+`fields` is the migration for a row added to `schema.md` after tickets
+already exist. It **adds keys and nothing else**: it never drops a field the
+schema stopped declaring, because that is data; it never moves a line that is
+already there, because a ticket written by hand may order its fields however
+it likes; and it does not bump `updated`, because a migration is not activity
+on the work and stamping every ticket would flatten `list --stale` on the day
+it ran. A missing key lands in schema order relative to the keys that are
+present. It is never part of `init`.
+
+`check` reports the same drift — `note: 12 ticket(s) have no 'area' line` —
+which is what `fields` would add, from the command that changes nothing. It
+is a **note**: printed, but it does not fail `check`. A ticket written by
+hand is a legal ticket and will not carry every slot, and the format's own
+promise is that mkdir and an editor are enough.
 
 ## Delegating to a subagent
 
@@ -1246,17 +1428,7 @@ registry_highest() {
 # Project fields the schema marks required, one per line. A ticket without a
 # value for one is still readable — check reports it — but new refuses to
 # make one, so a ticket starts valid rather than starting wrong.
-schema_required() {
-	[ -f "$1/schema.md" ] || return 0
-	awk -F'|' '
-		/^[[:space:]]*\|/ {
-			f = $2; r = $3
-			gsub(/^[ \t]+|[ \t]+$/, "", f)
-			gsub(/^[ \t]+|[ \t]+$/, "", r)
-			if (f == "" || f == "field" || f ~ /^-+$/) next
-			if (r == "yes") print f
-		}' "$1/schema.md"
-}
+schema_required() { schema_rows "$1" | awk -F'\t' '$2 == "yes" { print $1 }'; }
 
 # The highest number issued: the greater of what the registry records and
 # what the tree contains. Both are needed — the registry catches numbers whose
@@ -1607,18 +1779,29 @@ known_fields() {
 # file, and a hand-edit cannot call anything at all. Callers hold the lock.
 mark_updated() { set_field "$1" updated "$(now_iso)"; }
 
-# Field names the schema declares, one per line.
-schema_fields() {
+# The rows of the field table: "name<TAB>required", in the table's order.
+#
+# schema.md may hold more than one table — the shipped one documents the
+# three structural lines above the fields — so rows are only read while the
+# last header seen was the field table's. Picking rows out by shape instead
+# read "line" out of "| line | field | meaning |" and handed every ticket a
+# field called line.
+schema_rows() {
 	[ -f "$1/schema.md" ] || return 0
 	awk -F'|' '
 		/^[[:space:]]*\|/ {
-			f = $2
+			f = $2; r = $3
 			gsub(/^[ \t]+|[ \t]+$/, "", f)
-			if (f == "" || f == "field" || f ~ /^-+$/) next
-			if (f ~ /^[0-9]+$/) next          # the structural-lines table
-			print f
+			gsub(/^[ \t]+|[ \t]+$/, "", r)
+			if (f ~ /^-+$/ || r ~ /^-+$/) next           # the rule row
+			if (f == "field") { in_table = (r == "required"); next }
+			if (!in_table || f == "") next
+			printf "%s\t%s\n", f, r
 		}' "$1/schema.md"
 }
+
+# Field names the schema declares, one per line, in the table's order.
+schema_fields() { schema_rows "$1" | cut -f1; }
 
 # "number<TAB>state<TAB>blockers<TAB>title" for every open ticket, computed
 # from one traversal and the first three lines of each file. No bodies are
@@ -1812,12 +1995,21 @@ cmd_tree() {
 # incremented there never reaches this one.
 flag() { printf '%s\n' "$*" >> "$PIDLY_REPORT"; }
 
+# A note is something to know, not something wrong: it is printed and it does
+# not change the exit status. Drift is the case that needs this — a ticket
+# written by hand is a legal ticket, and it will not carry a slot for every
+# field the schema has grown. Failing CI over that would make the format's
+# own promise — mkdir and an editor — the thing that breaks the build.
+note() { printf '%s\n' "$*" >> "$PIDLY_NOTES"; }
+
 cmd_check() {
 	[ $# -eq 0 ] || die 'usage: pidly check'
 	_r=$(root)
 	PIDLY_REPORT="${TMPDIR:-/tmp}/pidly.report.$$"
-	export PIDLY_REPORT
+	PIDLY_NOTES="${TMPDIR:-/tmp}/pidly.notes.$$"
+	export PIDLY_REPORT PIDLY_NOTES
 	: > "$PIDLY_REPORT"
+	: > "$PIDLY_NOTES"
 	_m=$(map "$_r")
 
 	# One number, one ticket.
@@ -1893,6 +2085,30 @@ cmd_check() {
 		done
 	fi
 
+	# Declared fields a ticket has no line for. Reported per field rather
+	# than per ticket: a row added to schema.md today is missing from every
+	# ticket at once, and that is one fact, not two thousand of them. It is
+	# also the dry run for the migration — what 'pidly fields' would add,
+	# from the command that changes nothing.
+	#
+	# Required fields are left out: a ticket without a value for one is
+	# already reported above, by ticket, and by value rather than by slot.
+	_decl=$(settable_fields "$_r")
+	_req=$(schema_required "$_r")
+	if [ -n "$_decl" ]; then
+		printf '%s\n' "$_m" | while read -r _num _path; do
+			[ -n "$_num" ] || continue
+			case $_num in *[!0-9]*) continue ;; esac
+			[ -f "$_path/info" ] || continue
+			missing_fields "$_path/info" "$_decl"
+			printf '\n'
+		done | tr ' ' '\n' | grep -v '^$' | sort | uniq -c |
+		while read -r _fc _fk; do
+			printf '%s\n' "$_req" | grep -qx "$_fk" && continue
+			note "$_fc ticket(s) have no '$_fk' line — run 'pidly fields'"
+		done
+	fi
+
 	# Cycles, by peeling nodes with no unresolved dependency.
 	printf '%s\n' "$_m" | while read -r _num _path; do
 		[ -n "$_num" ] || continue
@@ -1935,6 +2151,8 @@ cmd_check() {
 	done
 	rm -f "$_tmp"
 
+	[ -s "$PIDLY_NOTES" ] && sort "$PIDLY_NOTES" | sed 's/^/note: /'
+	rm -f "$PIDLY_NOTES"
 	if [ -s "$PIDLY_REPORT" ]; then
 		sort "$PIDLY_REPORT"
 		printf '%s problem(s)\n' "$(wc -l < "$PIDLY_REPORT" | tr -d ' ')"
@@ -1966,6 +2184,10 @@ usage: pidly <command> [args]
   edit [-a|-b] <n>
                  open it in $EDITOR; -b replaces the body from stdin, -a
                  appends to it
+  set <n> <field> [value]
+                 write a project field; with no value, clear it
+  fields         give every ticket a slot for every field schema.md declares,
+                 adding keys only — never removing, reordering or restamping
   close <n>      finish it: move it into its container's c/
   reopen <n>     move it back, reopening any closed ancestors
   list [-a] [--stale 7d]
@@ -1977,7 +2199,8 @@ usage: pidly <command> [args]
                  a ticket that has no value; -a includes closed work
   tree           the hierarchy, closed tickets marked [x]
   check          report anything wrong; changes nothing, nonzero if it finds
-                 something, so it can run in CI
+                 something, so it can run in CI. Notes — drift a migration
+                 would close — are printed without failing it
   agents [-f F]  write .pidly/README.md and a summary into AGENTS.md (or F),
                  replacing the summary if already present
 
@@ -2007,6 +2230,8 @@ close)   cmd_close "$@" ;;
 reopen)  cmd_reopen "$@" ;;
 list)    cmd_list "$@" ;;
 field)   cmd_field "$@" ;;
+set)     cmd_set "$@" ;;
+fields)  cmd_fields "$@" ;;
 tree)    cmd_tree "$@" ;;
 check)   cmd_check "$@" ;;
 agents)  cmd_agents "$@" ;;

@@ -603,6 +603,26 @@ against each other. It buys nothing for readers: a field is still found by
 name, because counting lines is correct only until the table changes and then
 silently wrong for exactly the old tickets worth reading.
 
+A row added to `schema.md` after tickets exist leaves every one of them
+without the slot, so `pidly fields` rolls it out: it adds the missing keys to
+every ticket, open and closed, and does nothing else. It never removes a
+field the schema dropped — that is data — and never moves a line that is
+already there, because a ticket written by hand may order its fields however
+it likes and nothing may depend on where they sit. It does not bump
+`updated`: pidly is writing, but this is not activity on the work, and a
+migration that stamped every ticket would flatten `list --stale` the day it
+ran, the same reason `close` and `reopen` leave the stamp alone. It is an
+explicit command and never part of `init`, which is what you run after an
+upgrade and must not quietly rewrite the tracker.
+
+It needs no `--dry-run` of its own: `pidly check` reports the drift it would
+close, from the command that already changes nothing and already runs in CI.
+That report is a **note** rather than a problem — printed, but it leaves the
+exit status alone. A ticket made with `mkdir` and an editor is a legal
+ticket, and it will not have a slot for every row the schema has grown since;
+failing CI over that would turn the format's central promise into a build
+break.
+
 The `values` column stays documentation; nothing checks that `effort` is one
 of S, M, L. Validating it would make the column a grammar and the schema no
 longer free-form, which is a bigger decision than this one and belongs with

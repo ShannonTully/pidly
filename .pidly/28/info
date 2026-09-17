@@ -5,6 +5,7 @@ effort: M
 area: format
 created: 2026-09-17T06:26:19Z
 updated: 2026-09-17T15:38:25Z
+handoff:
 
 The values column is documentation: nothing checks that effort is one of S,
 M, L. Making it a check is what forces the file's shape, because the only

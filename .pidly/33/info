@@ -5,6 +5,7 @@ effort: S
 area: docs
 created: 2026-09-17T06:47:11Z
 updated: 2026-09-17T06:47:11Z
+handoff:
 
 The delegation convention in 18 says a subagent claims with PIDLY_AGENT and a
 lease, because a subagent shares its parent's process — a Bash call from a

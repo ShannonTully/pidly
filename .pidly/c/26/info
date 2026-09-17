@@ -5,6 +5,7 @@ effort: S
 area: docs
 created: 2026-09-17T06:21:54Z
 updated: 2026-09-17T06:36:43Z
+handoff:
 
 schema.md mixes two kinds of content with opposite ownership rules. The
 table is the project's: init seeds it and then never touches the file again,

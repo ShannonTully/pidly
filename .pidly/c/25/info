@@ -4,7 +4,8 @@ title: pidly set and pidly fields: writing a field, and filling slots after a sc
 effort: M
 area: cli
 created: 2026-09-17T06:16:28Z
-updated: 2026-09-17T06:16:28Z
+updated: 2026-09-17T15:45:16Z
+handoff:
 
 Nothing in the CLI sets a field. release -m writes handoff and that is the
 whole list; set_field exists inside the script and is not exposed. So a

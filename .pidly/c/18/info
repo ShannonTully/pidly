@@ -5,6 +5,7 @@ effort: S
 area: docs
 created: 2026-09-17T04:24:39Z
 updated: 2026-09-17T04:39:14Z
+handoff:
 
 Subagents run inside the Claude Code CLI process: a Bash call from one sees
 the same CLAUDE_PID as the lead agent. A pid-based claim cannot tell a
