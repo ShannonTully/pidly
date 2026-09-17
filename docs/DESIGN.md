@@ -482,8 +482,8 @@ are read until something has actually been chosen.
 Deliberately thin, and deliberately optional.
 
 `pidly` is a POSIX shell script — `new`, `claim`, `release`, `status`,
-`close`, `reopen`, `edit`, `list`, `tree`, `check`, `reap`. It is not a
-runtime dependency of the format; it's an ergonomics layer. The acceptance
+`close`, `reopen`, `edit`, `list`, `tree`, `check`, `reap`, `agents`. It is
+not a runtime dependency of the format; it's an ergonomics layer. The acceptance
 test for every command is that a person could have done the same thing with
 `mkdir`, `mv` and a text editor, and the repository would be byte-identical.
 
@@ -492,6 +492,38 @@ can falsify. And claiming is the single operation that is *not* safe to do by
 hand while other agents are running, because it needs the lock — one function's
 worth of shell, and the price of having the claim on line 1 rather than in a
 file of its own.
+
+## Telling agents how to use it
+
+`pidly agents` writes a short section into `AGENTS.md` — or `CLAUDE.md`,
+`GEMINI.md`, whichever the project already has — between two HTML comment
+markers:
+
+```
+<!-- pidly:begin -->
+...
+<!-- pidly:end -->
+```
+
+The markers are the whole mechanism. Re-running replaces what is between
+them and leaves everything a human wrote before and after untouched, so the
+command is safe to run on every upgrade and safe to put in a hook. Without
+them the only options are appending a second copy or overwriting someone's
+file, and both are worse than not shipping the command.
+
+The section leads with the *format*, not the CLI, because that is what an
+agent can always rely on: the instructions have to work for an agent in a
+checkout where `pidly` was never installed. Commands appear as the convenient
+path, with `find`/`sed`/`mv` as the guaranteed one.
+
+It has to stay short. It is injected into the context of every agent that
+touches the repo, so anything that isn't needed to pick up, work and close a
+ticket belongs in this document instead.
+
+**The block is a copy, and copies go stale.** Nothing currently notices when
+a command changes and the instructions don't. `pidly check` should compare the
+installed block against the current one and say so — cheap, since the block is
+generated from a single function.
 
 ## Deferred
 

@@ -86,6 +86,18 @@ Early. The design is settled enough to build against — see
 [docs/DESIGN.md](docs/DESIGN.md) for the layout, the reasoning behind it, and
 the questions still open. The work itself is tracked in `.pidly/`, using pidly.
 
+## Telling agents about it
+
+```sh
+pidly agents          # writes a section into AGENTS.md, CLAUDE.md, ...
+pidly agents -f docs/AGENTS.md
+```
+
+The section sits between `<!-- pidly:begin -->` and `<!-- pidly:end -->`, so
+re-running updates it in place and leaves the rest of the file alone. It
+explains the format first and the commands second, so it still works for an
+agent in a checkout where pidly isn't installed.
+
 ## Reading the tracker
 
 Until the `pidly` script exists, these are the primitives it will wrap:
