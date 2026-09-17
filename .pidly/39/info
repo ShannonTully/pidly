@@ -4,7 +4,7 @@ title: Audit what still has to be done by hand
 effort: M
 area: cli
 created: 2026-09-17T06:54:30Z
-updated: 2026-09-17T07:06:42Z
+updated: 2026-09-17T07:09:49Z
 
 Two properties, and they are not the same one:
 
@@ -40,12 +40,26 @@ command today. The operation is the fact; the suggested name is not.
   what closed, or closed last   find, or git log
   search bodies                 grep -r, and knowing to exclude c/
   anything in bulk              a shell loop
+  change part of a body         extract it with awk, transform it, and pipe
+                                 the whole body back through pidly edit -b
 
 Two of those are worth singling out. Setting a field on a ticket new just
 made happened for every one of the eighteen tickets opened in that range —
 it is the most repeated manual step in the tracker's history, and 24 and 25
 are why. And resolving a number to a path was needed to do almost anything
 else, including by the audit's own commands above.
+
+The last row is the worst of them, because the workaround is more dangerous
+than the gap. edit writes a body three ways: an editor, which an agent
+cannot drive; -a, which appends; and -b, which replaces the whole thing. So
+changing one paragraph non-interactively means reconstructing the entire
+body and piping it back, and a mistake in the reconstruction silently
+deletes whatever was left out. That is how 24 and 28 were corrected in
+99ebca6 — extract with awk, replace a passage in a temp file, pipe it all
+back — and it only survived review because the tickets were short enough to
+verify by eye. The commands that would remove it are the same ones that
+would remove several rows above: something that edits a field or a passage
+in place rather than a whole file.
 
 The pattern to aim for: mkdir -p .pidly/c && mv .pidly/2 .pidly/c/ appears
 throughout the history until b5444d3, which added close and reopen, and
