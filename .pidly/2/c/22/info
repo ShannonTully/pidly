@@ -17,3 +17,14 @@ callers one helper so the rule is written once.
 
 Done when the two sites match relative to .pidly and a test runs the suite
 from a checkout whose path contains a c segment.
+
+Three sites, not two: cmd_new's parent-closed guard matched the absolute
+path the same way, so a checkout under a c/ would have accepted children
+into a finished tree. All three now go through in_closed(), which strips the
+root and matches c/* or */c/* — the rule written once, since it was wrong
+everywhere it was written out.
+
+Done: bin/pidly, covered by tests/paths.sh, which runs a tracker at
+$TMPDIR/c/proj through list, claim, close, new -p, tree, reopen and check.
+Against the previous script that suite fails six ways, starting with list -a
+printing nothing at all.

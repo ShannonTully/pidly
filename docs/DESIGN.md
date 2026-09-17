@@ -662,6 +662,15 @@ the `/` between segments, which put children ahead of their own parents.
 so a shell `read` collapses two tabs into one and every later field shifts
 left. `survey` writes `-` for "no blockers" rather than nothing.
 
+**Closed-ness is matched relative to `.pidly`, through one helper.** The rule
+is *is there a `c/` between this ticket and the tracker root*, and the first
+implementation asked it of the absolute path — `case $dir in */c/*)`. A
+checkout under a directory named `c`, and every ticket in it reads as
+finished: `claim` sees nothing blocked, `list` offers everything as ready.
+The failure is silent and in the direction that loses work, which is why the
+test suite now runs a checkout at `$TMPDIR/c/proj`. The rule is written once,
+in `in_closed`, because it was wrong in three places at once.
+
 **`tree` is iterative, not recursive.** A recursive shell function cannot
 hold loop state: the inner call clobbers the outer one's cursor, and
 per-function variable prefixes do not help when a function collides with

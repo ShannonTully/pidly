@@ -30,6 +30,18 @@ ticket_dir() {
 	printf '%s\n' "$_td_p"
 }
 
+# Is a ticket closed, or held inside something closed? True when there is a
+# c/ between it and the tracker root.
+#
+# Matched on the path relative to .pidly. An absolute path carries the
+# checkout with it, and a checkout that lives under a directory named c —
+# ~/c/pidly — would otherwise make every ticket in it look finished: claim
+# would see nothing blocked and list would offer everything as ready, both
+# wrong in the direction that loses work.
+in_closed() {
+	case ${2#"$1"/} in c/*|*/c/*) return 0 ;; *) return 1 ;; esac
+}
+
 # Every ticket as "number path", one line each, from a single traversal.
 map() {
 	find "$1" -mindepth 1 -type d '!' -name c '!' -name '.*' -printf '%f %p\n'
@@ -312,7 +324,7 @@ cmd_claim() {
 		for _dep in $_needs; do
 			_dp=$(printf '%s\n' "$_m" | awk -v n="$_dep" '$1==n{print $2; exit}')
 			[ -n "$_dp" ] || die "$1 needs $_dep, which does not exist"
-			case $_dp in */c/*) ;; *) _open="$_open $_dep" ;; esac
+			in_closed "$_r" "$_dp" || _open="$_open $_dep"
 		done
 		[ -z "$_open" ] || die "$1 is blocked by open tickets:$_open"
 	fi
@@ -454,8 +466,7 @@ cmd_reopen() {
 	# Closed, or open inside a closed ancestor: either way there is a c/
 	# between the ticket and the surface, and lifting those out is what
 	# reopening means. A ticket with none of them is already open.
-	_rel=$(ticket_dir "$_r" "$1"); _rel=${_rel#"$_r"/}
-	case $_rel in c/*|*/c/*) ;; *) die "$1 is already open" ;; esac
+	in_closed "$_r" "$(ticket_dir "$_r" "$1")" || die "$1 is already open"
 
 	# Outermost first. A closed ancestor holding live work is exactly what
 	# the cascade exists to prevent, so each pass re-locates the ticket and
@@ -463,9 +474,8 @@ cmd_reopen() {
 	# is consistent between any two of them.
 	while :; do
 		_d=$(ticket_dir "$_r" "$1")
-		# Relative to .pidly: an absolute path may have its own c/ in it.
+		in_closed "$_r" "$_d" || break
 		_rel=${_d#"$_r"/}
-		case $_rel in c/*|*/c/*) ;; *) break ;; esac
 		_head=${_rel%%c/*}
 		_seg=${_rel#*c/}; _seg=${_seg%%/*}
 		mv "$_r/${_head}c/$_seg" "$_r/$_head$_seg"
@@ -923,9 +933,8 @@ cmd_new() {
 		_pd=$(ticket_dir "$_r" "$_parent")
 		# An open child inside a closed parent would put live work in a
 		# finished tree, which is the one thing the layout rules out.
-		case $_pd in
-		*/c/*) die "$_parent is closed — reopen it before adding children" ;;
-		esac
+		in_closed "$_r" "$_pd" &&
+			die "$_parent is closed — reopen it before adding children"
 	else
 		_pd=$_r
 	fi
@@ -1096,7 +1105,9 @@ schema_fields() {
 survey() {
 	_sv_r=$1
 	map "$_sv_r" | awk -v root="$_sv_r" '
-		{ closed[$1] = ($2 ~ /\/c\//); path[$1] = $2 }
+		# Relative to root, for the reason in in_closed().
+		{ closed[$1] = (substr($2, length(root) + 2) ~ /(^|\/)c\//)
+		  path[$1] = $2 }
 		END {
 			for (n in path) {
 				if (closed[n]) continue
@@ -1260,9 +1271,8 @@ cmd_check() {
 			# A numbered directory sitting here is an open child, and a
 			# finished tree may not hold live work. Only the parent can
 			# see this: the child's own path says c/ and looks closed.
-			case ${_path#"$_r"/} in
-			c/*|*/c/*) flag "$_num: closed, but child $_sn is open" ;;
-			esac
+			in_closed "$_r" "$_path" &&
+				flag "$_num: closed, but child $_sn is open"
 		done
 
 		# Claims and locks whose holder is gone.
