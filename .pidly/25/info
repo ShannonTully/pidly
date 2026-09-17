@@ -1,0 +1,44 @@
+claim:
+needs: 24
+title: pidly set and pidly fields: writing a field, and filling slots after a schema change
+effort: M
+area: cli
+created: 2026-09-17T06:16:28Z
+updated: 2026-09-17T06:16:28Z
+
+Nothing in the CLI sets a field. release -m writes handoff and that is the
+whole list; set_field exists inside the script and is not exposed. So a
+per-ticket value is pidly edit and your editor, and a bulk change is an awk
+loop over every info file. Adding a row to schema.md leaves every existing
+ticket without the slot, which is the gap this closes.
+
+  pidly set <n> <field> [value]    one ticket; no value clears it
+  pidly fields                     add missing declared keys to every ticket
+
+set replaces or appends within the field block, under the lock, the way
+release already writes handoff. It refuses a field the schema does not
+declare — that is what check would flag a second later.
+
+fields is the migration. It adds keys a ticket is missing, in schema order,
+and does nothing else: it never removes a field the schema dropped, because
+that is data, and never reorders existing lines, because nothing may depend
+on position (see 24). Explicit, never part of init — init is what you run
+after an upgrade, and it must not quietly rewrite every ticket in the
+tracker. check grows a report for the drift so there is a way to see what
+fields would do before running it.
+
+It must not bump updated. It is pidly writing, but it is not activity on the
+work, and a migration that touched every ticket would flatten list --stale
+to nothing. Same reasoning that keeps close and reopen from bumping it.
+
+Depends on 24 for the syntax: -f k=v and set <n> <field> <value> have to
+agree about what a value is, and about whether the values column in
+schema.md is validated or is documentation.
+
+Open question: whether fields is worth a --dry-run of its own, or whether
+check reporting the drift is enough.
+
+Done when both commands exist, a schema row added after the fact can be
+rolled out across a tracker in one command, updated is untouched by it, and
+the tests cover a field added mid-life, a ticket that already has it, a
+ticket made by hand with fields in a different order, and a closed ticket.

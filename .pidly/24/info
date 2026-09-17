@@ -1,0 +1,50 @@
+claim:
+needs:
+title: required means a value, and new can supply one
+effort: M
+area: cli
+created: 2026-09-17T06:16:15Z
+updated: 2026-09-17T06:16:15Z
+
+Today required: yes means the key exists. pidly new stubs it empty and check
+is satisfied, so the one thing labelled required requires nothing a reader
+can use — an empty value and a missing line are indistinguishable to
+get_field and to awk.
+
+Make required mean what the word says: the ticket is not valid until the
+field has a value. check reports "required field 'effort' is empty"
+alongside the existing missing case.
+
+That breaks stubbing, because a stubbed required field would make every
+freshly created ticket fail check. So new has to be able to supply values:
+
+  pidly new -f effort=M -f area=cli "Title"
+
+and refuse when a required field has none. -f is also the first way to set a
+field at all; 24 generalises it to existing tickets.
+
+Also: new writes every field the schema declares, in schema order, not just
+the required ones. Empty slots are a prompt — you see what the project
+expects without opening schema.md — and they make diffs between tickets line
+up. Order comes from the table, so the table is the one place it is decided.
+
+What this does not buy, deliberately: fixed line numbers. Uniform tickets
+make "the body starts at line 5+N" true, and readers still must not depend
+on it. Measured on 2000 tickets, one awk pass reading a fixed line is 0.43s
+and the same pass matching the field by name is 0.44s — inside the run-to-
+run noise, because the field block is under ten lines and ends at a blank.
+The 30x win is one pass instead of a process per ticket (17.4s), and that is
+available either way. A scanning reader is right unconditionally; a
+positional one is right only while every ticket matches the current schema,
+and is silently wrong for any that does not.
+
+The values column is documentation today — nothing checks that effort is one
+of S, M, L. Decide whether -f validates against it, or whether that stays a
+comment. Validating means the column becomes a grammar and the schema stops
+being free-form, which is the deferred "enums with per-value behaviour"
+worry in the design.
+
+Done when required fields are enforced by value, new -f supplies them, new
+writes the full slate in schema order, and the tests cover a required field
+left empty, a required field supplied, an unknown field name, and a value
+containing spaces.
