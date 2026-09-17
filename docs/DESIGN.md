@@ -577,7 +577,7 @@ JSON parser in bash to use it.
 
 `claim`, `needs` and `title` are structural and always present, in that
 order. They are not in the table — the table is only for the project's own
-fields, which live after the body:
+fields, which live between those three lines and the body:
 
 ```markdown
 | field | required | values |
