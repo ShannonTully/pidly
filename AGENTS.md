@@ -18,10 +18,11 @@ ones in that container's `c/`. Closing is a move.
 `info` is four header lines, then the body, then project fields:
 
 ```
-claim:                    1  empty, or who holds it
-needs: 3 8                2  must be closed before this starts
-title: Short title        3
-desc:11                   4  line number of the body's last line
+claim:                1  empty, or who holds it
+needs: 3 8            2  must be closed before this starts
+title: Short title    3
+effort: M             4  project fields, then a blank line,
+                         then the body to the end of the file
 ```
 
 ```sh
@@ -50,6 +51,5 @@ note a subagent claims with `PIDLY_AGENT`, not a pid.
 
 - **Never delete a ticket** — numbers are never reused. Close it.
 - A ticket cannot close while it has children outside its own `c/`.
-- If you hand-edit a body, fix `desc:` to the new last line.
 - A claim you cannot verify is not a dead one. Leave it alone.
 <!-- pidly:end -->

@@ -1,7 +1,9 @@
 claim:
 needs:
 title: Make test concurrency configurable
-desc:20
+effort: S
+area: cli
+
 The concurrency tests fork a process per racer. How many a machine tolerates
 is a property of the machine, not of pidly: a proot sandbox falls over well
 before a workstation does, and capping the suite at the sandbox's limit makes
@@ -18,5 +20,3 @@ before sourcing, and resolving from $0 silently gave it a different answer
 than the suites it was about to run.
 
 Done: tests/config.sh, .env.example, wired into claim.sh and new.sh.
-effort: S
-area: cli

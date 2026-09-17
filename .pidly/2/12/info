@@ -1,7 +1,9 @@
 claim:
 needs: 3
 title: pidly reap
-desc:14
+effort: S
+area: cli
+
 Clear claims that are positively dead: our runtime, and the process
 demonstrably absent. Never a claim that is live, unverifiable, or merely
 unrecognised — the whole point of separating reap from check is that
@@ -12,5 +14,3 @@ handles it directly and reap can ignore it.
 
 Note .pidly/.id is now only a fallback for systems with no boot id, so the
 identity work this ticket originally carried is done in 3.
-effort: S
-area: cli

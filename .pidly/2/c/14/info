@@ -1,7 +1,9 @@
 claim:
 needs:
 title: handoff: what the last agent left behind
-desc:30
+effort: S
+area: format
+
 A place for an agent to record where it got to when it drops a claim without
 finishing, so the next agent does not reconstruct it from the diff.
 
@@ -28,5 +30,3 @@ per invocation. That was already the design; it is now written down in the
 shipped reference, where it was missing.
 
 Done: implemented in bin/pidly, covered by tests/handoff.sh (14 cases).
-effort: S
-area: format

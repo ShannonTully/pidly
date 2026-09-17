@@ -1,7 +1,9 @@
 claim:
 needs:
 title: Settle the on-disk format
-desc:26
+effort: M
+area: format
+
 The layout, the header format, and the state model are written up in
 docs/DESIGN.md. What remained was closing the open questions, because
 tooling written before they were settled would have to be rewritten.
@@ -24,5 +26,3 @@ the filesystem: if a subtask needs redoing, its parent is not finished.
 
 What is left is deferred rather than open, and listed as such in the design
 with the trigger that would force each decision.
-effort: M
-area: format

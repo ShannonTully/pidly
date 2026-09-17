@@ -1,7 +1,9 @@
 claim:
 needs:
 title: Delegation convention for Claude Code subagents
-desc:29
+effort: S
+area: docs
+
 Subagents run inside the Claude Code CLI process: a Bash call from one sees
 the same CLAUDE_PID as the lead agent. A pid-based claim cannot tell a
 subagent from its parent — two claims, same pid, both live. Subagents claim
@@ -27,5 +29,3 @@ to do.
 
 Done: guidance in the reference and the summary, covered by the existing
 suites.
-effort: S
-area: docs

@@ -1,7 +1,9 @@
 claim:
 needs:
 title: Attachments: retracted
-desc:30
+effort: S
+area: format
+
 Retracted. An earlier revision made any file in a ticket directory an
 attachment, on the grounds that a ticket is a directory and the affordance
 was free. It was permission, not a mechanism, and for agents permission
@@ -28,5 +30,3 @@ invalid, since the scan reads it as a phantom ticket.
 This also raises the priority of 10 — writing findings into a body by hand
 means fixing desc: by hand, which is the drift the format is worst at
 detecting.
-effort: S
-area: format

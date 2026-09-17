@@ -1,7 +1,9 @@
 claim:
 needs: 1
 title: pidly claim / release, and the lock
-desc:23
+effort: M
+area: cli
+
 claim writes the agent's pid into line 1; release blanks it back to "claim:".
 Both rewrite info, as does edit, so all three serialize behind a lock.
 
@@ -21,5 +23,3 @@ claim also refuses a ticket whose needs are not all closed.
 
 Done: implemented in bin/pidly, covered by tests/claim.sh (17 cases, run under
 dash and bash), plus a 100-way race yielding exactly one winner.
-effort: M
-area: cli

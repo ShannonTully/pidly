@@ -1,7 +1,9 @@
 claim:
 needs: 1
 title: pidly new
-desc:27
+effort: M
+area: cli
+
 Allocate the next number, create the directory under the target parent, and
 write the four header lines with the schema's required fields stubbed below
 the body.
@@ -25,5 +27,3 @@ An open child inside a closed parent is refused rather than silently putting
 live work in a finished tree.
 
 Done: implemented in bin/pidly, covered by tests/new.sh (24 cases).
-effort: M
-area: cli

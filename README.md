@@ -55,18 +55,18 @@ in the tree plus one.
 claim:
 needs: 1 4
 title: Write the pidly shell script
-desc:7
-A single POSIX shell script providing the ergonomics layer over the
-format. Every command must be something a person could have done by hand.
 effort: L
 area: cli
+
+A single POSIX shell script providing the ergonomics layer over the
+format. Every command must be something a person could have done by hand.
 ```
 
-Four fixed header lines, then the body, then your own fields. Lines 1 and 2 are
-the status pair: an agent deciding what to pick up reads those two and nothing
-else, so *what can I start right now?* never opens a body. `desc:` is the
-absolute line number where the body ends, so the body and the project fields
-are each one exact read when they're actually wanted.
+Three fixed header lines, then your own fields, then a blank line, then the
+body to the end of the file. Lines 1 and 2 are the status pair: an agent
+deciding what to pick up reads those two and nothing else, so *what can I
+start right now?* never opens a body. Nothing records where the body starts
+or ends, so editing one needs no bookkeeping.
 
 `needs:` lists ticket numbers that must be closed first. It references numbers
 rather than paths because numbers are permanent and paths aren't — a `needs: 7`
@@ -153,10 +153,10 @@ find .pidly -type d -name c -prune -o -name info -print | sort -V |
   done
 
 # the body of one ticket, exactly
-f=.pidly/2/info; n=$(sed -n '4s/^desc://p' "$f"); sed -n "5,${n}p" "$f"
+f=.pidly/2/info; awk 'b { print } !b && $0 == "" { b = 1 }' "$f"
 
-# its custom fields
-tail -n +$((n+1)) "$f"
+# its project fields
+awk 'NR>3 { if ($0 == "") exit; print }' "$f"
 
 # claim it, and ask who holds one
 PIDLY_PID=$$ pidly claim 7

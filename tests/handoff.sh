@@ -34,12 +34,12 @@ check "a later handoff replaces the earlier one" "$(grep -c '^handoff:' .pidly/1
 check "with the new text" "$(sed -n 's/^handoff: //p' .pidly/1/info)" "Second note."
 
 echo "structure"
-d=$(sed -n '4s/^desc://p' .pidly/1/info)
-check "desc still points at the body's last line" "$d" "5"
-check "the body is untouched" "$(sed -n "5,${d}p" .pidly/1/info)" "Body line."
-check "handoff sits after the body, with the fields" \
-	"$(tail -n +$((d+1)) .pidly/1/info | grep -c '^handoff:')" "1"
-check "it does not become a header line" "$(sed -n 1,4p .pidly/1/info | grep -c handoff)" "0"
+body() { awk 'b { print } !b && $0 == "" { b = 1 }' "$1"; }
+fields() { awk 'NR>3 { if ($0 == "") exit; print }' "$1"; }
+check "the body is untouched" "$(body .pidly/1/info)" "Body line."
+check "handoff sits with the fields, before the body" \
+	"$(fields .pidly/1/info | grep -c '^handoff:')" "1"
+check "it does not become a header line" "$(sed -n 1,3p .pidly/1/info | grep -c handoff)" "0"
 
 echo "surfacing"
 out=$($PIDLY claim 1)

@@ -31,13 +31,13 @@ made of ticket numbers and `c`, so `.pidly/7/12/` is ticket 12 under 7.
 ## The info file
 
 ```
-claim:                       1  empty, or who holds it
-needs: 3 8                   2  tickets that must close before this starts
-title: Short human title     3
-desc:11                      4  line number of the body's last line
-                             5  body starts here
-...                         11  body ends at the number in desc:
-effort: M                       project fields, defined in schema.md
+claim:                     1  empty, or who holds it
+needs: 3 8                 2  tickets that must close before this starts
+title: Short human title   3
+effort: M                  4  project fields, defined in schema.md
+handoff: where I got to    5  ...as many as the schema declares, or none
+                           6  one blank line
+The body, from here        7  ...to the end of the file
 ```
 
 Read only as far as you need:
@@ -46,11 +46,13 @@ Read only as far as you need:
 |---|---|
 | can I take this? | `sed -n 1,2p info` |
 | a listing line | `sed -n 3p info` |
-| the body | `sed -n "5,${desc}p" info` |
-| project fields | `tail -n +$((desc+1)) info` |
+| project fields | `awk 'NR>3 { if ($0=="") exit; print }' info` |
+| the body | `awk 'b { print } !b && $0=="" { b=1 }' info` |
 
-If you edit a body, update `desc:` to the new last line, or use `pidly edit`,
-which does it for you.
+Nothing records where the body starts or ends. It runs to the end of the
+file, and the fields stop at the first blank line — which is ahead of the
+body, so nothing you write in a body can be mistaken for the boundary.
+Appending to a body needs no bookkeeping.
 
 ## Finding work
 
@@ -134,7 +136,7 @@ lines:
 
 ```sh
 mkdir .pidly/7/14
-printf 'claim:\nneeds:\ntitle: %s\ndesc:5\n%s\n' "Do the thing" "Why." \
+printf 'claim:\nneeds:\ntitle: %s\n\n%s\n' "Do the thing" "Why." \
   > .pidly/7/14/info
 printf '%s %s\n' "$(head -c8 /dev/urandom | od -An -tx1 | tr -d ' ')" \
   "Do the thing" > .pidly/.n/14
@@ -172,7 +174,7 @@ and the ticket frees itself.
 **Write down what the subagent found before the context is gone.** Its
 output is otherwise ephemeral: it lands in the lead agent's context, gets
 summarised, and disappears. Findings go in the body of the ticket the
-subagent worked on, with `pidly edit` so `desc:` stays honest.
+subagent worked on. Appending to a body is just appending.
 
 If the result is a standalone artifact — a review, a benchmark — put it
 where artifacts live in the repo and reference the path from the body. It is
@@ -212,8 +214,6 @@ and does not reopen tickets that `needs` it.
   its number be issued again to something else. Close it instead.
 - **`needs` holds numbers, never paths.** A number is permanent; a path
   changes every time a ticket is closed or re-parented.
-- **`desc:` must match the body.** Nothing detects a stale one except
-  `pidly check`.
 - **Parents and dependencies are different things.** `needs` blocks starting;
   children block closing. Neither implies the other, and a parent is never an
   implicit dependency of its own children.

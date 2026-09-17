@@ -1,17 +1,17 @@
 # Ticket schema
 
 Every ticket is a directory; its content is the file `info` inside it.
-Four header lines are structural and always present, in this order:
+Three header lines are structural and always present, in this order:
 
 | line | field | meaning |
 |---|---|---|
-| 1 | `claim:` | empty, or the pid of the agent holding the ticket |
+| 1 | `claim:` | empty, or who holds the ticket |
 | 2 | `needs:` | space-separated ticket numbers that must be closed first |
 | 3 | `title:` | a human title, not the number |
-| 4 | `desc:` | absolute line number of the body's last line |
 
-The body runs from line 5 to `desc`. Everything after `desc` is a project
-field from the table below.
+Lines 4 onward are project fields from the table below, ending at the first
+blank line. Everything after that blank line is the body, which runs to the
+end of the file.
 
 | field   | required | values                        |
 |---------|----------|-------------------------------|

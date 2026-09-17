@@ -1,7 +1,9 @@
 claim:
 needs: 1
 title: Claim identity and liveness
-desc:20
+effort: M
+area: format
+
 A pid is meaningful only relative to a process table and only until it is
 recycled, so a claim records pid.starttime@runtime, where runtime is boot id
 plus uid plus pid namespace, derived rather than stored. Each part closed a
@@ -18,5 +20,3 @@ resolves to unverifiable, because calling a live claim dead puts two agents
 on one ticket.
 
 Done: implemented in bin/pidly, covered by tests/identity.sh (18 cases).
-effort: M
-area: format

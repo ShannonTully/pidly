@@ -1,7 +1,9 @@
 claim:
 needs: 3
 title: Agent-facing usage guide
-desc:19
+effort: M
+area: docs
+
 pidly agents writes a section into AGENTS.md, or whichever of CLAUDE.md,
 GEMINI.md or .cursorrules the project already has, between HTML comment
 markers so re-running replaces it in place and leaves surrounding text alone.
@@ -17,5 +19,3 @@ not on every subcommand — so it was narrowed to 3.
 
 Done: implemented in bin/pidly, covered by tests/agents.sh (17 cases).
 Follow-on in 9: check should notice when an installed block has gone stale.
-effort: M
-area: docs

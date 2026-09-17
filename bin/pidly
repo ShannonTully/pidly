@@ -259,25 +259,37 @@ set_line() {
 	mv "$_sl_t" "$_sl_f"
 }
 
-# Set a project field — the region after the body — replacing it if present
-# and appending it if not. Callers hold the lock.
+# Fields are lines 4 up to the first blank line, or the end of the file.
+# The body is everything after that blank line. Nothing records where either
+# begins: the body ends at EOF, and the field boundary sits ahead of the body
+# so body content can never reach it.
+
+get_field() {
+	awk -v k="$2" '
+		NR <= 3 { next }
+		$0 == "" { exit }
+		index($0, k ":") == 1 { sub("^" k ": *", ""); print; exit }
+	' "$1"
+}
+
+# Replace a field if present, otherwise append it to the field block.
+# Callers hold the lock.
 set_field() {
-	_sf_f=$1 _sf_k=$2 _sf_v=$3
-	_sf_d=$(sed -n '4s/^desc://p' "$_sf_f")
-	_sf_t="$_sf_f.$$"
-	awk -v d="$_sf_d" -v k="$_sf_k" -v v="$_sf_v" '
-		NR <= d { print; next }
-		$0 ~ "^" k ":" { print k ": " v; seen = 1; next }
+	_sf_f=$1 _sf_k=$2 _sf_v=$3 _sf_t="$1.$$"
+	awk -v k="$_sf_k" -v v="$_sf_v" '
+		NR <= 3 { print; next }
+		!past && $0 == "" {
+			if (!hit) print k ": " v
+			past = 1; print; next
+		}
+		!past && index($0, k ":") == 1 { print k ": " v; hit = 1; next }
 		{ print }
-		END { if (!seen) print k ": " v }
+		END { if (!past && !hit) print k ": " v }
 	' "$_sf_f" > "$_sf_t"
 	mv "$_sf_t" "$_sf_f"
 }
 
-# Read a project field, empty if absent.
-get_field() {
-	sed -n "s/^$2: *//p" "$1" | tail -1
-}
+get_body() { awk 'b { print } !b && $0 == "" { b = 1 }' "$1"; }
 
 # --- claim / release -------------------------------------------------------
 
@@ -446,13 +458,13 @@ made of ticket numbers and `c`, so `.pidly/7/12/` is ticket 12 under 7.
 ## The info file
 
 ```
-claim:                       1  empty, or who holds it
-needs: 3 8                   2  tickets that must close before this starts
-title: Short human title     3
-desc:11                      4  line number of the body's last line
-                             5  body starts here
-...                         11  body ends at the number in desc:
-effort: M                       project fields, defined in schema.md
+claim:                     1  empty, or who holds it
+needs: 3 8                 2  tickets that must close before this starts
+title: Short human title   3
+effort: M                  4  project fields, defined in schema.md
+handoff: where I got to    5  ...as many as the schema declares, or none
+                           6  one blank line
+The body, from here        7  ...to the end of the file
 ```
 
 Read only as far as you need:
@@ -461,11 +473,13 @@ Read only as far as you need:
 |---|---|
 | can I take this? | `sed -n 1,2p info` |
 | a listing line | `sed -n 3p info` |
-| the body | `sed -n "5,${desc}p" info` |
-| project fields | `tail -n +$((desc+1)) info` |
+| project fields | `awk 'NR>3 { if ($0=="") exit; print }' info` |
+| the body | `awk 'b { print } !b && $0=="" { b=1 }' info` |
 
-If you edit a body, update `desc:` to the new last line, or use `pidly edit`,
-which does it for you.
+Nothing records where the body starts or ends. It runs to the end of the
+file, and the fields stop at the first blank line — which is ahead of the
+body, so nothing you write in a body can be mistaken for the boundary.
+Appending to a body needs no bookkeeping.
 
 ## Finding work
 
@@ -549,7 +563,7 @@ lines:
 
 ```sh
 mkdir .pidly/7/14
-printf 'claim:\nneeds:\ntitle: %s\ndesc:5\n%s\n' "Do the thing" "Why." \
+printf 'claim:\nneeds:\ntitle: %s\n\n%s\n' "Do the thing" "Why." \
   > .pidly/7/14/info
 printf '%s %s\n' "$(head -c8 /dev/urandom | od -An -tx1 | tr -d ' ')" \
   "Do the thing" > .pidly/.n/14
@@ -587,7 +601,7 @@ and the ticket frees itself.
 **Write down what the subagent found before the context is gone.** Its
 output is otherwise ephemeral: it lands in the lead agent's context, gets
 summarised, and disappears. Findings go in the body of the ticket the
-subagent worked on, with `pidly edit` so `desc:` stays honest.
+subagent worked on. Appending to a body is just appending.
 
 If the result is a standalone artifact — a review, a benchmark — put it
 where artifacts live in the repo and reference the path from the body. It is
@@ -627,8 +641,6 @@ and does not reopen tickets that `needs` it.
   its number be issued again to something else. Close it instead.
 - **`needs` holds numbers, never paths.** A number is permanent; a path
   changes every time a ticket is closed or re-parented.
-- **`desc:` must match the body.** Nothing detects a stale one except
-  `pidly check`.
 - **Parents and dependencies are different things.** `needs` blocks starting;
   children block closing. Neither implies the other, and a parent is never an
   implicit dependency of its own children.
@@ -659,10 +671,11 @@ ones in that container's `c/`. Closing is a move.
 `info` is four header lines, then the body, then project fields:
 
 ```
-claim:                    1  empty, or who holds it
-needs: 3 8                2  must be closed before this starts
-title: Short title        3
-desc:11                   4  line number of the body's last line
+claim:                1  empty, or who holds it
+needs: 3 8            2  must be closed before this starts
+title: Short title    3
+effort: M             4  project fields, then a blank line,
+                         then the body to the end of the file
 ```
 
 ```sh
@@ -691,7 +704,6 @@ note a subagent claims with `PIDLY_AGENT`, not a pid.
 
 - **Never delete a ticket** — numbers are never reused. Close it.
 - A ticket cannot close while it has children outside its own `c/`.
-- If you hand-edit a body, fix `desc:` to the new last line.
 - A claim you cannot verify is not a dead one. Leave it alone.
 <!-- pidly:end -->
 BLOCK
@@ -862,18 +874,11 @@ cmd_new() {
 		printf 'claim:\n'
 		printf 'needs:%s\n' "${_needs:+ $_needs}"
 		printf 'title: %s\n' "$_title"
-		if [ -t 0 ]; then
-			printf 'desc:4\n'
-		else
-			_body=$(cat)
-			if [ -z "$_body" ]; then
-				printf 'desc:4\n'
-			else
-				printf 'desc:%s\n' "$(( 4 + $(printf '%s\n' "$_body" | wc -l) ))"
-				printf '%s\n' "$_body"
-			fi
-		fi
 		schema_required "$_r" | while read -r _f; do printf '%s:\n' "$_f"; done
+		if [ ! -t 0 ]; then
+			_body=$(cat)
+			[ -n "$_body" ] && printf '\n%s\n' "$_body"
+		fi
 	} > "$_pd/$_n/info"
 
 	printf '%s\t%s\n' "$_n" "$_pd/$_n/info"
@@ -915,10 +920,10 @@ Four header lines are structural and always present, in this order:
 | 1 | `claim:` | empty, or `<pid>.<starttime>@<runtime>`, or `<agent>@- <expiry>` |
 | 2 | `needs:` | space-separated ticket numbers that must be closed first |
 | 3 | `title:` | a human title, not the number |
-| 4 | `desc:` | absolute line number of the body's last line |
 
-The body runs from line 5 to `desc`. Everything after it is a project field
-from the table below. Add your own rows; `pidly check` enforces them.
+Lines 4 onward are project fields from the table below, ending at the first
+blank line. Everything after that blank line is the body, which runs to the
+end of the file. Add your own rows; `pidly check` enforces them.
 
 | field   | required | values                                |
 |---------|----------|---------------------------------------|

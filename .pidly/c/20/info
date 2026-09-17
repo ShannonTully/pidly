@@ -1,0 +1,30 @@
+claim:
+needs:
+title: Put fields before the body and drop desc:
+effort: M
+area: format
+
+desc: was derived data a hand-edit could falsify, and only check would ever
+notice. It turned out not to be a necessary cost: it existed to serve one
+layout choice — fields after the body — and that choice was what created the
+derived data.
+
+The layout is now three header lines, the project's fields, a blank line,
+then the body to the end of the file. The body ends at EOF, which nothing
+can spoof. The fields end at the first blank after line 3, a boundary that
+sits ahead of the body, so the delimiter-spoofing objection that justified
+desc: does not apply once the delimiter moves in front.
+
+Every bounded read survived and reading fields got cheaper — a scan from the
+top rather than a seek past the body. What was given up is a fixed line
+number for the start of the body, which now depends on how many fields a
+ticket has; nothing stores it, so nothing can disagree with it.
+
+Appending to a body now needs no bookkeeping at all, which is what 19's
+retraction made the central operation, and principle 5 lost its only
+exception. pidly edit in 10 is now a convenience rather than a correctness
+requirement.
+
+Migrated all 20 tickets, both generated documents, this repo's schema and
+every suite. Tests cover a body containing blank lines, a body line that
+reads as a field, an empty body, and appending by hand.

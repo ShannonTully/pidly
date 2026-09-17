@@ -1,7 +1,7 @@
 claim:
 needs:
 title: Record created, updated and closed times
-desc:14
+
 The format has no timestamps. Beads filters on all three and has a stale
 query for work untouched recently, which is exactly what an agent supervisor
 wants. pidly can only answer it with git log per ticket.

@@ -1,7 +1,9 @@
 claim:
 needs:
 title: Merge-safe numbering across branches
-desc:26
+effort: M
+area: format
+
 Sequential numbers collided when two branches allocated at once: a branch
 creating .pidly/5 and another creating .pidly/7/5 merged cleanly and left two
 tickets numbered 5. The lock could not help — branches do not see each other
@@ -24,5 +26,3 @@ the next number still considers the tree and init backfills what it finds.
 
 Done: implemented in bin/pidly, covered by tests/merge.sh (8 cases driving
 real git merges) and additions to tests/init.sh.
-effort: M
-area: format

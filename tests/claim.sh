@@ -16,9 +16,9 @@ cd "$tmp"
 mkdir -p .pidly/c/1 .pidly/2 .pidly/3
 for n in 1 2 3; do
 	d=$(find .pidly -type d -name $n)
-	printf 'claim:\nneeds:\ntitle: ticket %s\ndesc:5\nbody\n' "$n" > "$d/info"
+	printf 'claim:\nneeds:\ntitle: ticket %s\n\nbody\n' "$n" > "$d/info"
 done
-printf 'claim:\nneeds: 2\ntitle: ticket 3\ndesc:5\nbody\n' > .pidly/3/info
+printf 'claim:\nneeds: 2\ntitle: ticket 3\n\nbody\n' > .pidly/3/info
 
 echo "claim"
 out=$(sh -c "PIDLY_PID=\$\$ $PIDLY claim 2" 2>&1) && rc=0 || rc=$?

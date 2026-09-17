@@ -1,7 +1,9 @@
 claim:
 needs: 1
 title: Write the pidly shell script
-desc:14
+effort: L
+area: cli
+
 A single POSIX shell script providing the ergonomics layer over the format.
 Not a runtime dependency: every command must be something a person could
 have done by hand with mkdir, mv, and an editor, leaving the repository
@@ -12,5 +14,3 @@ concurrent agents. Everything else stays hand-doable.
 
 Subcommands are broken out as child tickets. 13 is the entry point for a
 project that has no tracker yet.
-effort: L
-area: cli

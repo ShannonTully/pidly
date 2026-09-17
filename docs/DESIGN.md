@@ -25,8 +25,7 @@ this list in order.
    needs and stop. Deciding what to work on should not mean reading a single
    body.
 5. **Humans and agents read the same bytes.** No separate index, cache, or
-   machine format that can drift from the source of truth. `desc:` is the one
-   deliberate exception, and the ticket-file section explains what bought it.
+   machine format that can drift from the source of truth.
 
 ## Layout
 
@@ -133,9 +132,8 @@ can add it as a schema field.
 A subagent's output is ephemeral — it lands in the lead agent's context, is
 summarised, and is gone at the next compaction. That is a real problem, and
 the answer is that findings go in the **body** of the ticket the subagent
-worked on, written before the context is lost. `desc:` already bounds a long
-body, so it costs only the agent that committed to the ticket, not anyone
-scanning.
+worked on, written before the context is lost. A long body costs only the
+agent that committed to the ticket, since scanning never opens one.
 
 A standalone artifact goes in the repo, and the body references it by path.
 
@@ -149,7 +147,7 @@ affordance was free. It was withdrawn, for three reasons worth keeping:
   format exists to prevent.
 - **Nothing announces it.** A reader taking the header and the body gets no
   signal that another file exists. The obvious fix, a field listing them, is
-  derived data that can drift, and `desc:` is already one of those.
+  derived data that can drift, which the format now has none of.
 - **Wrong location.** An artifact worth keeping is usually about the *code*,
   not the ticket. A parser review belongs next to the parser, where everyone
   finds it; filed in a ticket it is visible only to that ticket's readers,
@@ -241,51 +239,69 @@ invariant for `check` to enforce, and no duplicated path data in the format.
 
 ## The ticket file
 
-Four header lines, then the body, then any project fields.
+Three header lines, then the project's fields, then a blank line, then the
+body to the end of the file.
 
 ```
 claim:
 needs: 1 4
 title: Write the pidly shell script
-desc:10
+effort: L
+handoff: Parser works; lexer fails on nested quotes.
+
 A single POSIX shell script providing the ergonomics layer over the format.
 Not a runtime dependency: every command must be something a person could
-have done by hand with mkdir, mv, and an editor.
-
-Subcommands are broken out as child tickets.
-effort: L
-area: cli
+have done by hand.
 ```
 
-The header is fixed-position on purpose, and the order falls out of how much a
-reader needs:
+The header is fixed-position on purpose, and the order falls out of how much
+a reader needs:
 
 | want | read |
 |---|---|
 | can I take this? | `sed -n 1,2p` |
 | a listing line | `sed -n 3p` |
-| the body | `sed -n "5,${desc}p"` |
-| project fields | `tail -n +$((desc+1))` |
+| project fields | `awk 'NR>3 { if ($0=="") exit; print }'` |
+| the body | `awk 'b { print } !b && $0=="" { b=1 }'` |
 
-The first two lines are the status pair and the next two are the content pair.
-An agent deciding what to work on needs only `claim:` and `needs:`, so the
-scheduling question — *what can I start right now?* — is answered by two lines
-per ticket and never touches a body. Add line 3 and you have a full listing.
+The first two lines are the status pair and the third is the title, so the
+scheduling question — *what can I start right now?* — is answered by two
+lines per ticket and never touches a body. Add line 3 and you have a full
+listing.
 
-`desc:` holds the absolute line number of the body's last line, so every one of
-those reads is exact — no scanning for a delimiter, and no risk of a body that
-happens to contain the delimiter breaking the parse.
+**Nothing records where the body starts or ends.** It ends at the end of the
+file, which nothing can spoof, and the fields end at the first blank line
+after line 3 — a boundary that sits *ahead* of the body, so nothing written
+in a body can be mistaken for it. A body may contain as many blank lines as
+it likes, and a body line that reads as `handoff: something` is still body.
+All three are covered by tests.
 
 Title is a human title, not the number; the number is the directory name and
 would be redundant here.
 
-**The cost is real: `desc:` is derived data living inside the file it
-describes.** Edit the body by hand and the header starts lying. Nothing detects
-that except `pidly check`, and nothing repairs it except rewriting the line.
-This is the one place the format knowingly breaks principle 5, bought with the
-bounded reads in the table above. It puts weight on `pidly edit` — the command
-exists specifically to keep the number honest — and makes the `desc:` check a
-required part of CI rather than a nicety.
+### Why the fields come first
+
+An earlier layout put the body immediately after the header and the fields
+after it, with a fourth header line `desc:` holding the body's last line
+number. That bought exact reads — no scanning, no delimiter a body could
+spoof — at the cost of derived data living inside the file it described.
+Edit a body by hand and the header started lying, and nothing but
+`pidly check` would ever notice.
+
+Inverting the layout removes the cost rather than guarding it. `desc:`
+existed only to say where the body ended; put the fields first and the end
+of the file says it instead. The delimiter objection does not survive the
+move either, because the boundary is no longer something a body could
+contain — it is passed before the body begins.
+
+What this gives up is a fixed line number for the start of the body, which
+now depends on how many fields a ticket has. Nothing stores that number, so
+nothing can disagree with it. Reading the fields got cheaper as well: a
+short scan from the top rather than a seek past the body.
+
+The payoff is that **appending to a body needs no bookkeeping at all**,
+which is what the retraction in ticket 19 made the central operation, and
+principle 5 loses its only exception.
 
 ## Dependencies
 
@@ -552,7 +568,7 @@ table, because the file has two audiences and a table serves both: a human reads
 it as documentation, an agent reads it as a spec, and no one needs a TOML or
 JSON parser in bash to use it.
 
-`claim`, `needs`, `title` and `desc` are structural and always present, in that
+`claim`, `needs` and `title` are structural and always present, in that
 order. They are not in the table — the table is only for the project's own
 fields, which live after the body:
 
@@ -579,8 +595,8 @@ body.
 
 It is one line on purpose. A multi-line dump invites an agent to paste its
 reasoning, which is exactly the context bloat the format is built to avoid;
-anything longer belongs in the body, where `desc:` already bounds it. And it
-is overwritten rather than accumulated, so it always describes the most
+anything longer belongs in the body. And it is overwritten rather than
+accumulated, so it always describes the most
 recent stop rather than growing into an unread log.
 
 This also covers what closing lost when the marker file went away: a project
@@ -634,11 +650,11 @@ about the symptom pointed at the lock. Helpers therefore use a per-function
 prefix (`_lk_`, `_td_`, `_ho_`), and the test suite asserts that a fresh
 tracker's first ticket is `1`.
 
-Two carve-outs. `edit` exists because `desc:` is derived data that a hand-edit
-can falsify. And claiming is the single operation that is *not* safe to do by
-hand while other agents are running, because it needs the lock — one function's
-worth of shell, and the price of having the claim on line 1 rather than in a
-file of its own.
+One carve-out. Claiming is the single operation that is *not* safe to do by
+hand while other agents are running, because it needs the lock — one
+function's worth of shell, and the price of having the claim on line 1
+rather than in a file of its own. Everything else, including editing a body,
+is a plain file edit with nothing to keep in sync.
 
 ## Starting a tracker
 

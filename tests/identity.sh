@@ -10,7 +10,7 @@ state() { $PIDLY status "$1" | cut -f2; }
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"; mkdir -p .pidly/1
-printf 'claim:\nneeds:\ntitle: one\ndesc:5\nbody\n' > .pidly/1/info
+printf 'claim:\nneeds:\ntitle: one\n\nbody\n' > .pidly/1/info
 
 echo "process identity"
 check "an unclaimed ticket is free" "$(state 1)" "unclaimed"

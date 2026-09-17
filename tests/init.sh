@@ -27,7 +27,7 @@ check "and the fallback id" "$(grep -c '^\.id$' .pidly/.gitignore)" "1"
 check "nothing is written to a root .gitignore" "$([ -f .gitignore ] && echo yes || echo no)" "no"
 
 echo "the seeded schema"
-check "documents the four header lines" "$(count 'desc:' .pidly/schema.md)" "1"
+check "documents the header lines" "$(count '| 3 | `title:`' .pidly/schema.md)" "1"
 check "ships the handoff field" "$(count '| handoff ' .pidly/schema.md)" "1"
 check "and nothing else opinionated" "$(grep -c '^| effort' .pidly/schema.md || true)" "0"
 
@@ -44,7 +44,7 @@ check "with a nonce and the title" \
 	"$(awk '{print (NF>=2 && $1 ~ /^[a-z0-9]+$/) ? "yes" : "no"}' .pidly/.n/1)" "yes"
 
 mkdir .pidly/9
-printf 'claim:\nneeds:\ntitle: made by hand\ndesc:4\n' > .pidly/9/info
+printf 'claim:\nneeds:\ntitle: made by hand\n' > .pidly/9/info
 $PIDLY init >/dev/null
 check "init backfills a hand-made ticket" "$([ -f .pidly/.n/9 ] && echo yes)" "yes"
 n=$($PIDLY new "after backfill" </dev/null | cut -f1)

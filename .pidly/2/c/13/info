@@ -1,7 +1,9 @@
 claim:
 needs: 5
 title: pidly init
-desc:26
+effort: M
+area: cli
+
 Create a .pidly tree in a project that has none: the directory itself, a
 seeded schema.md documenting the four structural header lines and shipping
 the handoff field, .pidly/README.md and the AGENTS.md summary via the same
@@ -24,5 +26,3 @@ A tracker inside a tracker is refused — the outer one's traversals would walk
 the inner one and numbers would collide.
 
 Done: implemented in bin/pidly, covered by tests/init.sh (21 cases).
-effort: M
-area: cli
