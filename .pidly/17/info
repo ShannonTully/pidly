@@ -1,0 +1,14 @@
+claim:
+needs:
+title: Record created, updated and closed times
+desc:14
+The format has no timestamps. Beads filters on all three and has a stale
+query for work untouched recently, which is exactly what an agent supervisor
+wants. pidly can only answer it with git log per ticket.
+
+Project fields rather than header lines: they do not help answer "can I start
+this?", which is what the header's fixed positions are for.
+
+Open question is whether closed time is needed at all given the close is a
+git commit, and whether updated is maintained by pidly or left to the
+filesystem mtime, which is free but does not survive a clone.

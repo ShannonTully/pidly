@@ -1,0 +1,27 @@
+claim:
+needs:
+title: Merge-safe numbering across branches
+desc:27
+Sequential numbers collide when two branches allocate at once. Verified: a
+branch creating .pidly/5 and another creating .pidly/7/5 merge cleanly and
+leave two tickets numbered 5, so find -name 5 has two answers and every
+needs: 5 is ambiguous. The lock cannot help — branches do not see each other
+until merge.
+
+The real choice is prevention versus detection. Only non-coordinating ids
+(hash, timestamp, per-actor prefix) prevent it, and all of them give up the
+readable number this project is built around. Everything that keeps "7"
+detects instead.
+
+Recommended: a number registry. Allocation writes .pidly/.n/<number>
+containing a nonce and the title, never modified afterwards. Two branches
+taking the same number produce an add/add conflict on that path, so git
+blocks the merge; different numbers merge cleanly. Both verified.
+
+It also makes allocation cheaper — a flat readdir instead of a tree walk —
+and guarantees numbers are never reissued even if someone hard-deletes a
+ticket directory, which today would recycle the number.
+
+Cost: one small file per ticket in a hidden directory, a second source of
+truth for check to verify, and resolution still means renumbering one side.
+Detection at merge time is the win, not automatic repair.

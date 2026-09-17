@@ -632,6 +632,32 @@ convenient path; `find`, `sed` and `mv` are the guaranteed one.
 changes and the installed text does not. `pidly check` should regenerate both
 and compare — cheap, since each comes from a single function.
 
+## Not doing
+
+pidly replaces beads (`bd`) for this project's workflow, so it is worth
+saying which of its ~100 commands are deliberate non-goals rather than
+oversights.
+
+- **A database.** Dolt, SQL, cell-level merge, federation, compaction, gc.
+  The whole premise is that the repository is the interface.
+- **Issue-tracker integrations.** GitHub, GitLab, Jira, Linear, Notion, ADO.
+- **Agent memory.** `remember`/`recall`/`forget`, a kv store, molecules,
+  formulas, swarms. That is a different product sharing a binary.
+- **More relation types.** `bd` has blocks, relates-to, duplicates,
+  supersedes, discovered-from. pidly has `needs` and parentage. Principle 3
+  is the reason: every additional relation is another reference to keep
+  honest, and the two that exist cover scheduling and decomposition.
+- **An assignee separate from the claim.** `bd` distinguishes a durable
+  assignee from `in_progress`. pidly has only the claim, which is a live
+  process. Saying "this is someone's ticket" while nothing is running is a
+  planning concern, and the `handoff` field covers the note that usually
+  goes with it.
+
+Worth noting the direction is not all one way: **`bd` has no claim
+liveness.** `bd update --claim` sets an assignee and a status, and if that
+agent dies the issue stays claimed until a human notices. Detecting that is
+what pidly is named after.
+
 ## Deferred
 
 Nothing above is unsettled. These are things consciously not solved yet, with
@@ -645,6 +671,11 @@ the trigger that would force each one.
   only while the schema stays flat key/value. Enums with per-value behaviour
   would outgrow it and force a real config format, which would cost the
   zero-parser property.
+- **Labels.** Project fields are single-line `key: value`, so they cannot
+  hold a set, and there is no equivalent of `bd`'s label filtering. A
+  comma-separated field covers the simple case badly. The trigger is wanting
+  to filter across a dimension that is not already a field — until then,
+  adding a field is cheaper and reads better.
 - **Verifying a remote claim.** Leases stop a remote claim from wedging a
   ticket, but nothing can confirm a remote agent is alive right now — that
   needs a shared medium updating in real time, which is a server. The
