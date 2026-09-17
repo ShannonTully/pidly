@@ -35,43 +35,155 @@ map() {
 	find "$1" -mindepth 1 -type d '!' -name c '!' -name '.*' -printf '%f %p\n'
 }
 
-# --- checkout identity -----------------------------------------------------
+# --- identity and liveness -------------------------------------------------
+#
+# A pid means nothing on its own. It is meaningful only relative to a specific
+# process table, and only until it is recycled. So a claim records both:
+#
+#   <pid>.<starttime>@<runtime>
+#
+# <starttime> distinguishes a recycled pid from the original: a new process
+# reusing the number has a different start time. <runtime> identifies the
+# process table — boot id, uid, and pid namespace where readable. Together
+# they are a unique, checkable process identity the kernel maintains for free.
+#
+# This is why a plain unique id would not be an improvement. Uniqueness is the
+# easy half; the hard half is liveness, and only the OS keeps a registry of
+# live processes. A UUID has no registry behind it, so it would identify an
+# agent without ever telling you whether that agent still exists.
+#
+# Agents with no reachable process table — anything in the cloud — cannot use
+# any of this, and carry a lease instead.
 
-# A random string identifying this checkout. Not the hostname: that is
-# routinely "localhost", which is the collision this exists to prevent.
-# Gitignored, so it never travels in a commit.
+runtime() {
+	_boot=""
+	[ -r /proc/sys/kernel/random/boot_id ] &&
+		read -r _boot < /proc/sys/kernel/random/boot_id 2>/dev/null || true
+	if [ -n "$_boot" ]; then
+		_boot=${_boot%%-*}
+	else
+		# No boot id: fall back to a per-checkout random string. Weaker,
+		# because a checkout survives reboots and pids do not.
+		_boot=$(checkout_id "$1")
+	fi
+	_ns=$(readlink /proc/self/ns/pid 2>/dev/null || true)
+	case $_ns in
+	*"["*) _ns=${_ns#*[}; _ns=".n${_ns%]}" ;;
+	*)     _ns="" ;;
+	esac
+	printf '%s.u%s%s\n' "$_boot" "$(id -u)" "$_ns"
+}
+
 checkout_id() {
-	_r=$1 _f="$1/.id"
+	_f="$1/.id"
 	if [ ! -f "$_f" ]; then
 		( umask 077
 		  if [ -r /dev/urandom ]; then
-			LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom 2>/dev/null | dd bs=1 count=12 2>/dev/null > "$_f"
+			LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom 2>/dev/null |
+				dd bs=1 count=12 2>/dev/null > "$_f"
 		  else
 			printf '%s%s' "$$" "$(date +%s)" > "$_f"
 		  fi
 		  printf '\n' >> "$_f" )
 	fi
-	read -r _id < "$_f"
-	[ -n "$_id" ] || die "could not read checkout id from $_f"
-	printf '%s\n' "$_id"
+	read -r _cid < "$_f"
+	printf '%s\n' "$_cid"
 }
 
-# --- whose pid ------------------------------------------------------------
-#
-# Not this process's. `pidly claim` exits immediately, so its own pid is dead
-# before anyone can check it, which would make every claim look stale. The pid
-# that matters belongs to the agent doing the work, and only the caller knows
-# which process that is: it sets PIDLY_PID. Falling back to the parent is right
-# for a person at a shell and wrong for `sh -c 'pidly claim 8'`, so the
-# fallback is a convenience, not a contract.
+starttime() { awk '{print $22}' "/proc/$1/stat" 2>/dev/null || true; }
 
-agent_pid() {
-	if [ -n "${PIDLY_PID:-}" ]; then
-		kill -0 "$PIDLY_PID" 2>/dev/null ||
-			die "PIDLY_PID=$PIDLY_PID is not a running process"
-		printf '%s\n' "$PIDLY_PID"
+# Is this process identity still running? Only called when the recorded
+# runtime matches ours — same boot, same namespace, same uid — so our own
+# processes are always visible and absence really does mean gone.
+holder_alive() {
+	case $1 in
+	*.*) _pid=${1%%.*}; _start=${1#*.} ;;
+	*)   _pid=$1;       _start="" ;;
+	esac
+	if [ -d /proc ]; then
+		[ -r "/proc/$_pid/stat" ] || return 1
+		[ -z "$_start" ] && return 0
+		[ "$(starttime "$_pid")" = "$_start" ]
 	else
-		printf '%s\n' "$PPID"
+		kill -0 "$_pid" 2>/dev/null
+	fi
+}
+
+# Who is claiming. An agent with a real process is identified by it; one
+# without — a cloud agent, a CI job — names itself in PIDLY_AGENT and must
+# carry a lease, because nothing else can establish that it is alive.
+holder() {
+	if [ -n "${PIDLY_AGENT:-}" ]; then
+		case $PIDLY_AGENT in
+		*@*|*" "*) die 'PIDLY_AGENT may not contain @ or spaces' ;;
+		esac
+		printf '%s@-\n' "$PIDLY_AGENT"
+		return 0
+	fi
+	_p=${PIDLY_PID:-$PPID}
+	kill -0 "$_p" 2>/dev/null || die "PIDLY_PID=$_p is not a running process"
+	_s=$(starttime "$_p")
+	if [ -n "$_s" ]; then
+		printf '%s.%s@%s\n' "$_p" "$_s" "$(runtime "$1")"
+	else
+		printf '%s@%s\n' "$_p" "$(runtime "$1")"
+	fi
+}
+
+# --- leases ----------------------------------------------------------------
+#
+# A lease is the only liveness signal available to an agent whose process
+# table nobody else can reach. It is a promise with an end, not a heartbeat:
+# no refresh traffic, and a claim whose holder dies frees itself on expiry.
+
+now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+iso_at() {
+	date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null ||
+	date -u -r "$1"  +%Y-%m-%dT%H:%M:%SZ 2>/dev/null ||
+	die 'cannot compute a lease expiry: no usable date(1)'
+}
+
+# PIDLY_LEASE as 90s / 30m / 2h / 3d, or bare seconds.
+lease_expiry() {
+	case $1 in
+	*s) _n=${1%s}; _m=1 ;;
+	*m) _n=${1%m}; _m=60 ;;
+	*h) _n=${1%h}; _m=3600 ;;
+	*d) _n=${1%d}; _m=86400 ;;
+	*)  _n=$1;     _m=1 ;;
+	esac
+	case $_n in
+	''|*[!0-9]*) die "PIDLY_LEASE=$1 is not a duration (e.g. 90s, 30m, 2h)" ;;
+	esac
+	iso_at "$(( $(date -u +%s) + _n * _m ))"
+}
+
+# Timestamps are ISO-8601 UTC, so lexical order is chronological order.
+expired() {
+	[ -n "$1" ] || return 1
+	[ "$(printf '%s\n%s\n' "$1" "$(now_iso)" | sort | head -1)" = "$1" ]
+}
+
+# Split a claim value; sets _c_holder, _c_runtime, _c_expiry.
+parse_claim() {
+	case $1 in
+	*" "*) _c_who=${1% *}; _c_expiry=${1##* } ;;
+	*)     _c_who=$1;      _c_expiry="" ;;
+	esac
+	_c_runtime=${_c_who##*@}
+	_c_holder=${_c_who%@*}
+}
+
+# One of: free, expired, live, dead, unverifiable.
+claim_state() {
+	[ -n "$2" ] || { echo free; return 0; }
+	parse_claim "$2"
+	if expired "$_c_expiry"; then echo expired; return 0; fi
+	if [ "$_c_runtime" = "$(runtime "$1")" ]; then
+		if holder_alive "$_c_holder"; then echo live; else echo dead; fi
+	else
+		echo unverifiable
 	fi
 }
 
@@ -132,7 +244,13 @@ set_line() {
 
 cmd_claim() {
 	[ $# -eq 1 ] || die 'usage: pidly claim <number>'
-	_r=$(root); _d=$(ticket_dir "$_r" "$1"); _id=$(checkout_id "$_r")
+	_r=$(root); _d=$(ticket_dir "$_r" "$1")
+
+	# An agent with no reachable process table has no other liveness
+	# signal, so a lease is not optional for it.
+	if [ -n "${PIDLY_AGENT:-}" ] && [ -z "${PIDLY_LEASE:-}" ]; then
+		die 'PIDLY_AGENT requires PIDLY_LEASE: nothing else can show it is alive'
+	fi
 
 	# needs blocks starting, so refuse before taking the lock: a blocked
 	# ticket is not claimable regardless of who else is asking.
@@ -149,45 +267,70 @@ cmd_claim() {
 	fi
 
 	lock "$_d" || die "$1 is being modified by another process"
-	# From here on, release the lock on any exit path.
 	_held=$(sed -n '1s/^claim://p' "$_d/info")
-	if [ -n "$_held" ]; then
-		unlock "$_d"
-		case $_held in
-		*@"$_id")
-			_pid=${_held%@*}
-			kill -0 "$_pid" 2>/dev/null &&
-				die "$1 is claimed by pid $_pid, which is running"
-			die "$1 is claimed by pid $_pid, which is gone — 'pidly reap' clears it" ;;
-		*)      die "$1 is claimed by $_held on another checkout — cannot verify it" ;;
-		esac
+	_state=$(claim_state "$_r" "$_held")
+	case $_state in
+	free|expired) ;;
+	live)         unlock "$_d"; die "$1 is held by $_held, which is running" ;;
+	dead)         unlock "$_d"
+	              die "$1 is held by $_held, which is gone — 'pidly reap' clears it" ;;
+	unverifiable) unlock "$_d"
+	              die "$1 is held by $_held, which this machine cannot check" ;;
+	esac
+
+	_who=$(holder "$_r")
+	if [ -n "${PIDLY_LEASE:-}" ]; then
+		_who="$_who $(lease_expiry "$PIDLY_LEASE")"
 	fi
-	_me=$(agent_pid)
-	set_line "$_d/info" 1 "claim:$_me@$_id"
+	set_line "$_d/info" 1 "claim:$_who"
 	unlock "$_d"
-	printf '%s claimed by %s\n' "$1" "$_me@$_id"
+	if [ "$_state" = expired ]; then
+		printf '%s claimed by %s (previous lease had expired)\n' "$1" "$_who"
+	else
+		printf '%s claimed by %s\n' "$1" "$_who"
+	fi
 }
 
 cmd_release() {
 	[ $# -eq 1 ] || die 'usage: pidly release <number>'
-	_r=$(root); _d=$(ticket_dir "$_r" "$1"); _id=$(checkout_id "$_r")
+	_r=$(root); _d=$(ticket_dir "$_r" "$1")
 
 	lock "$_d" || die "$1 is being modified by another process"
 	_held=$(sed -n '1s/^claim://p' "$_d/info")
-	if [ -z "$_held" ]; then
-		unlock "$_d"; die "$1 is not claimed"
-	fi
-	_me="$(agent_pid)@$_id"
-	if [ "$_held" != "$_me" ]; then
+	[ -n "$_held" ] || { unlock "$_d"; die "$1 is not claimed"; }
+
+	# You may only release what you hold. Anything else — including a claim
+	# left behind by a dead local agent — is reap's job, which keeps
+	# clearing someone else's claim behind an explicit command.
+	parse_claim "$_held"
+	_mine=$(holder "$_r")
+	if [ "$_c_who" != "$_mine" ]; then
 		unlock "$_d"
-		case $_held in
-		*@"$_id") die "$1 is held by $_held, not by you — 'pidly reap' clears a dead claim" ;;
-		*)        die "$1 is claimed by $_held on another checkout — refusing" ;;
+		case $(claim_state "$_r" "$_held") in
+		dead) die "$1 is held by $_c_who, which is gone — 'pidly reap' clears it" ;;
+		unverifiable)
+		      die "$1 is held by $_c_who, which this machine cannot check" ;;
+		*)    die "$1 is held by $_c_who, not by you" ;;
 		esac
 	fi
 	set_line "$_d/info" 1 'claim:'
 	unlock "$_d"
 	printf '%s released\n' "$1"
+}
+
+cmd_status() {
+	[ $# -eq 1 ] || die 'usage: pidly status <number>'
+	_r=$(root); _d=$(ticket_dir "$_r" "$1")
+	_held=$(sed -n '1s/^claim://p' "$_d/info")
+	_state=$(claim_state "$_r" "$_held")
+	if [ "$_state" = free ]; then
+		printf '%s\tunclaimed\n' "$1"
+	else
+		parse_claim "$_held"
+		printf '%s\t%s\tholder %s' "$1" "$_state" "$_c_holder"
+		[ -n "$_c_expiry" ] && printf '\tlease until %s' "$_c_expiry"
+		printf '\n'
+	fi
 }
 
 # --- entry point -----------------------------------------------------------
@@ -196,8 +339,16 @@ usage() {
 	cat >&2 <<'USAGE'
 usage: pidly <command> [args]
 
-  claim <n>      take ticket n, recording $PIDLY_PID (default: $PPID)
+  claim <n>      take ticket n
   release <n>    give it back
+  status <n>     who holds it, and whether that can be verified
+
+environment:
+  PIDLY_PID      the agent's process (default: $PPID). Recorded with its
+                 start time, so a recycled pid is never mistaken for it.
+  PIDLY_AGENT    an agent with no local process — a cloud session, a CI job.
+                 Requires PIDLY_LEASE: nothing else can show it is alive.
+  PIDLY_LEASE    how long the claim is good for: 90s, 30m, 2h, 3d.
 
 not yet implemented: new, close, reopen, edit, list, tree, check, reap
 USAGE
@@ -209,5 +360,6 @@ cmd=$1; shift
 case $cmd in
 claim)   cmd_claim "$@" ;;
 release) cmd_release "$@" ;;
+status)  cmd_status "$@" ;;
 *)       usage ;;
 esac

@@ -10,7 +10,8 @@ agent, with `find` and `sed`, on a machine where pidly was never installed.
 
 The name comes from how claiming works: an agent that picks up a ticket writes
 its **pid** onto it, so you can tell a live claim from one left behind by an
-agent that died.
+agent that died. Agents with no local process — cloud sessions, CI jobs —
+carry a lease with an expiry instead.
 
 ```
 .pidly/
@@ -112,14 +113,12 @@ f=.pidly/2/info; n=$(sed -n '4s/^desc://p' "$f"); sed -n "5,${n}p" "$f"
 # its custom fields
 tail -n +$((n+1)) "$f"
 
-# claim it (pidly takes a lock around this; by hand, just don't race)
-sed -i "1s/.*/claim:$$@$(cat .pidly/.id)/" .pidly/2/info
+# claim it, and ask who holds one
+PIDLY_PID=$$ pidly claim 7
+pidly status 7
 
-# is a claim still alive? (only answerable for claims from this checkout)
-c=$(sed -n '1s/^claim://p' .pidly/2/info)
-[ "${c#*@}" = "$(cat .pidly/.id)" ] &&
-  { kill -0 "${c%@*}" 2>/dev/null && echo live || echo dead; } ||
-  echo "foreign claim — cannot check"
+# a cloud agent, which has no pid anyone here can check, leases instead
+PIDLY_AGENT=$SESSION_ID PIDLY_LEASE=2h pidly claim 7
 
 # close a ticket: move it into its container's c/
 mkdir -p .pidly/c && mv .pidly/2 .pidly/c/

@@ -1,15 +1,16 @@
 claim:
-needs: 8
-title: pidly reap, and checkout identity
-desc:13
-Generate .pidly/.id on first use: a random string identifying this
-checkout, gitignored so it never travels in a commit. Hostname is not
-usable for this — it is routinely "localhost", which is precisely the
-collision the field exists to prevent.
+needs: 3
+title: pidly reap
+desc:14
+Clear claims that are positively dead: our runtime, and the process
+demonstrably absent. Never a claim that is live, unverifiable, or merely
+unrecognised — the whole point of separating reap from check is that
+clearing someone else's claim stays an explicit act.
 
-reap clears claims that are both local (the @id matches this checkout) and
-dead (kill -0 fails). It never touches a foreign claim, because the
-information needed to judge one does not exist on this machine. check
-reports both cases and modifies nothing.
-effort: M
+An expired lease does not need reaping. It is already takeable, so claim
+handles it directly and reap can ignore it.
+
+Note .pidly/.id is now only a fallback for systems with no boot id, so the
+identity work this ticket originally carried is done in 3.
+effort: S
 area: cli

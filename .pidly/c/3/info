@@ -1,0 +1,22 @@
+claim:
+needs: 1
+title: Claim identity and liveness
+desc:20
+A pid is meaningful only relative to a process table and only until it is
+recycled, so a claim records pid.starttime@runtime, where runtime is boot id
+plus uid plus pid namespace, derived rather than stored. Each part closed a
+real hole: a stored checkout id survived reboots, kill -0 reported another
+user's live process as dead, and containers sharing a checkout shared an id
+but not a process table.
+
+Agents with no reachable process table carry a lease instead: an expiry on
+line 1, no heartbeat. PIDLY_AGENT requires PIDLY_LEASE, since an agent that
+can neither be checked nor expire would wedge a ticket forever.
+
+Underlying rule: never report dead without positive evidence. Unknown
+resolves to unverifiable, because calling a live claim dead puts two agents
+on one ticket.
+
+Done: implemented in bin/pidly, covered by tests/identity.sh (18 cases).
+effort: M
+area: format

@@ -263,13 +263,18 @@ for it.
 
 ## Claims
 
-Line 1 is the claim: `claim:` when free, `claim:<pid>@<id>` when held, where
-`<id>` identifies the checkout the pid belongs to.
+Line 1 is the claim: `claim:` when free, and when held one of
 
-The pid is the point. An agent that dies mid-task cannot release what it holds,
-and a claim with no liveness information is indistinguishable from active work.
-A pid is checkable — `kill -0 <pid>` — so a stale claim is detectable rather
-than merely suspicious, and `pidly check` reports claims whose holder is gone.
+```
+claim:<pid>.<starttime>@<runtime>        an agent with a process table
+claim:<agent>@- <expiry>                 an agent without one
+```
+
+The pid is the point where there is one. An agent that dies mid-task cannot
+release what it holds, and a claim with no liveness information is
+indistinguishable from active work. A pid is checkable, so a stale claim is
+detectable rather than merely suspicious, and `pidly check` reports claims
+whose holder is gone.
 
 **Claiming is the one operation the format does not make atomic.** Because the
 claim lives inside `info`, taking it is read-modify-write, and two agents can
@@ -333,39 +338,90 @@ Measured: 100 concurrent claims on one free ticket, one winner, no leftovers.
 
 The same lock, at `.pidly/.lock`, serializes number allocation.
 
-### Whose pid is it
+### What a pid is worth, and when
 
-Not the `pidly` process's. `pidly claim` exits immediately, so recording its
-own pid would make every claim look stale the moment it was taken. The pid that
-matters belongs to the agent doing the work, and only the caller knows which
-process that is, so the caller names it in `PIDLY_PID`. Falling back to the
-parent process is right for a person at a shell and wrong for
-`sh -c 'pidly claim 8'`, so it is a convenience rather than a contract.
+A pid on its own identifies nothing. It is meaningful only relative to a
+particular process table, and only until the number is recycled. Both halves
+have to be recorded or the check gives confident wrong answers:
 
-**Releasing requires ownership.** A claim may only be released by the agent
-holding it — same pid, same checkout. Anything else, including a claim left by
-a dead local agent, is refused and pointed at `pidly reap`, which keeps the
-one-way door of clearing someone else's claim behind an explicit command.
+```
+claim:<pid>.<starttime>@<runtime>
+claim:19248.117009904@31917916.u1000
+```
 
-Because the claim is in a tracked file, claims are committed whether or not
-that's wanted, and a pid from another machine will be checked against the local
-process table. A bare pid is therefore worse than useless across machines: it
-can match an unrelated live local process and report a dead agent as working.
+`<starttime>` is the process's start time, so a later process that inherits
+the number reads as a different identity rather than as the original still
+running. `<runtime>` identifies the process table: boot id, uid, and pid
+namespace where readable, all **derived at run time, never stored**.
 
-So line 1 is `claim:<pid>@<id>`, and `<id>` identifies the checkout.
+Each component closes a hole that was live in the first implementation:
 
-`<id>` is **not** the hostname. On the machine this design was written,
-`hostname` returns `localhost` — a value shared by an unbounded number of other
-machines, which is exactly the collision the field exists to prevent. Instead,
-`.pidly/.id` holds a random string generated on first use and is gitignored, so
-every checkout has an identity that is unique by construction and never travels
-in a commit.
+- **Boot id.** The old `.pidly/.id` was a file, so it survived reboots. Pids
+  do not. A claim written before a reboot kept matching, and its number had
+  since been handed to something else.
+- **Uid.** `kill -0` returns the same failure for "no such process" and "not
+  your process", so an agent running as another user read as *dead* and would
+  have been reaped while working. With the uid in the runtime, a mismatch is
+  never checked in the first place, and a match means the process is ours —
+  where a `kill -0` failure really does mean gone.
+- **Pid namespace.** Two containers sharing a checkout shared one `.pidly/.id`
+  and had entirely separate process tables.
 
-The rule that follows is short: **a claim whose `@<id>` is not the local one is
-unverifiable, not stale.** Liveness cannot be checked across machines at all, so
-the honest answer is to report the claim as foreign and leave it alone. Without
-the id, that case is indistinguishable from a local claim and the tool
-confidently gives a wrong answer.
+The rule underneath all three: **never report dead without positive evidence.**
+Unknown must resolve to unverifiable, because calling a live claim dead puts
+two agents on one ticket, while the reverse only parks one.
+
+### Why not a unique id instead of a pid
+
+Because uniqueness is the easy half. The hard half is liveness, and only the
+operating system keeps a registry of live processes — `kill -0` and
+`/proc/<pid>` work precisely because something else is maintaining them. A
+UUID has no registry behind it: it would tell you *which* agent holds a
+ticket and never whether that agent still exists.
+
+Pairing the pid with its start time gets the uniqueness a UUID would give,
+while keeping the free liveness check. So the pid stays wherever there is a
+process table to ask.
+
+### Leases, for agents with no process table
+
+A cloud agent, a CI job, a container nobody else can see: these have no pid
+anyone can check, and no amount of identity fixes that. For them, liveness
+has to come from a clock instead of a kernel.
+
+```
+claim:<agent>@- <expiry>
+claim:cloud-sess-9f2@- 2026-09-17T05:37:26Z
+```
+
+`@-` means "no reachable process table". The expiry is an ISO-8601 UTC
+instant, so lexical comparison is chronological and no date parsing is needed
+to evaluate it.
+
+This is a **lease, not a heartbeat**: a promise with an end rather than a
+signal that must keep arriving. No refresh traffic, nothing to run in the
+background, and no server — but a claim whose holder dies frees itself when
+the lease runs out, which is the thing a bare unverifiable claim could never
+do. An agent that outlives its lease renews by claiming again.
+
+`PIDLY_AGENT` requires `PIDLY_LEASE`. An agent that can neither be checked nor
+expire would wedge a ticket permanently, so the format refuses to record one.
+
+Resolution order, once for every claim:
+
+| | state | meaning |
+|---|---|---|
+| 1 | `expired` | the lease has run out; anyone may take it |
+| 2 | `live` | our runtime, and the process is there |
+| 3 | `dead` | our runtime, and it positively is not |
+| 4 | `unverifiable` | someone else's runtime, lease still good |
+
+Only `free` and `expired` allow a claim. Only `dead` may be reaped, and only
+locally.
+
+The costs are the ones a clock always brings: skew between machines, which
+UTC and generous leases absorb, and the chance of preempting a slow agent that
+forgot to renew.
 
 ### Clearing dead claims
 
@@ -425,11 +481,11 @@ are read until something has actually been chosen.
 
 Deliberately thin, and deliberately optional.
 
-`pidly` is a POSIX shell script — `new`, `claim`, `release`, `close`, `reopen`,
-`edit`, `list`, `tree`, `check`, `reap`. It is not a runtime dependency of the
-format; it's an ergonomics layer. The acceptance test for every command is that
-a person could have done the same thing with `mkdir`, `mv`, and a text editor,
-and the repository would be byte-identical.
+`pidly` is a POSIX shell script — `new`, `claim`, `release`, `status`,
+`close`, `reopen`, `edit`, `list`, `tree`, `check`, `reap`. It is not a
+runtime dependency of the format; it's an ergonomics layer. The acceptance
+test for every command is that a person could have done the same thing with
+`mkdir`, `mv` and a text editor, and the repository would be byte-identical.
 
 Two carve-outs. `edit` exists because `desc:` is derived data that a hand-edit
 can falsify. And claiming is the single operation that is *not* safe to do by
@@ -450,11 +506,10 @@ the trigger that would force each one.
   only while the schema stays flat key/value. Enums with per-value behaviour
   would outgrow it and force a real config format, which would cost the
   zero-parser property.
-- **Multi-machine claims.** `@<id>` makes a foreign claim *recognizable*, which
-  is enough to stop wrong answers. It does not make one *checkable* — that
-  would need agents to publish liveness somewhere shared, which is a server,
-  which is the thing this project doesn't have. If distributed teams ever need
-  it, the answer is probably a heartbeat timestamp rather than a pid.
+- **Verifying a remote claim.** Leases stop a remote claim from wedging a
+  ticket, but nothing can confirm a remote agent is alive right now — that
+  needs a shared medium updating in real time, which is a server. The
+  remaining question is only whether lease durations want tuning per project.
 - **Body conventions.** The body is free markdown. Whether acceptance criteria
   deserve structure is open; the trigger is agents guessing wrong about when a
   ticket is done.
