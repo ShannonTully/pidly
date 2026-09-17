@@ -13,7 +13,7 @@ fields() { awk 'NR>3 { if ($0 == "") exit; print }' "$1"; }
 fieldnames() { fields "$1" | sed 's/:.*/:/'; }
 iso='^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z$'
 body() { awk 'b { print } !b && $0 == "" { b = 1 }' "$1"; }
-nums() { find .pidly -mindepth 1 -type d '!' -name c '!' -name '.*' -printf '%f\n' | sort -n | tr '\n' ' '; }
+nums() { find .pidly -mindepth 1 -type d '!' -name c '!' -name '.*' -print | awk -F/ '{print $NF}' | sort -n | tr '\n' ' '; }
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"; mkdir .pidly
@@ -160,7 +160,7 @@ done
 wait
 after=$(find .pidly -name info | wc -l)
 check "every parallel creation succeeds" "$((after - before))" "$PIDLY_TEST_RACE"
-dupes=$(find .pidly -mindepth 1 -type d '!' -name c '!' -name '.*' -printf '%f\n' | sort | uniq -d | tr -d '\n')
+dupes=$(find .pidly -mindepth 1 -type d '!' -name c '!' -name '.*' -print | awk -F/ '{print $NF}' | sort | uniq -d | tr -d '\n')
 check "and no number is issued twice" "$dupes" ""
 check "no lock is left behind" "$(find .pidly -name '.lock*' | wc -l)" "0"
 

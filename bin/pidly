@@ -25,7 +25,9 @@ root() {
 # call: callers needing many lookups should use map() instead.
 ticket_dir() {
 	_td_r=$1 _td_n=$2
-	_td_p=$(find "$_td_r" -type d -name "$_td_n" -print -quit)
+	# head, not -quit: find stops anyway when the pipe closes, and -quit is
+	# not POSIX. Nothing here needs an option BSD find might not have.
+	_td_p=$(find "$_td_r" -type d -name "$_td_n" -print | head -n 1)
 	[ -n "$_td_p" ] || die "no ticket $_td_n"
 	printf '%s\n' "$_td_p"
 }
@@ -43,8 +45,15 @@ in_closed() {
 }
 
 # Every ticket as "number path", one line each, from a single traversal.
+#
+# The basename is awk's, not find's: -printf is a GNU extension, and BSD find
+# — which is what macOS ships — does not have it. That went unnoticed because
+# the machine this was written on has bfs as its find, which implements the
+# GNU options. Every caller already pipes this into awk, so the split costs
+# nothing. -mindepth stays: BSD has it too.
 map() {
-	find "$1" -mindepth 1 -type d '!' -name c '!' -name '.*' -printf '%f %p\n'
+	find "$1" -mindepth 1 -type d '!' -name c '!' -name '.*' -print |
+		awk -F/ '{ print $NF" "$0 }'
 }
 
 # --- identity and liveness -------------------------------------------------

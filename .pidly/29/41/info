@@ -4,8 +4,8 @@ title: find -printf is GNU-only, so pidly does not run on macOS
 effort: M
 area: cli
 created: 2026-09-17T07:12:58Z
-updated: 2026-09-17T07:12:58Z
-handoff:
+updated: 2026-09-17T19:10:59Z
+handoff: All but the macOS run; see the body for what stands in for it.
 
 map() is how every traversal in pidly works — list, tree, check, new, reap,
 init, and anything 25 or 27 adds — and it is written as:
@@ -42,3 +42,24 @@ friends is a cheap guard against the habit coming back.
 Done when map and every other traversal run under a POSIX find, verified on
 macOS, the published idioms are portable too, and something in the suite
 notices if a GNU-only option reappears.
+
+
+Done here except the macOS run, which this machine cannot do: its find is
+bfs 4.1.1 and no BSD find is installed.
+
+  map now traverses with -print and takes the basename in the awk every
+  caller already pipes through; ticket_dir stops with head -n 1 rather than
+  -quit, which is not POSIX either. -mindepth stays, as the ticket said.
+  list, tree, check and field print byte-identically before and after.
+
+  The published idioms were already POSIX: the reference and the AGENTS.md
+  block use -prune -o -name info -print, which BSD has.
+
+  tests/portable.sh is the guard the ticket asked for, both halves: a grep
+  over the script and both generated documents for -printf and twelve other
+  extensions, and a run of every command with a find on PATH that refuses
+  them. It is a guard against the habit, not a proof of portability.
+
+What is left is running the suite on a Mac. Also worth knowing before that:
+the suites themselves use GNU sed -i, which BSD sed spells sed -i '', so the
+suite will need work before it runs there even though pidly will.

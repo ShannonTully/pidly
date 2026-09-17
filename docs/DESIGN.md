@@ -817,6 +817,24 @@ not a runtime dependency of the format; it's an ergonomics layer. The acceptance
 test for every command is that a person could have done the same thing with
 `mkdir`, `mv` and a text editor, and the repository would be byte-identical.
 
+**POSIX means the tools too, and `find` is where that slipped.** `map()` —
+the single traversal every command goes through — was written with
+`-printf '%f %p\n'`, which is a GNU extension BSD find does not have, so
+every command would have failed on macOS: the platform a Homebrew tap exists
+to serve. It went unnoticed for the most ordinary reason: the machine pidly
+was written on has bfs as its `find`, which implements the GNU options, so
+nothing ever complained. The basename now comes from the `awk` every caller
+already pipes through, and `ticket_dir` stops with `head -n 1` rather than
+`-quit`. `-mindepth` stays, being the one non-POSIX primary BSD ships too.
+
+A suite running on one machine cannot prove portability, so `tests/
+portable.sh` does the two things it can: it greps the script and both
+generated documents for the extensions — the documents publish `find`
+commands that agents will run, and those are the ones nothing else exercises
+— and it re-runs every command with a `find` on `PATH` that refuses them.
+That catches the habit coming back, which is the failure mode; it does not
+replace running pidly on a Mac.
+
 The locking tests are only as good as the number of processes they race, and
 that number is a property of the machine rather than of pidly — a proot
 sandbox gives out long before a workstation does. `PIDLY_TEST_RACE` carries
