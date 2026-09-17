@@ -3,7 +3,7 @@ needs: 1
 title: pidly claim / release, and the lock
 desc:19
 claim writes the caller's pid into line 1; release blanks it back to
-"claim:". Both rewrite ticket.md, as does edit, so all three must serialize
+"claim:". Both rewrite the ticket file, as does edit, so all three must serialize
 against each other.
 
 The lock is a directory: mkdir ticket-dir/.lock, which fails atomically if

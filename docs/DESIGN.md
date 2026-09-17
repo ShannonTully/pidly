@@ -34,25 +34,42 @@ this list in order.
 .pidly/
   schema.md       # the ticket schema for this project
   1/
-    ticket.md
+    t             # ticket 1 itself
     3/            # an open child
-      ticket.md
+      t
       8/
-        ticket.md
+        t
     c/
       5/          # a closed child
-        ticket.md
+        t
   c/
     2/            # a closed root, moved here whole
-      ticket.md
+      t
       4/
-        ticket.md
+        t
 ```
 
-**Every ticket is a directory.** Leaves too. The alternative — leaves are
-`8.md`, parents are `8/` — means promoting a leaf to a parent rewrites its
-path, and means every tool needs two code paths. Uniformity is worth one extra
-inode.
+**Every ticket is a directory, and its content is a file called `t`.** Leaves
+too. The alternative — a leaf is a file, a parent is a directory — means
+promoting a leaf to a parent rewrites its path, and means every tool needs two
+code paths. Uniformity is worth one extra inode.
+
+`t` has no extension because the content isn't any established format: four
+header lines, a markdown body, then fields. Calling it `.md` would promise a
+rendering that turns the header into one mangled paragraph, which is worse than
+no rendering at all.
+
+The name matters more than it looks. `t` cannot be mistaken for a ticket
+number, which keeps two idioms unambiguous and separate:
+
+```sh
+find .pidly -name t          # every ticket
+find .pidly -name 8          # ticket 8, and only it
+```
+
+Naming the file after its own number — `8/8` — would break both: the second
+lookup would return a directory and a file, and the first would have no single
+name left to match.
 
 ## State is location
 
@@ -73,7 +90,7 @@ work sinks one level out of the way at whatever depth it finished. And because
 
 ```sh
 # every open ticket, at any depth, without descending into finished work
-find .pidly -type d -name c -prune -o -name ticket.md -print
+find .pidly -type d -name c -prune -o -name t -print
 ```
 
 That single idiom is both the query and the performance story. A mature project
@@ -239,7 +256,7 @@ A pid is checkable — `kill -0 <pid>` — so a stale claim is detectable rather
 than merely suspicious, and `pidly check` reports claims whose holder is gone.
 
 **Claiming is the one operation the format does not make atomic.** Because the
-claim lives inside `ticket.md`, taking it is read-modify-write, and two agents
+claim lives inside `t`, taking it is read-modify-write, and two agents
 can both see `claim:` and both write their pid, with the loser never finding
 out. A separate claim file would have made this free (`set -C` fails when the
 file exists) at the cost of another file per ticket.
@@ -338,9 +355,9 @@ This remains the weakest part of the design: a markdown table is parseable by
 ## Why this shape suits agents
 
 The tree is the work breakdown, so it's also the delegation graph. A lead agent
-claims `1` by writing its pid to line 1 of `.pidly/1/ticket.md`. Each child
+claims `1` by writing its pid to line 1 of `.pidly/1/t`. Each child
 directory under it is a unit of work a subagent can claim independently, and the
-subagent's working context is one directory — its own `ticket.md` plus whatever
+subagent's working context is one directory — its own `t` plus whatever
 children it spawns. Parent completion is a question about the filesystem: are
 there any children left outside my `c/`?
 

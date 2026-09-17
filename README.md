@@ -16,18 +16,24 @@ agent that died.
 .pidly/
   schema.md
   1/
-    ticket.md
+    t             # ticket 1 itself
     3/            # an open child
-      ticket.md
+      t
       8/
-        ticket.md
+        t
     c/
       5/          # a closed child
-        ticket.md
+        t
   c/
     2/            # a closed root, moved here whole
-      ticket.md
+      t
 ```
+
+A ticket's content is a file called `t` — no extension, because the content
+isn't markdown or YAML or anything else with a renderer, and one character
+because it repeats in every path. It can't be confused with a ticket number,
+so `find .pidly -name t` lists every ticket and `find .pidly -name 8` finds
+exactly one.
 
 **State is location.** A ticket is open if it sits directly in its container,
 closed if it sits in that container's `c/`. Closing is a move, at every depth.
@@ -83,10 +89,10 @@ Until the `pidly` script exists, these are the primitives it will wrap:
 
 ```sh
 # every open ticket, at any depth, never descending into finished work
-find .pidly -type d -name c -prune -o -name ticket.md -print
+find .pidly -type d -name c -prune -o -name t -print
 
 # what can I start right now? — two lines per ticket, no bodies read
-find .pidly -type d -name c -prune -o -name ticket.md -print | sort -V |
+find .pidly -type d -name c -prune -o -name t -print | sort -V |
   while read -r f; do
     [ -n "$(sed -n '1s/^claim://p' "$f")" ] && continue     # already claimed
     for dep in $(sed -n '2s/^needs://p' "$f"); do
@@ -99,22 +105,22 @@ find .pidly -type d -name c -prune -o -name ticket.md -print | sort -V |
   done
 
 # the body of one ticket, exactly
-f=.pidly/1/ticket.md; n=$(sed -n '4s/^desc://p' "$f"); sed -n "5,${n}p" "$f"
+f=.pidly/2/t; n=$(sed -n '4s/^desc://p' "$f"); sed -n "5,${n}p" "$f"
 
 # its custom fields
 tail -n +$((n+1)) "$f"
 
 # claim it (pidly takes a lock around this; by hand, just don't race)
-sed -i "1s/.*/claim:$$@$(cat .pidly/.id)/" .pidly/1/ticket.md
+sed -i "1s/.*/claim:$$@$(cat .pidly/.id)/" .pidly/2/t
 
 # is a claim still alive? (only answerable for claims from this checkout)
-c=$(sed -n '1s/^claim://p' .pidly/1/ticket.md)
+c=$(sed -n '1s/^claim://p' .pidly/2/t)
 [ "${c#*@}" = "$(cat .pidly/.id)" ] &&
   { kill -0 "${c%@*}" 2>/dev/null && echo live || echo dead; } ||
   echo "foreign claim — cannot check"
 
 # close a ticket: move it into its container's c/
-mkdir -p .pidly/c && mv .pidly/1 .pidly/c/
+mkdir -p .pidly/c && mv .pidly/2 .pidly/c/
 ```
 
 Names are unpadded, so `ls` sorts them lexically (`1, 10, 2`). Use `ls -v` or
