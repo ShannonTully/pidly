@@ -1,0 +1,44 @@
+claim:
+needs:
+title: check costs a second a ticket, and it did not used to
+created: 2026-09-17T23:20:24Z
+updated: 2026-09-17T23:20:24Z
+effort: M
+area: cli
+handoff:
+
+check takes 44s on this tracker's 43 tickets. Measured 2026-09-17 on aarch64
+Linux by checking out bin/pidly at each commit and running it against the
+same tracker:
+
+  after 24 (required means a value)      19s
+  after 28 (patterns, schema stanzas)    36s
+  after 40 (the format's own lines)      47s
+
+So it roughly doubled while values gained patterns, and the cost is a second
+a ticket. On the 2000-ticket tracker the other measurements use, that is
+half an hour for the command that is meant to run in CI.
+
+It is process count, not work. Almost all of check's per-ticket cost is
+spawning, and three things drive it:
+
+- info_faults is called inside a pipeline — `info_faults ... | while read` —
+  so every call runs in its own subshell, and schema_cached and format_cached
+  reparse per ticket rather than once per command. The cache is real; the
+  subshell defeats it.
+- The positional checks read lines 1, 2 and 3 with a sed each. A POSIX shell
+  can read three lines from a file with no process at all:
+  { read -r a; read -r b; read -r c; } < info
+- Every non-empty value with a pattern costs a grep, because grep is the
+  matcher (28: mawk has no interval expressions). That is the one real cost,
+  and it is per ticket per patterned field.
+
+The first two are straightforward. The third is the interesting one: the
+loop could be inverted — one pass collecting every ticket's value for one
+field, then a single grep -E over that list — which is O(patterns) greps for
+the whole tracker instead of O(tickets x patterns). That changes which
+findings are easy to attribute to a ticket, so it wants care.
+
+Done when check on 2000 tickets is measured, the per-ticket process count is
+down by an order of magnitude, the findings are unchanged ticket for ticket,
+and the suite still passes.
