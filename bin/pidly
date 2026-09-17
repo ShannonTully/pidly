@@ -477,6 +477,85 @@ cmd_status() {
 	return 0
 }
 
+# --- reap ------------------------------------------------------------------
+#
+# Clearing someone else's claim is the one destructive thing in the tracker,
+# so it is a command of its own rather than something check or claim does on
+# the way past. What it will clear is exactly the dead state: our runtime, so
+# the process table is one we can read, and the process demonstrably absent.
+#
+# Not live, obviously. Not unverifiable — another machine's pid says nothing
+# here, and treating silence as death is how two agents end up on one ticket.
+# Not expired either: a lapsed lease is already takeable, so claim handles it
+# and reap has nothing to add.
+#
+# Locks are not its business. A lock names a local pid and lock() breaks a
+# dead one on the next attempt, so a stale lock heals itself.
+
+# Clear one dead claim. Prints what it cleared; returns 1, silently, if the
+# claim is anything else. Callers decide whether that is worth saying.
+reap_one() {
+	_rp_r=$1 _rp_d=$2 _rp_n=$3
+	lock "$_rp_d" 100 || die "$_rp_n is being modified by another process"
+	# Re-read under the lock. Between the scan and here the holder may have
+	# released it, or a new agent may have taken it — and that one is alive.
+	_rp_h=$(sed -n '1s/^claim://p' "$_rp_d/info")
+	if [ "$(claim_state "$_rp_r" "$_rp_h")" != dead ]; then
+		unlock "$_rp_d"
+		return 1
+	fi
+	set_line "$_rp_d/info" 1 'claim:'
+	unlock "$_rp_d"
+	parse_claim "$_rp_h"
+	printf '%s: cleared the claim by %s, which is gone\n' "$_rp_n" "$_c_holder"
+	return 0
+}
+
+cmd_reap() {
+	[ $# -le 1 ] || die 'usage: pidly reap [number]'
+	_r=$(root)
+
+	# Named ticket: say why nothing happened, since the caller asked about
+	# this one and a silent success would read as "cleared".
+	if [ $# -eq 1 ]; then
+		_d=$(ticket_dir "$_r" "$1")
+		_held=$(sed -n '1s/^claim://p' "$_d/info")
+		parse_claim "$_held"
+		case $(claim_state "$_r" "$_held") in
+		dead) reap_one "$_r" "$_d" "$1" ||
+			printf '%s: the claim was gone before it could be cleared\n' "$1" ;;
+		free) die "$1 is not claimed" ;;
+		live) die "$1 is held by $_c_holder, which is running" ;;
+		expired)
+		      die "$1 has an expired lease, which is already takeable — claim it" ;;
+		unverifiable)
+		      die "$1 is held by $_c_holder, which this machine cannot check — a claim you cannot verify is not a dead one" ;;
+		esac
+		return 0
+	fi
+
+	# A sweep. Closed tickets included: a dead claim left on finished work
+	# is still something check reports, so reap has to be able to clear it.
+	_rc="${TMPDIR:-/tmp}/pidly.reap.$$"
+	: > "$_rc"
+	map "$_r" | while read -r _num _path; do
+		[ -n "$_num" ] || continue
+		case $_num in *[!0-9]*) continue ;; esac
+		[ -f "$_path/info" ] || continue
+		[ "$(claim_state "$_r" "$(sed -n '1s/^claim://p' "$_path/info")")" = dead ] ||
+			continue
+		reap_one "$_r" "$_path" "$_num" >> "$_rc" || true
+	done
+	if [ -s "$_rc" ]; then
+		cat "$_rc"
+		printf '%s claim(s) cleared\n' "$(wc -l < "$_rc" | tr -d ' ')"
+	else
+		printf 'nothing to reap\n'
+	fi
+	rm -f "$_rc"
+	return 0
+}
+
 # --- edit ------------------------------------------------------------------
 #
 # The body is the part of a ticket nothing can derive: it is what the work
@@ -768,9 +847,18 @@ A claim resolves to one of:
 | `dead` | same runtime, process positively is not |
 | `unverifiable` | another runtime, lease still good |
 
-Only `free` and `expired` can be claimed. Only `dead` can be cleared, with
-`pidly reap`. **Never treat `unverifiable` as dead** — that puts two agents
-on one ticket.
+Only `free` and `expired` can be claimed. Only `dead` can be cleared:
+
+```sh
+pidly reap 7      # clear a dead claim on one ticket, and say why if it will not
+pidly reap        # sweep the whole tracker, closed work included
+```
+
+**Never treat `unverifiable` as dead** — that puts two agents on one ticket,
+and `reap` will not do it for you. It refuses a live claim, an unverifiable
+one, and an expired lease, which needs no clearing because it is already
+takeable. A stale `.lock` needs no clearing either: it names a local process,
+and the next command to want the lock breaks it.
 
 Claiming rewrites line 1, so it is the one operation that is not safe to do
 by hand while other agents are running: `pidly claim` serializes it behind a
@@ -1521,6 +1609,8 @@ usage: pidly <command> [args]
   release [-m note] <n>
                  give it back, optionally recording where you got to
   status <n>     who holds it, and whether that can be verified
+  reap [n]       clear claims whose process is positively gone, one ticket or
+                 the whole tracker; never a claim it cannot check
   edit [-a|-b] <n>
                  open it in $EDITOR; -b replaces the body from stdin, -a
                  appends to it
@@ -1541,7 +1631,6 @@ environment:
                  Requires PIDLY_LEASE: nothing else can show it is alive.
   PIDLY_LEASE    how long the claim is good for: 90s, 30m, 2h, 3d.
 
-not yet implemented: reap
 USAGE
 	exit 2
 }
@@ -1554,6 +1643,7 @@ new)     cmd_new "$@" ;;
 claim)   cmd_claim "$@" ;;
 release) cmd_release "$@" ;;
 status)  cmd_status "$@" ;;
+reap)    cmd_reap "$@" ;;
 edit)    cmd_edit "$@" ;;
 close)   cmd_close "$@" ;;
 reopen)  cmd_reopen "$@" ;;

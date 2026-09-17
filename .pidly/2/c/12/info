@@ -1,0 +1,33 @@
+claim:
+needs: 3
+title: pidly reap
+effort: S
+area: cli
+
+Clear claims that are positively dead: our runtime, and the process
+demonstrably absent. Never a claim that is live, unverifiable, or merely
+unrecognised — the whole point of separating reap from check is that
+clearing someone else's claim stays an explicit act.
+
+An expired lease does not need reaping. It is already takeable, so claim
+handles it directly and reap can ignore it.
+
+Note .pidly/.id is now only a fallback for systems with no boot id, so the
+identity work this ticket originally carried is done in 3.
+
+pidly reap [n] — one ticket, or a sweep of the whole tracker including closed
+work, since a dead claim on finished work is still something check reports.
+
+Named, it says why it will not act: a live claim, an unclaimed ticket, an
+unverifiable claim ("a claim you cannot verify is not a dead one"), or an
+expired lease, which needs no clearing because claim already takes it. The
+sweep skips those silently and counts what it cleared.
+
+Each claim is re-read under the lock before it is cleared. The scan is not a
+snapshot: between finding a dead claim and clearing it, the dead agent's
+replacement may have taken the ticket, and that one is alive.
+
+Locks were left out. A lock names a local pid and lock() breaks a dead one on
+the next attempt, so a stale lock heals itself and reap has nothing to add.
+
+Done: bin/pidly, covered by tests/reap.sh (24 cases, mostly the refusals).

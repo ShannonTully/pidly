@@ -662,6 +662,25 @@ the `/` between segments, which put children ahead of their own parents.
 so a shell `read` collapses two tabs into one and every later field shifts
 left. `survey` writes `-` for "no blockers" rather than nothing.
 
+**`reap` is a command rather than a step inside `claim` or `check`.** It
+clears exactly one state — same runtime, process positively absent — and the
+separation is the point: clearing someone else's claim is the only
+destructive operation in the tracker, so it happens because someone asked for
+it. `claim` therefore refuses a dead claim and names `reap` rather than
+taking the ticket, and `check` reports one without touching it.
+
+It refuses everything else, and the refusals are the interesting half. An
+unverifiable claim is another machine's pid and stays alone, because reading
+silence as death is exactly how two agents end up on one ticket. An expired
+lease needs nothing: it is already takeable, so `claim` handles it and `reap`
+would only add a second way to do the same thing. A stale `.lock` is not its
+business either — `lock()` breaks a dead one on the next attempt, so it heals
+itself.
+
+The sweep re-reads each claim under the lock before clearing it. The scan is
+not a snapshot: between finding a dead claim and clearing it, the holder's
+replacement may have taken the ticket, and that one is alive.
+
 **`edit` does not hold the lock while the editor runs.** A lock held for the
 length of a human edit blocks every claim on that ticket for as long as the
 session lasts, and a session that is never closed leaves one behind for `reap`

@@ -111,9 +111,18 @@ A claim resolves to one of:
 | `dead` | same runtime, process positively is not |
 | `unverifiable` | another runtime, lease still good |
 
-Only `free` and `expired` can be claimed. Only `dead` can be cleared, with
-`pidly reap`. **Never treat `unverifiable` as dead** — that puts two agents
-on one ticket.
+Only `free` and `expired` can be claimed. Only `dead` can be cleared:
+
+```sh
+pidly reap 7      # clear a dead claim on one ticket, and say why if it will not
+pidly reap        # sweep the whole tracker, closed work included
+```
+
+**Never treat `unverifiable` as dead** — that puts two agents on one ticket,
+and `reap` will not do it for you. It refuses a live claim, an unverifiable
+one, and an expired lease, which needs no clearing because it is already
+takeable. A stale `.lock` needs no clearing either: it names a local process,
+and the next command to want the lock breaks it.
 
 Claiming rewrites line 1, so it is the one operation that is not safe to do
 by hand while other agents are running: `pidly claim` serializes it behind a
