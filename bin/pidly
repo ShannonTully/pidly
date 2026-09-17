@@ -535,6 +535,10 @@ the most recent stop.
 
 ## Creating
 
+A project with no tracker starts one with `pidly init`, which seeds this
+file, `schema.md` and the ignore rules. Re-running it refreshes the generated
+files and leaves `schema.md` alone.
+
 The next number is the **highest number anywhere in the tracker plus one**,
 counting closed tickets. There is no counter file. Make the directory inside
 the parent, or in `.pidly/` for a top-level ticket, and write the four header
@@ -769,12 +773,103 @@ cmd_new() {
 	printf '%s\t%s\n' "$_n" "$_pd/$_n/info"
 }
 
+# --- init ------------------------------------------------------------------
+
+# The tracker's own ignore rules live inside .pidly, not in the repo root, so
+# the tracker is self-contained: copying or deleting the directory does not
+# leave stale entries behind in a file it does not own.
+ignore_text() {
+	cat <<'IGNORE'
+# Transient locks, held for the duration of one command. A lock in a commit
+# names a process on someone else's machine and can only mislead.
+.lock
+.lock.*
+
+# Fallback checkout identity, used only where there is no boot id to derive a
+# runtime from. It is per-machine by definition.
+.id
+IGNORE
+}
+
+# The starting schema. The four header lines are structural and always
+# present, so they are documented rather than declared; the table below them
+# is the project's own, and starts with just the handoff field.
+schema_text() {
+	cat <<'SCHEMA'
+# Ticket schema
+
+Every ticket is a directory; its content is the file `info` inside it.
+Four header lines are structural and always present, in this order:
+
+| line | field | meaning |
+|---|---|---|
+| 1 | `claim:` | empty, or `<pid>.<starttime>@<runtime>`, or `<agent>@- <expiry>` |
+| 2 | `needs:` | space-separated ticket numbers that must be closed first |
+| 3 | `title:` | a human title, not the number |
+| 4 | `desc:` | absolute line number of the body's last line |
+
+The body runs from line 5 to `desc`. Everything after it is a project field
+from the table below. Add your own rows; `pidly check` enforces them.
+
+| field   | required | values                                |
+|---------|----------|---------------------------------------|
+| handoff | no       | one line: where the last agent got to |
+SCHEMA
+}
+
+# The nearest .pidly at or above a directory, or nothing.
+find_root() {
+	_fr_d=$1
+	while [ "$_fr_d" != / ]; do
+		[ -d "$_fr_d/.pidly" ] && { printf '%s\n' "$_fr_d/.pidly"; return 0; }
+		_fr_d=$(dirname "$_fr_d")
+	done
+	return 0
+}
+
+cmd_init() {
+	[ $# -eq 0 ] || die 'usage: pidly init'
+	_ir="$PWD/.pidly"
+
+	if [ -d "$_ir" ]; then
+		_fresh=no
+	else
+		# A tracker inside another tracker would be found by the outer
+		# one's traversals, and its numbers would collide.
+		_outer=$(find_root "$PWD")
+		[ -n "$_outer" ] &&
+			die "$_outer already tracks this directory; pidly does not nest"
+		mkdir "$_ir" || die "cannot create $_ir"
+		_fresh=yes
+	fi
+
+	# schema.md belongs to the project once it exists. Everything else here
+	# is generated, so re-running init is a refresh rather than a reset.
+	if [ -f "$_ir/schema.md" ]; then
+		_schema=kept
+	else
+		schema_text > "$_ir/schema.md"
+		_schema=written
+	fi
+	ignore_text > "$_ir/.gitignore"
+
+	if [ "$_fresh" = yes ]; then
+		printf 'created %s\n' "$_ir"
+	else
+		printf 'refreshed %s\n' "$_ir"
+	fi
+	printf 'schema.md %s, .gitignore written\n' "$_schema"
+	cmd_agents "$@"
+	return 0
+}
+
 # --- entry point -----------------------------------------------------------
 
 usage() {
 	cat >&2 <<'USAGE'
 usage: pidly <command> [args]
 
+  init           create .pidly here, or refresh what it generates
   new [-p N] [-n "3 8"] <title>
                  create a ticket, optionally under parent N, optionally
                  blocked on other tickets; body is read from stdin
@@ -800,6 +895,7 @@ USAGE
 [ $# -ge 1 ] || usage
 cmd=$1; shift
 case $cmd in
+init)    cmd_init "$@" ;;
 new)     cmd_new "$@" ;;
 claim)   cmd_claim "$@" ;;
 release) cmd_release "$@" ;;

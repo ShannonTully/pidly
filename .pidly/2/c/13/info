@@ -1,0 +1,28 @@
+claim:
+needs: 5
+title: pidly init
+desc:26
+Create a .pidly tree in a project that has none: the directory itself, a
+seeded schema.md documenting the four structural header lines and shipping
+the handoff field, .pidly/README.md and the AGENTS.md summary via the same
+code path as `pidly agents`, and ignore rules for transient locks and the
+.id fallback.
+
+Re-running is a refresh, not a reset: everything generated is rewritten,
+schema.md is left alone the moment it exists because from then on the
+project owns it. That makes init safe after an upgrade and safe in a hook.
+
+Ignore rules went in .pidly/.gitignore rather than the repo root, so the
+tracker is self-contained. Migrating this repo to that layout found its root
+rules had been wrong for a while: they read .pidly/**/.lock/ with a trailing
+slash, matching only directories, and were never updated when the lock became
+a file. git check-ignore confirmed a lock file was not ignored. Nothing was
+ever committed, since a lock is removed before its command returns, but the
+safety net was not there.
+
+A tracker inside a tracker is refused — the outer one's traversals would walk
+the inner one and numbers would collide.
+
+Done: implemented in bin/pidly, covered by tests/init.sh (21 cases).
+effort: M
+area: cli

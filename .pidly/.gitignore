@@ -1,0 +1,8 @@
+# Transient locks, held for the duration of one command. A lock in a commit
+# names a process on someone else's machine and can only mislead.
+.lock
+.lock.*
+
+# Fallback checkout identity, used only where there is no boot id to derive a
+# runtime from. It is per-machine by definition.
+.id

@@ -3,7 +3,7 @@
 set -eu
 cd "$(dirname "$0")"
 rc=0
-for t in new.sh claim.sh handoff.sh identity.sh agents.sh; do
+for t in init.sh new.sh claim.sh handoff.sh identity.sh agents.sh; do
 	printf '\n=== %s ===\n' "$t"
 	./"$t" || rc=1
 done

@@ -537,6 +537,41 @@ hand while other agents are running, because it needs the lock — one function'
 worth of shell, and the price of having the claim on line 1 rather than in a
 file of its own.
 
+## Starting a tracker
+
+`pidly init` creates `.pidly/` in the current directory, seeds `schema.md`,
+writes the ignore rules, and installs both documents. A project can adopt
+pidly without hand-building anything.
+
+**Re-running is a refresh, not a reset.** Everything generated — the
+reference, the summary, the ignore rules — is rewritten; `schema.md` is left
+alone the moment it exists, because from then on it belongs to the project.
+That makes `init` safe after an upgrade and safe in a hook, which a command
+that clobbered the schema could never be.
+
+**The ignore rules live in `.pidly/.gitignore`, not the repo root.** The
+tracker stays self-contained: copy the directory into another project and its
+rules come along, delete it and nothing stale is left behind in a file it
+does not own.
+
+Migrating this repo to that layout exposed that its root rules had been wrong
+for some time. They read `.pidly/**/.lock/` — with a trailing slash, matching
+only directories — and had not been updated when the lock became a file. A
+lock file was never actually ignored:
+
+```
+$ git check-ignore -v .pidly/2/.lock     # under the old root rules
+$                                        # no match
+```
+
+Nothing was ever committed, because a lock is removed before the command that
+took it returns, but the safety net had not been there for a while. Rules that
+travel with the thing they describe do not drift out from under it this way.
+
+**A tracker inside a tracker is refused.** The outer one's traversals would
+walk the inner one, its numbers would collide, and `find .pidly -name 8` would
+have two answers.
+
 ## Telling agents how to use it
 
 A project using pidly does not have this document. Everything an agent needs

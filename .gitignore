@@ -1,4 +1,0 @@
-# transient claim/edit locks — never belong in history
-.pidly/**/.lock/
-.pidly/.lock/
-.pidly/.id

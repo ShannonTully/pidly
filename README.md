@@ -86,6 +86,18 @@ Early. The design is settled enough to build against — see
 [docs/DESIGN.md](docs/DESIGN.md) for the layout, the reasoning behind it, and
 the questions still open. The work itself is tracked in `.pidly/`, using pidly.
 
+## Getting started
+
+```sh
+pidly init            # creates .pidly/, seeds a schema, installs the docs
+pidly new "The first thing to do"
+```
+
+Re-running `init` refreshes what it generates and leaves `schema.md` alone
+once the project owns it, so it is safe after an upgrade. Ignore rules go in
+`.pidly/.gitignore` rather than the repo root, so the tracker is
+self-contained.
+
 ## Telling agents about it
 
 ```sh

@@ -123,6 +123,10 @@ the most recent stop.
 
 ## Creating
 
+A project with no tracker starts one with `pidly init`, which seeds this
+file, `schema.md` and the ignore rules. Re-running it refreshes the generated
+files and leaves `schema.md` alone.
+
 The next number is the **highest number anywhere in the tracker plus one**,
 counting closed tickets. There is no counter file. Make the directory inside
 the parent, or in `.pidly/` for a top-level ticket, and write the four header
