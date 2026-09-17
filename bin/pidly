@@ -24,10 +24,10 @@ root() {
 # The directory of one ticket, by number. One traversal, not a search per
 # call: callers needing many lookups should use map() instead.
 ticket_dir() {
-	_r=$1 _n=$2
-	_p=$(find "$_r" -type d -name "$_n" -print -quit)
-	[ -n "$_p" ] || die "no ticket $_n"
-	printf '%s\n' "$_p"
+	_td_r=$1 _td_n=$2
+	_td_p=$(find "$_td_r" -type d -name "$_td_n" -print -quit)
+	[ -n "$_td_p" ] || die "no ticket $_td_n"
+	printf '%s\n' "$_td_p"
 }
 
 # Every ticket as "number path", one line each, from a single traversal.
@@ -56,38 +56,38 @@ map() {
 # any of this, and carry a lease instead.
 
 runtime() {
-	_boot=""
+	_rt_boot=""
 	[ -r /proc/sys/kernel/random/boot_id ] &&
-		read -r _boot < /proc/sys/kernel/random/boot_id 2>/dev/null || true
-	if [ -n "$_boot" ]; then
-		_boot=${_boot%%-*}
+		read -r _rt_boot < /proc/sys/kernel/random/boot_id 2>/dev/null || true
+	if [ -n "$_rt_boot" ]; then
+		_rt_boot=${_rt_boot%%-*}
 	else
 		# No boot id: fall back to a per-checkout random string. Weaker,
 		# because a checkout survives reboots and pids do not.
-		_boot=$(checkout_id "$1")
+		_rt_boot=$(checkout_id "$1")
 	fi
-	_ns=$(readlink /proc/self/ns/pid 2>/dev/null || true)
-	case $_ns in
-	*"["*) _ns=${_ns#*[}; _ns=".n${_ns%]}" ;;
-	*)     _ns="" ;;
+	_rt_ns=$(readlink /proc/self/ns/pid 2>/dev/null || true)
+	case $_rt_ns in
+	*"["*) _rt_ns=${_rt_ns#*[}; _rt_ns=".n${_rt_ns%]}" ;;
+	*)     _rt_ns="" ;;
 	esac
-	printf '%s.u%s%s\n' "$_boot" "$(id -u)" "$_ns"
+	printf '%s.u%s%s\n' "$_rt_boot" "$(id -u)" "$_rt_ns"
 }
 
 checkout_id() {
-	_f="$1/.id"
-	if [ ! -f "$_f" ]; then
+	_ci_f="$1/.id"
+	if [ ! -f "$_ci_f" ]; then
 		( umask 077
 		  if [ -r /dev/urandom ]; then
 			LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom 2>/dev/null |
-				dd bs=1 count=12 2>/dev/null > "$_f"
+				dd bs=1 count=12 2>/dev/null > "$_ci_f"
 		  else
-			printf '%s%s' "$$" "$(date +%s)" > "$_f"
+			printf '%s%s' "$$" "$(date +%s)" > "$_ci_f"
 		  fi
-		  printf '\n' >> "$_f" )
+		  printf '\n' >> "$_ci_f" )
 	fi
-	read -r _cid < "$_f"
-	printf '%s\n' "$_cid"
+	read -r _ci_cid < "$_ci_f"
+	printf '%s\n' "$_ci_cid"
 }
 
 starttime() { awk '{print $22}' "/proc/$1/stat" 2>/dev/null || true; }
@@ -97,15 +97,15 @@ starttime() { awk '{print $22}' "/proc/$1/stat" 2>/dev/null || true; }
 # processes are always visible and absence really does mean gone.
 holder_alive() {
 	case $1 in
-	*.*) _pid=${1%%.*}; _start=${1#*.} ;;
-	*)   _pid=$1;       _start="" ;;
+	*.*) _ha_pid=${1%%.*}; _ha_start=${1#*.} ;;
+	*)   _ha_pid=$1;       _ha_start="" ;;
 	esac
 	if [ -d /proc ]; then
-		[ -r "/proc/$_pid/stat" ] || return 1
-		[ -z "$_start" ] && return 0
-		[ "$(starttime "$_pid")" = "$_start" ]
+		[ -r "/proc/$_ha_pid/stat" ] || return 1
+		[ -z "$_ha_start" ] && return 0
+		[ "$(starttime "$_ha_pid")" = "$_ha_start" ]
 	else
-		kill -0 "$_pid" 2>/dev/null
+		kill -0 "$_ha_pid" 2>/dev/null
 	fi
 }
 
@@ -120,13 +120,13 @@ holder() {
 		printf '%s@-\n' "$PIDLY_AGENT"
 		return 0
 	fi
-	_p=${PIDLY_PID:-$PPID}
-	kill -0 "$_p" 2>/dev/null || die "PIDLY_PID=$_p is not a running process"
-	_s=$(starttime "$_p")
-	if [ -n "$_s" ]; then
-		printf '%s.%s@%s\n' "$_p" "$_s" "$(runtime "$1")"
+	_ho_p=${PIDLY_PID:-$PPID}
+	kill -0 "$_ho_p" 2>/dev/null || die "PIDLY_PID=$_ho_p is not a running process"
+	_ho_s=$(starttime "$_ho_p")
+	if [ -n "$_ho_s" ]; then
+		printf '%s.%s@%s\n' "$_ho_p" "$_ho_s" "$(runtime "$1")"
 	else
-		printf '%s@%s\n' "$_p" "$(runtime "$1")"
+		printf '%s@%s\n' "$_ho_p" "$(runtime "$1")"
 	fi
 }
 
@@ -147,16 +147,16 @@ iso_at() {
 # PIDLY_LEASE as 90s / 30m / 2h / 3d, or bare seconds.
 lease_expiry() {
 	case $1 in
-	*s) _n=${1%s}; _m=1 ;;
-	*m) _n=${1%m}; _m=60 ;;
-	*h) _n=${1%h}; _m=3600 ;;
-	*d) _n=${1%d}; _m=86400 ;;
-	*)  _n=$1;     _m=1 ;;
+	*s) _le_n=${1%s}; _le_m=1 ;;
+	*m) _le_n=${1%m}; _le_m=60 ;;
+	*h) _le_n=${1%h}; _le_m=3600 ;;
+	*d) _le_n=${1%d}; _le_m=86400 ;;
+	*)  _le_n=$1;     _le_m=1 ;;
 	esac
-	case $_n in
+	case $_le_n in
 	''|*[!0-9]*) die "PIDLY_LEASE=$1 is not a duration (e.g. 90s, 30m, 2h)" ;;
 	esac
-	iso_at "$(( $(date -u +%s) + _n * _m ))"
+	iso_at "$(( $(date -u +%s) + _le_n * _le_m ))"
 }
 
 # Timestamps are ISO-8601 UTC, so lexical order is chronological order.
@@ -195,8 +195,15 @@ claim_state() {
 # exists. The lock holds a pid so a crashed holder can be detected and broken
 # rather than wedging the ticket forever.
 
+# lock <dir> [seconds]
+#
+# Without a budget this returns as soon as the lock is held by someone else.
+# That is right for claiming — there is other work to pick up — and wrong for
+# anything the caller cannot simply skip, like allocating a number, so those
+# pass a budget and wait.
 lock() {
-	_d=$1 _t="$_d/.lock.$$" _n=0
+	_lk_d=$1 _lk_t="$_lk_d/.lock.$$" _lk_n=0
+	_lk_budget=${2:-0} _lk_waited=0
 
 	# Write the pid FIRST, into a private file nobody else looks at, then
 	# publish it with link(2). A hard link either appears whole or not at
@@ -204,29 +211,38 @@ lock() {
 	# no instant where the lock is visible but anonymous. link() is also
 	# the primitive that stays atomic over NFS, where O_EXCL historically
 	# is not.
-	printf '%s\n' "$$" > "$_t" || return 1
+	printf '%s\n' "$$" > "$_lk_t" || return 1
 
-	while [ "$_n" -lt 100 ]; do
-		_n=$((_n+1))
-		if ln "$_t" "$_d/.lock" 2>/dev/null; then
-			rm -f "$_t"
+	while [ "$_lk_n" -lt 100 ]; do
+		_lk_n=$((_lk_n+1))
+		if ln "$_lk_t" "$_lk_d/.lock" 2>/dev/null; then
+			rm -f "$_lk_t"
 			return 0
 		fi
-		_owner=""
-		[ -r "$_d/.lock" ] && read -r _owner < "$_d/.lock" 2>/dev/null || true
-		if [ -z "$_owner" ]; then
+		_lk_owner=""
+		[ -r "$_lk_d/.lock" ] && read -r _lk_owner < "$_lk_d/.lock" 2>/dev/null || true
+		if [ -z "$_lk_owner" ]; then
 			# Should be unreachable now that publishing is atomic. Kept
 			# because the cost of being wrong is two writers: an empty
 			# lock is treated as in-flight, never as abandoned.
 			continue
 		fi
-		if kill -0 "$_owner" 2>/dev/null; then
-			rm -f "$_t"
-			return 1                            # a live holder
+		if kill -0 "$_lk_owner" 2>/dev/null; then
+			# A live holder. Wait if we were given a budget: the
+			# lock is held for a few syscalls, so a short sleep
+			# almost always clears it.
+			if [ "$_lk_waited" -lt "$_lk_budget" ]; then
+				sleep 0.05 2>/dev/null || sleep 1
+				_lk_waited=$((_lk_waited + 1))
+				_lk_n=0
+				continue
+			fi
+			rm -f "$_lk_t"
+			return 1
 		fi
-		rm -f "$_d/.lock"                           # a dead one: break it
+		rm -f "$_lk_d/.lock"                           # a dead one: break it
 	done
-	rm -f "$_t"
+	rm -f "$_lk_t"
 	return 1
 }
 
@@ -235,9 +251,9 @@ unlock() { rm -f "$1/.lock"; }
 # Replace one line of a file, via a temp file and a rename. Callers hold the
 # lock; the rename keeps a crash mid-write from leaving a truncated info.
 set_line() {
-	_f=$1 _n=$2 _v=$3 _t="$1.$$"
-	awk -v n="$_n" -v v="$_v" 'NR==n{print v; next}{print}' "$_f" > "$_t"
-	mv "$_t" "$_f"
+	_sl_f=$1 _sl_n=$2 _sl_v=$3 _sl_t="$1.$$"
+	awk -v n="$_sl_n" -v v="$_sl_v" 'NR==n{print v; next}{print}' "$_sl_f" > "$_sl_t"
+	mv "$_sl_t" "$_sl_f"
 }
 
 # --- claim / release -------------------------------------------------------
@@ -589,12 +605,115 @@ cmd_agents() {
 	fi
 }
 
+# --- new -------------------------------------------------------------------
+
+# Project fields the schema marks required, one per line. A ticket missing one
+# is still readable — check reports it — but new stubs them so the ticket
+# starts valid rather than starting wrong.
+schema_required() {
+	[ -f "$1/schema.md" ] || return 0
+	awk -F'|' '
+		/^[[:space:]]*\|/ {
+			f = $2; r = $3
+			gsub(/^[ \t]+|[ \t]+$/, "", f)
+			gsub(/^[ \t]+|[ \t]+$/, "", r)
+			if (f == "" || f == "field" || f ~ /^-+$/) next
+			if (r == "yes") print f
+		}' "$1/schema.md"
+}
+
+# The highest number anywhere in the tracker, closed tickets included.
+# Numbers are never reused, so this only ever goes up.
+highest() {
+	map "$1" | awk '{ if ($1+0 > m) m = $1+0 } END { print m+0 }'
+}
+
+cmd_new() {
+	_parent="" _needs=""
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-p) [ $# -ge 2 ] || die 'usage: pidly new [-p parent] [-n "3 8"] <title>'
+		    _parent=$2; shift 2 ;;
+		-n) [ $# -ge 2 ] || die 'usage: pidly new [-p parent] [-n "3 8"] <title>'
+		    _needs=$2; shift 2 ;;
+		-*) die "unknown option $1" ;;
+		*)  break ;;
+		esac
+	done
+	[ $# -eq 1 ] || die 'usage: pidly new [-p parent] [-n "3 8"] <title>'
+	_title=$1
+	case $_title in
+	'') die 'a ticket needs a title' ;;
+	*"
+"*) die 'a title must be one line' ;;
+	esac
+
+	_r=$(root)
+
+	if [ -n "$_parent" ]; then
+		_pd=$(ticket_dir "$_r" "$_parent")
+		# An open child inside a closed parent would put live work in a
+		# finished tree, which is the one thing the layout rules out.
+		case $_pd in
+		*/c/*) die "$_parent is closed — reopen it before adding children" ;;
+		esac
+	else
+		_pd=$_r
+	fi
+
+	for _dep in $_needs; do
+		case $_dep in
+		''|*[!0-9]*) die "needs takes ticket numbers, not '$_dep'" ;;
+		esac
+		ticket_dir "$_r" "$_dep" >/dev/null
+	done
+
+	# Scan before locking. A stale answer only costs a few extra mkdir
+	# attempts, and it keeps the critical section down to those attempts
+	# rather than a full traversal of the tracker.
+	_n=$(highest "$_r")
+
+	# mkdir only arbitrates between siblings, so two agents adding children
+	# to different parents would otherwise both take the same number. 200
+	# attempts at 50ms is ten seconds, far longer than any real contention.
+	lock "$_r" 200 || die 'the tracker is busy; try again'
+	while :; do
+		_n=$((_n + 1))
+		mkdir "$_pd/$_n" 2>/dev/null && break
+		[ "$_n" -gt 1000000 ] && { unlock "$_r"; die 'cannot allocate a number'; }
+	done
+	unlock "$_r"
+
+	{
+		printf 'claim:\n'
+		printf 'needs:%s\n' "${_needs:+ $_needs}"
+		printf 'title: %s\n' "$_title"
+		if [ -t 0 ]; then
+			printf 'desc:4\n'
+		else
+			_body=$(cat)
+			if [ -z "$_body" ]; then
+				printf 'desc:4\n'
+			else
+				printf 'desc:%s\n' "$(( 4 + $(printf '%s\n' "$_body" | wc -l) ))"
+				printf '%s\n' "$_body"
+			fi
+		fi
+		schema_required "$_r" | while read -r _f; do printf '%s:\n' "$_f"; done
+	} > "$_pd/$_n/info"
+
+	printf '%s\t%s\n' "$_n" "$_pd/$_n/info"
+}
+
 # --- entry point -----------------------------------------------------------
 
 usage() {
 	cat >&2 <<'USAGE'
 usage: pidly <command> [args]
 
+  new [-p N] [-n "3 8"] <title>
+                 create a ticket, optionally under parent N, optionally
+                 blocked on other tickets; body is read from stdin
   claim <n>      take ticket n
   release <n>    give it back
   status <n>     who holds it, and whether that can be verified
@@ -608,7 +727,7 @@ environment:
                  Requires PIDLY_LEASE: nothing else can show it is alive.
   PIDLY_LEASE    how long the claim is good for: 90s, 30m, 2h, 3d.
 
-not yet implemented: new, close, reopen, edit, list, tree, check, reap
+not yet implemented: close, reopen, edit, list, tree, check, reap
 USAGE
 	exit 2
 }
@@ -616,6 +735,7 @@ USAGE
 [ $# -ge 1 ] || usage
 cmd=$1; shift
 case $cmd in
+new)     cmd_new "$@" ;;
 claim)   cmd_claim "$@" ;;
 release) cmd_release "$@" ;;
 status)  cmd_status "$@" ;;

@@ -1,0 +1,29 @@
+claim:
+needs: 1
+title: pidly new
+desc:27
+Allocate the next number, create the directory under the target parent, and
+write the four header lines with the schema's required fields stubbed below
+the body.
+
+  pidly new [-p parent] [-n "3 8"] <title>     body read from stdin
+
+The next number is the highest anywhere in the tree plus one, closed tickets
+included, so there is no counter file. The tree is scanned before the lock is
+taken — a stale answer costs only a few extra mkdir attempts and keeps the
+critical section short.
+
+Two bugs found by running it. lock() used _n as a spin counter while cmd_new
+used _n as the ticket number; POSIX shell has one namespace, so taking the
+lock overwrote the allocation and the first ticket in a fresh tracker came
+out as 2. Helpers now prefix their locals. And with no wait budget on the
+lock, 34 of 40 concurrent creations failed as busy while still producing
+correct unique numbers — correct and useless — so new waits where claim does
+not.
+
+An open child inside a closed parent is refused rather than silently putting
+live work in a finished tree.
+
+Done: implemented in bin/pidly, covered by tests/new.sh (24 cases).
+effort: M
+area: cli

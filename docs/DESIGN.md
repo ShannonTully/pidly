@@ -336,7 +336,21 @@ alive exactly as long as the command holding it; a claim outlives many.
 
 Measured: 100 concurrent claims on one free ticket, one winner, no leftovers.
 
-The same lock, at `.pidly/.lock`, serializes number allocation.
+**Whether to wait for the lock is the caller's decision.** `claim` returns
+immediately if someone else holds it: there is other work to pick up, and
+blocking would be worse than moving on. `new` cannot do that — the caller
+wants a ticket and has no alternative — so it waits, up to ten seconds in 50ms
+steps.
+
+Getting this wrong is not subtle. With no wait, 34 of 40 concurrent
+creations failed with "the tracker is busy" while still producing correct,
+unique numbers: the invariant held and the command was useless.
+
+The same lock, at `.pidly/.lock`, serializes number allocation. The expensive
+part of allocating — scanning the tree for the highest number — happens
+*before* the lock is taken. A stale answer only costs a few extra `mkdir`
+attempts, and it keeps the critical section down to those attempts rather
+than a full traversal.
 
 ### What a pid is worth, and when
 
@@ -486,6 +500,16 @@ Deliberately thin, and deliberately optional.
 not a runtime dependency of the format; it's an ergonomics layer. The acceptance
 test for every command is that a person could have done the same thing with
 `mkdir`, `mv` and a text editor, and the repository would be byte-identical.
+
+**Every function prefixes its variables.** POSIX shell has one global
+namespace, so a helper's locals and its caller's locals are the same
+variables. `lock()` used `_n` as a spin counter while `cmd_new()` used `_n` as
+the ticket number it was allocating, so taking the lock silently overwrote the
+allocation — the first ticket in a fresh tracker came out as `2`, and under
+contention numbering skewed by however many times the lock had spun. Nothing
+about the symptom pointed at the lock. Helpers therefore use a per-function
+prefix (`_lk_`, `_td_`, `_ho_`), and the test suite asserts that a fresh
+tracker's first ticket is `1`.
 
 Two carve-outs. `edit` exists because `desc:` is derived data that a hand-edit
 can falsify. And claiming is the single operation that is *not* safe to do by
