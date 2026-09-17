@@ -1,0 +1,31 @@
+claim:
+needs:
+title: Delegation convention for Claude Code subagents
+desc:29
+Subagents run inside the Claude Code CLI process: a Bash call from one sees
+the same CLAUDE_PID as the lead agent. A pid-based claim cannot tell a
+subagent from its parent — two claims, same pid, both live. Subagents claim
+with PIDLY_AGENT plus a lease, the path already built for cloud agents,
+which turns out to cover shared process tables as well as absent ones.
+
+Not a hook. SubagentStart and SubagentStop exist, but PreToolUse cannot
+modify tool input, so a hook cannot put the number into a subagent's prompt.
+It does not need to: the lead agent writes that prompt. And a ticket per
+subagent is the wrong default — most subagent calls are lookups, numbers are
+never reused, tickets are never deleted, and an open child blocks its parent
+from closing, so automatic tracking would make permanent noise that also
+wedges the work.
+
+PIDLY_PID now defaults to CLAUDE_PID where set, falling back to $PPID. The
+two usually resolve to the same process, but only because a tool call's
+shell is a direct child of the runner.
+
+That change broke a test that had been relying on the coincidence: it used a
+per-command assignment, so the claim carried it and the release did not.
+Exporting once for the agent's lifetime is what the reference already says
+to do.
+
+Done: guidance in the reference and the summary, covered by the existing
+suites.
+effort: S
+area: docs

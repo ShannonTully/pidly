@@ -77,7 +77,7 @@ check "a foreign claim is not released" "$rc" "1"
 sed -i '1s/.*/claim:/' .pidly/2/info
 out=$($PIDLY release 2 2>&1) && rc=0 || rc=$?
 check "an unclaimed ticket cannot be released" "$rc" "1"
-sh -c "PIDLY_PID=\$\$ $PIDLY claim 2 >/dev/null && $PIDLY release 2 >/dev/null" && rc=0 || rc=$?
+sh -c "export PIDLY_PID=\$\$; $PIDLY claim 2 >/dev/null && $PIDLY release 2 >/dev/null" && rc=0 || rc=$?
 check "an agent can release its own live claim" "$rc" "0"
 check "line 1 is blank again" "$(sed -n 1p .pidly/2/info)" "claim:"
 

@@ -44,7 +44,9 @@ PIDLY_AGENT=$SESSION_ID PIDLY_LEASE=2h pidly claim 7
 mkdir -p .pidly/c && mv .pidly/7 .pidly/c/
 ```
 
-Claim before starting; release or close when done.
+Claim before starting; release or close when done. Delegating real work to a
+subagent? Open a child ticket and pass it the number — see the reference, and
+note a subagent claims with `PIDLY_AGENT`, not a pid.
 
 - **Never delete a ticket** — numbers are never reused. Close it.
 - A ticket cannot close while it has children outside its own `c/`.

@@ -431,6 +431,36 @@ Pairing the pid with its start time gets the uniqueness a UUID would give,
 while keeping the free liveness check. So the pid stays wherever there is a
 process table to ask.
 
+### Subagents share their parent's process
+
+A subagent spawned inside an agent runner is usually not a process of its
+own. Under Claude Code, a `Bash` call from a subagent reports the same
+`CLAUDE_PID` as the lead agent, so a pid identifies the *runner*, not the
+agent doing the work: two claims, one pid, both live, and no way to tell
+which is which.
+
+So a subagent claims the way a cloud agent does — `PIDLY_AGENT` plus a
+lease. The mechanism built for agents with no reachable process table turns
+out to cover agents with a process table they *share*, which is the more
+common case.
+
+`PIDLY_PID` therefore defaults to `$CLAUDE_PID` where it is set, falling
+back to `$PPID`. The two are usually the same process, but only because a
+tool call's shell is a direct child of the runner; wrap that call in another
+shell and `$PPID` quietly becomes the wrapper. Naming the runner explicitly
+is free and does not guess.
+
+**Delegation is a convention, not a hook.** Claude Code has `SubagentStart`
+and `SubagentStop`, but `PreToolUse` cannot modify tool input, so a hook
+cannot put a ticket number into a subagent's prompt. It does not need to:
+the lead agent *writes* that prompt, so it can create a child ticket and
+include the number itself.
+
+And a ticket per subagent would be the wrong default regardless. Most
+subagent calls are lookups; numbers are never reused and tickets are never
+deleted, so the noise would be permanent — and an open child blocks its
+parent from closing, so it would also wedge the work it was meant to track.
+
 ### Leases, for agents with no process table
 
 A cloud agent, a CI job, a container nobody else can see: these have no pid

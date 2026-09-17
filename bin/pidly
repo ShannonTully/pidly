@@ -120,7 +120,10 @@ holder() {
 		printf '%s@-\n' "$PIDLY_AGENT"
 		return 0
 	fi
-	_ho_p=${PIDLY_PID:-$PPID}
+	# CLAUDE_PID is the long-lived Claude Code process. $PPID usually
+	# resolves to the same thing, but only because a tool call's shell is
+	# a direct child of it — wrap the call and that stops being true.
+	_ho_p=${PIDLY_PID:-${CLAUDE_PID:-$PPID}}
 	kill -0 "$_ho_p" 2>/dev/null || die "PIDLY_PID=$_ho_p is not a running process"
 	_ho_s=$(starttime "$_ho_p")
 	if [ -n "$_ho_s" ]; then
@@ -558,6 +561,35 @@ ticket created by hand needs one too. `pidly init` backfills any that are
 missing, and `pidly new` writes it for you along with the lock that stops two
 agents picking the same number.
 
+## Delegating to a subagent
+
+A subagent usually shares its parent's process — under Claude Code, a Bash
+call from a subagent reports the same `CLAUDE_PID` as the lead agent. So a
+pid cannot tell them apart: two claims, one pid, both live. **A subagent
+claims as an agent, with a lease**, the same way a cloud agent does:
+
+```sh
+PIDLY_AGENT=sub-review-parser PIDLY_LEASE=1h pidly claim 19
+```
+
+The lead agent creates the ticket and passes the number down, because it
+writes the subagent's prompt:
+
+```sh
+pidly new -p 7 "Review the parser changes"     # prints 19
+# ...then include "your ticket is 19" in the subagent's instructions
+```
+
+When the subagent finishes it leaves a handoff and releases; the lead reads
+that and decides whether to close. If the subagent dies, the lease expires
+and the ticket frees itself.
+
+**Not every subagent deserves a ticket.** A lookup or a search does not.
+Numbers are never reused and tickets are never deleted, so a ticket per
+subagent call is permanent noise — and an open child blocks its parent from
+closing, so it does active harm. Open one when the work is a unit you would
+want to see in the tracker tomorrow.
+
 ## Closing and reopening
 
 Closing is a move into the container's `c/`:
@@ -638,7 +670,9 @@ PIDLY_AGENT=$SESSION_ID PIDLY_LEASE=2h pidly claim 7
 mkdir -p .pidly/c && mv .pidly/7 .pidly/c/
 ```
 
-Claim before starting; release or close when done.
+Claim before starting; release or close when done. Delegating real work to a
+subagent? Open a child ticket and pass it the number — see the reference, and
+note a subagent claims with `PIDLY_AGENT`, not a pid.
 
 - **Never delete a ticket** — numbers are never reused. Close it.
 - A ticket cannot close while it has children outside its own `c/`.
@@ -955,8 +989,9 @@ usage: pidly <command> [args]
                  replacing the summary if already present
 
 environment:
-  PIDLY_PID      the agent's process (default: $PPID). Recorded with its
-                 start time, so a recycled pid is never mistaken for it.
+  PIDLY_PID      the agent's process (default: $CLAUDE_PID, else $PPID).
+                 Recorded with its start time, so a recycled pid is never
+                 mistaken for it.
   PIDLY_AGENT    an agent with no local process — a cloud session, a CI job.
                  Requires PIDLY_LEASE: nothing else can show it is alive.
   PIDLY_LEASE    how long the claim is good for: 90s, 30m, 2h, 3d.

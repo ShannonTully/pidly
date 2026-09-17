@@ -146,6 +146,35 @@ ticket created by hand needs one too. `pidly init` backfills any that are
 missing, and `pidly new` writes it for you along with the lock that stops two
 agents picking the same number.
 
+## Delegating to a subagent
+
+A subagent usually shares its parent's process — under Claude Code, a Bash
+call from a subagent reports the same `CLAUDE_PID` as the lead agent. So a
+pid cannot tell them apart: two claims, one pid, both live. **A subagent
+claims as an agent, with a lease**, the same way a cloud agent does:
+
+```sh
+PIDLY_AGENT=sub-review-parser PIDLY_LEASE=1h pidly claim 19
+```
+
+The lead agent creates the ticket and passes the number down, because it
+writes the subagent's prompt:
+
+```sh
+pidly new -p 7 "Review the parser changes"     # prints 19
+# ...then include "your ticket is 19" in the subagent's instructions
+```
+
+When the subagent finishes it leaves a handoff and releases; the lead reads
+that and decides whether to close. If the subagent dies, the lease expires
+and the ticket frees itself.
+
+**Not every subagent deserves a ticket.** A lookup or a search does not.
+Numbers are never reused and tickets are never deleted, so a ticket per
+subagent call is permanent noise — and an open child blocks its parent from
+closing, so it does active harm. Open one when the work is a unit you would
+want to see in the tracker tomorrow.
+
 ## Closing and reopening
 
 Closing is a move into the container's `c/`:
