@@ -1,0 +1,26 @@
+# The project's fields: one stanza per field, separated by a blank line, in
+# the order pidly writes them into a new ticket.
+#
+#   field:     the name, which is the key on its line in a ticket's info
+#   required:  yes means a ticket is not valid until the field has a value
+#   match:     a POSIX ERE the value must match, tested anchored as ^(...)$
+#   note:      one line, for whoever opens this file
+#
+# Everything after "match: " is the pattern, so | [ ] { } and spaces need no
+# escaping. Keep to POSIX ERE: \d, \w, \s, \b and (?...) are PCRE, and
+# pidly reports them rather than trusting whichever grep is installed here.
+#
+# Lines 1, 2 and 3 of a ticket are claim:, needs: and title:. They are the
+# format's, not the project's, and are not declared here. Neither are
+# created: and updated:, which are pidly's own stamps.
+
+field: effort
+match: S|M|L
+note: rough size
+
+field: area
+match: format|cli|docs
+note: which part of the project this is
+
+field: handoff
+note: where the last agent got to when they stopped

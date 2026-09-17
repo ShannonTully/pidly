@@ -31,7 +31,7 @@ this list in order.
 
 ```
 .pidly/
-  schema.md       # the ticket schema for this project
+  schema          # the ticket schema for this project
   1/
     info          # ticket 1 itself
     3/            # an open child
@@ -570,24 +570,63 @@ doesn't exist on this machine.
 
 ## Configurable schema
 
-`.pidly/schema.md` defines the fields for this project. It's markdown with a
-table, because the file has two audiences and a table serves both: a human reads
-it as documentation, an agent reads it as a spec, and no one needs a TOML or
-JSON parser in bash to use it.
+`.pidly/schema` defines the fields for this project. It is the format's own
+shape applied to its own configuration: one stanza per field, `key: value`
+lines, a blank line between, read with the idioms tickets are read with. It
+has two audiences and this serves both — a human reads it as documentation,
+an agent reads it as a spec, and nobody needs a TOML or JSON parser in bash.
+
+```
+field: effort
+match: S|M|L
+note: rough size
+
+field: area
+required: yes
+match: format|cli|docs
+note: which part of the project
+```
+
+It was a markdown table until a value needed a regex. A table separates its
+cells on `|` and an ERE alternates on `|`, so the one validator worth having
+could not live in the container. The stanza has no delimiter after
+`match: `, which is exactly what buys a pattern its `|`, brackets, braces and
+spaces with no escaping. The file loses its extension for the reason `info`
+never had one: an editor that thinks this is markdown will reflow it.
 
 `claim`, `needs` and `title` are structural and always present, in that
-order. They are not in the table — the table is only for the project's own
-fields, which live between those three lines and the body:
-
-```markdown
-| field | required | values |
-|---|---|---|
-| effort | no | S, M, L |
-| area | no | format, cli, docs |
-```
+order. They are not declared here — the schema is only for the project's own
+fields, which live between those three lines and the body.
 
 Those are validated by `pidly check` rather than by the format, so a ticket
 missing a required field is still a readable ticket.
+
+**`match:` is a POSIX ERE, tested anchored.** pidly asks `^(<pattern>)$`, so
+`S|M|L` cannot half-match `M extra` and a pattern its author already anchored
+still works. No `match:` means anything, which is what a prose `values` cell
+meant before. An empty value is never matched against a pattern: absence is
+`required:`'s question, and folding the two together would make every
+optional field carry a trailing `?` and read like a mistake.
+
+**The matcher is `grep -E`, never awk.** mawk 1.3.4 has no interval
+expressions: `[0-9]{4}` matches `2026` under `grep -E` and does not under
+mawk, in a literal `/re/` or in a dynamic `$0 ~ p`. gawk does support them,
+which is the point — a pattern's meaning must not depend on which awk is
+installed. Measured 2026-09-17 on aarch64 Linux, mawk 1.3.4 20200120.
+
+**A permissive grep hides a dialect error.** ugrep 7.8.4 accepts `\d`, where
+GNU `grep -E` leaves it undefined, so a pattern written against whatever is
+installed locally can behave differently on the next machine. `check` lints
+the pattern text for `\d \w \s \b` and `(?...)` rather than trusting the
+local tool, and asks grep whether the pattern compiles at all — exit 2 rather
+than 1 says it does not, which makes a broken schema a finding instead of a
+crash. Both are properties of the tools rather than of this checkout, so
+re-test them wherever the work happens.
+
+A fault in the schema is reported once, by `check`, before any ticket: one
+mistake there would otherwise be a finding against every ticket that carries
+the field. `new -f` and `set` refuse a value the pattern rejects, so the two
+ways of writing a field agree with what `check` would say a moment later.
 
 **`required: yes` means a value, not a key.** An empty field and an absent
 one are the same thing to `get_field` and to every awk that goes looking, so
@@ -596,14 +635,14 @@ a schema that only demanded the line would demand nothing a reader can use.
 refuses to create a ticket whose required field has no value — which is why
 `new` takes `-f name=value`, the first way to set a field at all.
 
-`new` writes a line for **every** field the table declares, in the table's
+`new` writes a line for **every** field the schema declares, in declaration
 order, valued or empty. An empty slot is a prompt — what the project expects,
-without opening `schema.md` — and uniform blocks make two tickets diff
+without opening the schema — and uniform blocks make two tickets diff
 against each other. It buys nothing for readers: a field is still found by
-name, because counting lines is correct only until the table changes and then
+name, because counting lines is correct only until the schema changes and then
 silently wrong for exactly the old tickets worth reading.
 
-A row added to `schema.md` after tickets exist leaves every one of them
+A stanza added to the schema after tickets exist leaves every one of them
 without the slot, so `pidly fields` rolls it out: it adds the missing keys to
 every ticket, open and closed, and does nothing else. It never removes a
 field the schema dropped — that is data — and never moves a line that is
@@ -649,8 +688,8 @@ This also covers what closing lost when the marker file went away: a project
 wanting a written resolution has somewhere to put one.
 
 **`created` is pidly's field, not the project's.** It is written by `new`,
-sits in the field block like any other, and is valid whether or not
-`schema.md` declares it — otherwise every tracker that predates the field
+sits in the field block like any other, and is valid whether or not the
+schema declares it — otherwise every tracker that predates the field
 would fail `check` until someone edited a file the project owns.
 
 It records something no other part of the format carries. A path gives
@@ -831,12 +870,12 @@ is a plain file edit with nothing to keep in sync.
 
 ## Starting a tracker
 
-`pidly init` creates `.pidly/` in the current directory, seeds `schema.md`,
+`pidly init` creates `.pidly/` in the current directory, seeds `schema`,
 writes the ignore rules, and installs both documents. A project can adopt
 pidly without hand-building anything.
 
 **Re-running is a refresh, not a reset.** Everything generated — the
-reference, the summary, the ignore rules — is rewritten; `schema.md` is left
+reference, the summary, the ignore rules — is rewritten; `schema` is left
 alone the moment it exists, because from then on it belongs to the project.
 That makes `init` safe after an upgrade and safe in a hook, which a command
 that clobbered the schema could never be.
@@ -918,12 +957,12 @@ compares — cheap, since each comes from a single function — so a command tha
 changes without its documentation is a finding.
 
 That covers the two generated documents and nothing else, and the gap has
-been expensive. The same fault has been found three times: `schema.md` told
+been expensive. The same fault has been found three times: the schema told
 every project "Four header lines" from the day `desc:` was dropped until it
 was noticed while doing 17; this document, the README and *both generated
 documents* still said "four header lines, then the body, then project
 fields" until later the same day, directly above examples showing the
-opposite order; and `schema.md` was the file that could not be fixed by an
+opposite order; and the schema was the file that could not be fixed by an
 upgrade, because `init` correctly refuses to rewrite what the project owns.
 
 The rule that falls out: **pidly's prose belongs in files pidly regenerates
@@ -991,7 +1030,8 @@ section is where reasoning goes and the tracker is where work does.
   the decision rather than a candidate, and the file loses its extension for
   the reason `info` never had one: `key: value` lines are not markdown, and a
   `.md` suffix invites an editor to reflow them. What it costs is the
-  rendered table.
+  rendered table. Shipped: see **Configurable schema** above for the file and
+  what validating a pattern turned out to require.
 
   Two portability facts constrain the implementation, found on 2026-09-17
   with mawk 1.3.4 20200120 and ugrep 7.8.4 on aarch64 Linux. **`awk` cannot

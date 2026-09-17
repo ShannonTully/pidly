@@ -25,6 +25,10 @@ effort: M             4  project fields, then a blank line,
                          then the body to the end of the file
 ```
 
+The project's fields are declared in `.pidly/schema`, one stanza each —
+`field:`, and optionally `required:`, `match:` (a POSIX ERE the value must
+match) and `note:`. `pidly new` gives a ticket a slot for every one of them.
+
 ```sh
 # open tickets, never descending into finished work
 find .pidly -type d -name c -prune -o -name info -print

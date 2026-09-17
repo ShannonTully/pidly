@@ -355,8 +355,24 @@ info_faults() {
 		*:*) _if_k=${_if_l%%:*} ;;
 		*)   printf "%s: '%s' is not a field\n" "$_if_n" "$_if_l"; continue ;;
 		esac
-		printf '%s\n' "$_if_decl" | grep -qx "$_if_k" ||
-			printf "%s: field '%s' is not in schema.md\n" "$_if_n" "$_if_k"
+		printf '%s\n' "$_if_decl" | grep -qx "$_if_k" || {
+			printf "%s: field '%s' is not in the schema\n" "$_if_n" "$_if_k"
+			continue
+		}
+
+		# The value against the field's pattern. An empty value is not
+		# matched — absence is required:'s question, not match:'s — and a
+		# pattern grep cannot compile is a fault in the schema, reported
+		# once by schema_faults rather than against every ticket.
+		_if_p=$(schema_match "$_if_r" "$_if_k")
+		[ -n "$_if_p" ] || continue
+		_if_v=$(get_field "$_if_f" "$_if_k")
+		[ -n "$_if_v" ] || continue
+		_if_st=0
+		value_matches "$_if_p" "$_if_v" || _if_st=$?
+		[ "$_if_st" -eq 1 ] &&
+			printf "%s: %s is '%s', which does not match %s\n" \
+				"$_if_n" "$_if_k" "$_if_v" "$_if_p"
 	done
 
 	# A timestamp that is not one is worse than none: it sorts wrong and
@@ -731,7 +747,7 @@ open_children() {
 
 # --- writing fields --------------------------------------------------------
 
-# The fields a ticket may carry, in the order schema.md gives them, minus
+# The fields a ticket may carry, in the order the schema declares them, minus
 # pidly's own stamps: created records one event and updated means "when pidly
 # last wrote here", so neither is a value anyone sets.
 settable_fields() {
@@ -739,6 +755,19 @@ settable_fields() {
 		case $_st_f in ''|created|updated) continue ;; esac
 		printf '%s\n' "$_st_f"
 	done
+}
+
+# Refuse a value the field's pattern rejects. check would report it a moment
+# later, and it keeps the two ways of writing a field — new -f and set —
+# agreeing about what a value is. An empty value is required:'s business, and
+# a pattern grep cannot compile is the schema's; neither is refused here.
+require_match() {
+	_rm_p=$(schema_match "$1" "$2")
+	[ -n "$_rm_p" ] && [ -n "$3" ] || return 0
+	_rm_st=0
+	value_matches "$_rm_p" "$3" || _rm_st=$?
+	[ "$_rm_st" -eq 1 ] && die "$2 must match $_rm_p, and '$3' does not"
+	return 0
 }
 
 # One field on one ticket. The same write release makes for handoff, under
@@ -754,15 +783,16 @@ cmd_set() {
 	settable_fields "$_r" | grep -qx "$_sk" || {
 		case $_sk in
 		created|updated) die "$_sk is pidly's own stamp, not a field to set" ;;
-		*) die "no field '$_sk' in schema.md" ;;
+		*) die "no field '$_sk' in the schema" ;;
 		esac
 	}
 	# Clearing a required field writes exactly the state check reports, and
 	# edit already refuses to install a file it would reject. Refusing here
 	# keeps the CLI from being the thing that breaks the ticket.
 	if [ -z "$_sv" ] && schema_required "$_r" | grep -qx "$_sk"; then
-		die "$_sk is required: give it a value, or change the row in schema.md"
+		die "$_sk is required: give it a value, or change its stanza in the schema"
 	fi
+	require_match "$_r" "$_sk" "$_sv"
 	_sd=$(ticket_dir "$_r" "$_sn")
 	lock "$_sd" 100 || die "$_sn is being modified by another process"
 	set_field "$_sd/info" "$_sk" "$_sv"
@@ -806,7 +836,7 @@ cmd_fields() {
 	[ $# -eq 0 ] || die 'usage: pidly fields'
 	_r=$(root)
 	_fdecl=$(settable_fields "$_r")
-	[ -n "$_fdecl" ] || { printf 'schema.md declares no fields\n'; return 0; }
+	[ -n "$_fdecl" ] || { printf 'the schema declares no fields\n'; return 0; }
 
 	_fout="${TMPDIR:-/tmp}/pidly.fields.$$"
 	: > "$_fout"
@@ -964,7 +994,7 @@ closed if it sits in that container's `c/`. Nothing else records state.
 
 ```
 .pidly/
-  schema.md        project fields
+  schema           the project's fields, one stanza each
   7/
     info           ticket 7, open
     12/
@@ -986,14 +1016,14 @@ needs: 3 8                    2  tickets that must close before this starts
 title: Short human title      3
 created: 2026-09-16T21:43:59Z 4  when the ticket was made
 updated: 2026-09-17T08:02:11Z 5  when pidly last wrote to it
-effort: M                     6  project fields, defined in schema.md
+effort: M                     6  project fields, declared in .pidly/schema
 handoff: where I got to       7  ...as many as the schema declares, or none
                               8  one blank line
 The body, from here           9  ...to the end of the file
 ```
 
 `created` and `updated` are pidly's own fields rather than the project's, so
-they are valid whether or not `schema.md` mentions them. Both are ISO-8601
+they are valid whether or not the schema mentions them. Both are ISO-8601
 UTC, which sorts lexically. `created` records one event and nothing touches
 it again; `updated` is bumped by every pidly command that writes to the file
 — claim, release, edit, reap — and by nothing else.
@@ -1017,6 +1047,56 @@ Nothing records where the body starts or ends. It runs to the end of the
 file, and the fields stop at the first blank line — which is ahead of the
 body, so nothing you write in a body can be mistaken for the boundary.
 Appending to a body needs no bookkeeping.
+
+## The schema
+
+`.pidly/schema` declares the project's fields, one stanza per field,
+separated by a blank line, in the order `pidly new` writes them:
+
+```
+field: effort
+match: S|M|L
+note: rough size
+
+field: area
+required: yes
+match: format|cli|docs
+note: which part of the project
+```
+
+`field:` opens a stanza. `required: yes` means a ticket is not valid until
+the field has a value. `match:` is a POSIX ERE the value is tested against,
+**anchored** — pidly asks `^(<pattern>)$`, so `S|M|L` cannot half-match
+`M extra`. No `match:` means anything, an empty value is never matched
+against one, and `note:` is one line.
+
+Everything after `match: ` is the pattern, so `|`, spaces, brackets and
+braces need no escaping. That is the reason this is not a markdown table:
+a table separates its cells on `|` and an ERE alternates on `|`.
+
+Read it the way everything here is read:
+
+```sh
+awk '$1 == "field:" { print $2 }' .pidly/schema
+awk '$1=="field:" { cur=$2 } $1=="required:" && $2=="yes" { print cur }' \
+    .pidly/schema
+```
+
+Two things the implementation is stuck with, and so are you:
+
+- **Patterns go through `grep -E`, never awk.** mawk has no interval
+  expressions — `[0-9]{4}` matches `2026` under `grep -E` and does not under
+  mawk, in a literal `/re/` or a dynamic `$0 ~ p` — and gawk differs again.
+  A pattern's meaning must not depend on which awk is installed.
+- **Keep to POSIX ERE.** `\d`, `\w`, `\s`, `\b` and `(?...)` are PCRE.
+  Some greps take them anyway — ugrep does — so a pattern written against
+  whatever is installed here can mean something else on the next machine.
+  `pidly check` reports them rather than trusting the local tool, along with
+  a pattern grep cannot compile and a stanza with no `field:`.
+
+`claim:`, `needs:` and `title:` are lines 1, 2 and 3 of every ticket: they
+belong to the format, not to the project, and are not declared here. Neither
+are `created:` and `updated:`.
 
 ## Finding work
 
@@ -1121,16 +1201,16 @@ the most recent stop.
 ## Creating
 
 A project with no tracker starts one with `pidly init`, which seeds this
-file, `schema.md` and the ignore rules. Re-running it refreshes the generated
-files and leaves `schema.md` alone.
+file, `schema` and the ignore rules. Re-running it refreshes the generated
+files and leaves `schema` alone.
 
 ```sh
 pidly new -f effort=M -f area=cli "Do the thing"     # body from stdin
 ```
 
 `-f` sets a project field. `pidly new` writes a line for **every field the
-schema declares**, in the table's order, whether or not it has a value: an
-empty slot shows what the project expects without opening `schema.md`, and it
+schema declares**, in declaration order, whether or not it has a value: an
+empty slot shows what the project expects without opening the schema, and it
 makes two tickets line up when they are diffed. A field marked `required: yes`
 must have a value — `new` refuses without one, and `check` reports a ticket
 whose required field is empty as well as one where it is missing. Required
@@ -1193,7 +1273,7 @@ pidly release -m "..." 7      # the one that matters: it writes handoff
 pidly fields                  # give every ticket a slot for every declared field
 ```
 
-`fields` is the migration for a row added to `schema.md` after tickets
+`fields` is the migration for a stanza added to the schema after tickets
 already exist. It **adds keys and nothing else**: it never drops a field the
 schema stopped declaring, because that is data; it never moves a line that is
 already there, because a ticket written by hand may order its fields however
@@ -1316,6 +1396,10 @@ effort: M             4  project fields, then a blank line,
                          then the body to the end of the file
 ```
 
+The project's fields are declared in `.pidly/schema`, one stanza each —
+`field:`, and optionally `required:`, `match:` (a POSIX ERE the value must
+match) and `note:`. `pidly new` gives a ticket a slot for every one of them.
+
 ```sh
 # open tickets, never descending into finished work
 find .pidly -type d -name c -prune -o -name info -print
@@ -1428,7 +1512,7 @@ registry_highest() {
 # Project fields the schema marks required, one per line. A ticket without a
 # value for one is still readable — check reports it — but new refuses to
 # make one, so a ticket starts valid rather than starting wrong.
-schema_required() { schema_rows "$1" | awk -F'\t' '$2 == "yes" { print $1 }'; }
+schema_required() { schema_cached "$1" | awk -F'\t' '$2 == "yes" { print $1 }'; }
 
 # The highest number issued: the greater of what the registry records and
 # what the tree contains. Both are needed — the registry catches numbers whose
@@ -1516,7 +1600,8 @@ cmd_new() {
 		created|updated) die "$_fk is pidly's own stamp, not a field to set" ;;
 		esac
 		printf '%s\n' "$_decl" | grep -qx "$_fk" ||
-			die "no field '$_fk' in schema.md"
+			die "no field '$_fk' in the schema"
+		require_match "$_r" "$_fk" "${_pair#*=}"
 	done <<PAIRS
 $_pairs
 PAIRS
@@ -1533,7 +1618,7 @@ PAIRS
 $(schema_required "$_r")
 REQ
 	[ -z "$_missing" ] ||
-		die "schema.md requires a value for:$_missing — supply it with -f name=value"
+		die "the schema requires a value for:$_missing — supply it with -f name=value"
 
 	# Scan before locking. A stale answer only costs a few extra mkdir
 	# attempts, and it keeps the critical section down to those attempts
@@ -1561,7 +1646,7 @@ REQ
 		printf 'updated: %s\n' "$_now"
 		# Every field the schema declares, in the order the table gives
 		# them, whether or not it has a value. An empty slot is a prompt
-		# — the project's expectations without opening schema.md — and it
+		# — the project's expectations without opening the schema — and it
 		# makes two tickets line up when they are diffed. The order lives
 		# in the table, so the table is the one place it is decided.
 		#
@@ -1609,30 +1694,24 @@ IGNORE
 # is the project's own, and starts with just the handoff field.
 schema_text() {
 	cat <<'SCHEMA'
-# Ticket schema
+# The project's fields: one stanza per field, separated by a blank line, in
+# the order pidly writes them into a new ticket.
+#
+#   field:     the name, which is the key on its line in a ticket's info
+#   required:  yes means a ticket is not valid until the field has a value
+#   match:     a POSIX ERE the value must match, tested anchored as ^(...)$
+#   note:      one line, for whoever opens this file
+#
+# Everything after "match: " is the pattern, so | [ ] { } and spaces need no
+# escaping. Keep to POSIX ERE: \d, \w, \s, \b and (?...) are PCRE, and
+# pidly reports them rather than trusting whichever grep is installed here.
+#
+# Lines 1, 2 and 3 of a ticket are claim:, needs: and title:. They are the
+# format's, not the project's, and are not declared here. Neither are
+# created: and updated:, which are pidly's own stamps.
 
-Every ticket is a directory; its content is the file `info` inside it.
-Three header lines are structural and always present, in this order:
-
-| line | field | meaning |
-|---|---|---|
-| 1 | `claim:` | empty, or `<pid>.<starttime>@<runtime>`, or `<agent>@- <expiry>` |
-| 2 | `needs:` | space-separated ticket numbers that must be closed first |
-| 3 | `title:` | a human title, not the number |
-
-Lines 4 onward are project fields from the table below, in this order, ending
-at the first blank line. Everything after that blank line is the body, which
-runs to the end of the file. Add your own rows; `pidly check` enforces them.
-
-`required: yes` means a value, not just the line: `pidly new` will not make a
-ticket without one — pass it with `-f effort=M` — and `check` reports the
-field left empty. The values column is documentation; nothing validates it.
-
-| field   | required | values                                |
-|---------|----------|---------------------------------------|
-| created | no       | ISO-8601 UTC; pidly new writes it     |
-| updated | no       | ISO-8601 UTC; every pidly write bumps it |
-| handoff | no       | one line: where the last agent got to |
+field: handoff
+note: where the last agent got to when they stopped
 SCHEMA
 }
 
@@ -1691,12 +1770,12 @@ cmd_init() {
 		_fresh=yes
 	fi
 
-	# schema.md belongs to the project once it exists. Everything else here
+	# The schema belongs to the project once it exists. Everything else here
 	# is generated, so re-running init is a refresh rather than a reset.
-	if [ -f "$_ir/schema.md" ]; then
+	if [ -f "$(schema_file "$_ir")" ]; then
 		_schema=kept
 	else
-		schema_text > "$_ir/schema.md"
+		schema_text > "$(schema_file "$_ir")"
 		_schema=written
 	fi
 	ignore_text > "$_ir/.gitignore"
@@ -1750,7 +1829,7 @@ cmd_init() {
 	else
 		printf 'refreshed %s\n' "$_ir"
 	fi
-	printf 'schema.md %s, .gitignore written\n' "$_schema"
+	printf 'schema %s, .gitignore written\n' "$_schema"
 	[ "${_added:-0}" -gt 0 ] &&
 		printf 'registered %s number(s) that had no entry\n' "$_added"
 	[ "${_dated:-0}" -gt 0 ] &&
@@ -1766,7 +1845,7 @@ cmd_init() {
 #
 # created is pidly's rather than the project's. It is a fact about the ticket
 # that nothing else in the file records and that no later edit can make
-# false, so new writes it whether or not schema.md has heard of it — an older
+# false, so new writes it whether or not the schema has heard of it — an older
 # tracker gets dated tickets without its schema, which the project owns,
 # being rewritten underneath it.
 known_fields() {
@@ -1779,29 +1858,132 @@ known_fields() {
 # file, and a hand-edit cannot call anything at all. Callers hold the lock.
 mark_updated() { set_field "$1" updated "$(now_iso)"; }
 
-# The rows of the field table: "name<TAB>required", in the table's order.
+# --- the schema ------------------------------------------------------------
 #
-# schema.md may hold more than one table — the shipped one documents the
-# three structural lines above the fields — so rows are only read while the
-# last header seen was the field table's. Picking rows out by shape instead
-# read "line" out of "| line | field | meaning |" and handed every ticket a
-# field called line.
-schema_rows() {
-	[ -f "$1/schema.md" ] || return 0
-	awk -F'|' '
-		/^[[:space:]]*\|/ {
-			f = $2; r = $3
-			gsub(/^[ \t]+|[ \t]+$/, "", f)
-			gsub(/^[ \t]+|[ \t]+$/, "", r)
-			if (f ~ /^-+$/ || r ~ /^-+$/) next           # the rule row
-			if (f == "field") { in_table = (r == "required"); next }
-			if (!in_table || f == "") next
-			printf "%s\t%s\n", f, r
-		}' "$1/schema.md"
+# The project's fields, one stanza each, in .pidly/schema — the format's own
+# key: value lines applied to its own configuration. It was a markdown table
+# until a value needed a regex: a table separates cells on | and an ERE
+# alternates on |, so the table could not hold the one validator worth having.
+# Nothing after "match: " is a delimiter, which is what buys a pattern its |,
+# brackets, braces and spaces with no escaping.
+#
+# No extension, for the reason info has none: an editor that thinks a file is
+# markdown will reflow it.
+schema_file() { printf '%s/schema\n' "$1"; }
+
+# "name<TAB>required<TAB>match" per field, in declaration order. A pattern
+# holding a tab would break this line, which is what schema_faults reports.
+schema_table() {
+	_sc_f=$(schema_file "$1")
+	[ -f "$_sc_f" ] || return 0
+	awk '
+		function flush() {
+			if (name != "") printf "%s\t%s\t%s\n", name, req, pat
+			name = ""; req = "no"; pat = ""
+		}
+		{ sub(/^[ \t]+/, "") }
+		/^#/ { next }
+		# A blank line closes the stanza, so a key that follows one
+		# belongs to nothing rather than to whatever came before it.
+		# schema_faults reports that stanza; this one just ignores it.
+		$0 == "" { flush(); next }
+		$1 == "field:" { flush(); name = $2; next }
+		name == "" { next }
+		$1 == "required:" { req = $2; next }
+		index($0, "match:") == 1 { pat = substr($0, 7); sub(/^ /, "", pat); next }
+		END { flush() }
+	' "$_sc_f"
 }
 
-# Field names the schema declares, one per line, in the table's order.
-schema_fields() { schema_rows "$1" | cut -f1; }
+# Parsed once per command. check asks for it per ticket and info_faults per
+# field; reparsing there would put a process per field per ticket back into
+# the one place the whole design is built to keep to a single pass.
+schema_cached() {
+	if [ -z "${_schema_read:-}" ]; then
+		_schema_tab=$(schema_table "$1")
+		_schema_read=yes
+	fi
+	printf '%s\n' "$_schema_tab"
+}
+
+# Field names the schema declares, one per line, in declaration order.
+schema_fields() { schema_cached "$1" | awk -F'\t' '$1 != "" { print $1 }'; }
+
+# The pattern one field's value must match, or nothing.
+schema_match() {
+	schema_cached "$1" | awk -F'\t' -v k="$2" '$1 == k { print $3; exit }'
+}
+
+# Does this value match this pattern? 0 yes, 1 no, 2 the pattern is unusable —
+# which is a fault in the schema, not in the ticket, and is reported once by
+# schema_faults rather than against every ticket that has the field.
+#
+# grep, never awk. mawk 1.3.4 has no interval expressions: [0-9]{4} matches
+# 2026 under grep -E and does not under mawk, in a literal /re/ or in a
+# dynamic $0 ~ p, and gawk differs again. A pattern's meaning must not depend
+# on which awk is installed.
+#
+# Anchored here rather than in the schema: ^(...)$ so that S|M|L cannot
+# half-match "M extra", and a pattern its author already anchored still works.
+value_matches() {
+	printf '%s\n' "$2" | grep -Eq "^($1)\$" 2>/dev/null
+}
+
+# Everything wrong with the schema itself, one finding per line. Reported by
+# check once, not per ticket: a bad pattern is one mistake however many
+# tickets carry the field.
+schema_faults() {
+	_sf_r=$1 _sf_f=$(schema_file "$1")
+	[ -f "$_sf_f" ] || { printf 'schema: %s does not exist\n' "$_sf_f"; return 0; }
+
+	# \047 is the apostrophe: the program is inside single quotes, so it
+	# cannot contain one.
+	awk '
+		BEGIN { q = "\047" }
+		function say(msg) { print "schema: " msg ", at line " NR }
+		{ sub(/^[ \t]+/, "") }
+		/^#/ { next }
+		$0 == "" { open = 0; next }
+		{
+			if (!open) {
+				open = 1
+				if ($1 != "field:") { say("a stanza with no field:"); next }
+				if (NF != 2) { say("field: takes one name"); next }
+				if ($2 in seen) say(q $2 q " is declared twice")
+				seen[$2] = 1
+				if ($2 == "created" || $2 == "updated")
+					say(q $2 q " is pidly" q "s own and is not declared here")
+				next
+			}
+			if ($1 == "field:") { say("a second field: inside a stanza"); next }
+			if ($1 == "required:") {
+				if ($2 != "yes" && $2 != "no") say("required: takes yes or no")
+				next
+			}
+			if (index($0, "match:") == 1 || index($0, "note:") == 1) {
+				if (index($0, "match:") == 1 && index($0, "\t") > 0)
+					say("a match with a tab in it")
+				next
+			}
+			say(q $1 q " is not a schema key")
+		}' "$_sf_f"
+
+	# The patterns, which only grep can judge. A permissive grep is the
+	# hazard: ugrep 7.8.4 accepts \d, where GNU grep -E leaves it undefined,
+	# so a pattern written against whichever tool is installed here can mean
+	# something else on the next machine. Lint the text, then ask grep
+	# whether it compiles at all — exit 2 rather than 1 says it does not.
+	schema_cached "$_sf_r" | while IFS='	' read -r _sf_k _sf_req _sf_pat; do
+		[ -n "$_sf_k" ] && [ -n "$_sf_pat" ] || continue
+		case $_sf_pat in
+		*'\d'*|*'\w'*|*'\s'*|*'\b'*|*'(?'*)
+			printf "schema: '%s' uses a PCRE escape, which is not ERE\n" "$_sf_k" ;;
+		esac
+		_sf_rc=0; value_matches "$_sf_pat" x || _sf_rc=$?
+		[ "$_sf_rc" -le 1 ] ||
+			printf "schema: '%s' has a match grep cannot compile\n" "$_sf_k"
+	done
+}
 
 # "number<TAB>state<TAB>blockers<TAB>title" for every open ticket, computed
 # from one traversal and the first three lines of each file. No bodies are
@@ -2012,6 +2194,16 @@ cmd_check() {
 	: > "$PIDLY_NOTES"
 	_m=$(map "$_r")
 
+	# The schema first: a fault there is one mistake that would otherwise be
+	# reported against every ticket carrying the field.
+	schema_faults "$_r" | while read -r _sfault; do
+		[ -n "$_sfault" ] || continue
+		flag "$_sfault"
+	done
+	if [ -f "$_r/schema.md" ]; then
+		flag "schema.md is not read any more — the schema is $(schema_file "$_r")"
+	fi
+
 	# One number, one ticket.
 	printf '%s\n' "$_m" | awk '{print $1}' | sort | uniq -d | while read -r _d; do
 		[ -n "$_d" ] || continue
@@ -2086,7 +2278,7 @@ cmd_check() {
 	fi
 
 	# Declared fields a ticket has no line for. Reported per field rather
-	# than per ticket: a row added to schema.md today is missing from every
+	# than per ticket: a stanza added to the schema today is missing from every
 	# ticket at once, and that is one fact, not two thousand of them. It is
 	# also the dry run for the migration — what 'pidly fields' would add,
 	# from the command that changes nothing.
@@ -2186,7 +2378,7 @@ usage: pidly <command> [args]
                  appends to it
   set <n> <field> [value]
                  write a project field; with no value, clear it
-  fields         give every ticket a slot for every field schema.md declares,
+  fields         give every ticket a slot for every field the schema declares,
                  adding keys only — never removing, reordering or restamping
   close <n>      finish it: move it into its container's c/
   reopen <n>     move it back, reopening any closed ancestors

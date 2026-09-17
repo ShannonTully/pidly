@@ -35,8 +35,8 @@ echo "field"
 # Two tickets carry effort, in different places in their blocks, one carries
 # area instead and one carries neither: a tracker whose tickets disagree
 # about which fields they have, which is what a schema change leaves behind.
-printf '| effort  | no       | S, M, L   |\n| area    | no       | cli, docs |\n' \
-	>> .pidly/schema.md
+printf '\nfield: effort\nmatch: S|M|L\n\nfield: area\nmatch: cli|docs\n' \
+	>> .pidly/schema
 sed -i '3a effort: L' .pidly/1/info
 sed -i '3a area: cli\neffort: M' .pidly/2/info
 sed -i '3a area: docs' .pidly/1/3/info
@@ -98,7 +98,7 @@ sed -i '2s/.*/needs:/' .pidly/2/info
 
 printf 'strayfield: x\n' > .pidly/2/info.tmp
 sed -i '3a strayfield: x' .pidly/2/info; rm -f .pidly/2/info.tmp
-has "an undeclared field" "$($PIDLY check 2>&1 || true)" "field 'strayfield' is not in schema.md"
+has "an undeclared field" "$($PIDLY check 2>&1 || true)" "field 'strayfield' is not in the schema"
 sed -i '/^strayfield:/d' .pidly/2/info
 
 mkdir .pidly/2/notes

@@ -17,11 +17,11 @@ nums() { find .pidly -mindepth 1 -type d '!' -name c '!' -name '.*' -printf '%f\
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"; mkdir .pidly
-cat > .pidly/schema.md <<'EOF'
-| field  | required | values  |
-|--------|----------|---------|
-| effort | no       | S, M, L |
-| area   | no       | free    |
+cat > .pidly/schema <<'EOF'
+field: effort
+match: S|M|L
+
+field: area
 EOF
 
 echo "numbering"
@@ -100,11 +100,12 @@ echo "fields"
 # A tracker of its own: required means a value here, and every other test in
 # this file would have to supply one.
 mkdir req; cd req; mkdir .pidly
-cat > .pidly/schema.md <<'EOF'
-| field  | required | values  |
-|--------|----------|---------|
-| effort | yes      | S, M, L |
-| area   | no       | free    |
+cat > .pidly/schema <<'EOF'
+field: effort
+required: yes
+match: S|M|L
+
+field: area
 EOF
 
 out=$($PIDLY new "unvalued" </dev/null 2>&1) && rc=0 || rc=$?
@@ -139,7 +140,7 @@ check "a repeated -f is a correction: the last wins" \
 
 out=$($PIDLY new -f nosuch=1 -f effort=M "unknown field" </dev/null 2>&1) && rc=0 || rc=$?
 check "a field the schema does not declare is refused" "$rc" "1"
-case $out in *"schema.md"*) ok "and says where the names come from" ;; *) no "message: $out" ;; esac
+case $out in *"the schema"*) ok "and says where the names come from" ;; *) no "message: $out" ;; esac
 out=$($PIDLY new -f effort "no equals" </dev/null 2>&1) && rc=0 || rc=$?
 check "a -f without name=value is refused" "$rc" "1"
 out=$($PIDLY new -f created=2020-01-01T00:00:00Z -f effort=M "stamp" </dev/null 2>&1) && rc=0 || rc=$?

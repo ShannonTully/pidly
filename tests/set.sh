@@ -16,7 +16,7 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 PIDLY_PID=$$; export PIDLY_PID
 $PIDLY init >/dev/null
-printf '| effort | yes      | S, M, L |\n' >> .pidly/schema.md
+printf '\nfield: effort\nrequired: yes\nmatch: S|M|L\n' >> .pidly/schema
 $PIDLY new -f effort=M "one" </dev/null >/dev/null
 $PIDLY new -f effort=S "two" </dev/null >/dev/null
 
@@ -46,7 +46,7 @@ has "and says what to do instead" "$out" "required"
 check "so the value survives" "$(sed -n 's/^effort: //p' .pidly/1/info)" "L"
 out=$($PIDLY set 1 nosuch x 2>&1) && rc=0 || rc=$?
 check "a field the schema does not declare is refused" "$rc" "1"
-has "and says where names come from" "$out" "schema.md"
+has "and says where names come from" "$out" "the schema"
 out=$($PIDLY set 1 updated 2026-01-01T00:00:00Z 2>&1) && rc=0 || rc=$?
 check "pidly's own stamps are not set's to write" "$rc" "1"
 out=$($PIDLY set 1 handoff "two
@@ -63,7 +63,7 @@ printf 'claim:\nneeds:\ntitle: hand made\neffort: S\ncreated: 2020-01-01T00:00:0
 	> .pidly/3/info
 printf 'abc123 hand made\n' > .pidly/.n/3
 mkdir -p .pidly/c && mv .pidly/2 .pidly/c/          # and one that is finished
-printf '| area | no       | cli, docs |\n' >> .pidly/schema.md
+printf '\nfield: area\nmatch: cli|docs\n' >> .pidly/schema
 
 out=$($PIDLY check 2>&1 || true)
 has "check reports the drift a new schema row leaves" "$out" "have no 'area' line"
@@ -97,7 +97,7 @@ check "and check is clean" "$($PIDLY check >/dev/null 2>&1 && echo ok)" "ok"
 
 # A field the schema stopped declaring is data, not drift.
 $PIDLY set 1 area docs >/dev/null
-sed -i '/^| area /d' .pidly/schema.md
+sed -i '/^field: area$/,+1d' .pidly/schema
 $PIDLY fields >/dev/null
 check "a dropped schema row does not delete the value" \
 	"$(sed -n 's/^area: //p' .pidly/1/info)" "docs"

@@ -14,7 +14,7 @@ closed if it sits in that container's `c/`. Nothing else records state.
 
 ```
 .pidly/
-  schema.md        project fields
+  schema           the project's fields, one stanza each
   7/
     info           ticket 7, open
     12/
@@ -36,14 +36,14 @@ needs: 3 8                    2  tickets that must close before this starts
 title: Short human title      3
 created: 2026-09-16T21:43:59Z 4  when the ticket was made
 updated: 2026-09-17T08:02:11Z 5  when pidly last wrote to it
-effort: M                     6  project fields, defined in schema.md
+effort: M                     6  project fields, declared in .pidly/schema
 handoff: where I got to       7  ...as many as the schema declares, or none
                               8  one blank line
 The body, from here           9  ...to the end of the file
 ```
 
 `created` and `updated` are pidly's own fields rather than the project's, so
-they are valid whether or not `schema.md` mentions them. Both are ISO-8601
+they are valid whether or not the schema mentions them. Both are ISO-8601
 UTC, which sorts lexically. `created` records one event and nothing touches
 it again; `updated` is bumped by every pidly command that writes to the file
 — claim, release, edit, reap — and by nothing else.
@@ -67,6 +67,56 @@ Nothing records where the body starts or ends. It runs to the end of the
 file, and the fields stop at the first blank line — which is ahead of the
 body, so nothing you write in a body can be mistaken for the boundary.
 Appending to a body needs no bookkeeping.
+
+## The schema
+
+`.pidly/schema` declares the project's fields, one stanza per field,
+separated by a blank line, in the order `pidly new` writes them:
+
+```
+field: effort
+match: S|M|L
+note: rough size
+
+field: area
+required: yes
+match: format|cli|docs
+note: which part of the project
+```
+
+`field:` opens a stanza. `required: yes` means a ticket is not valid until
+the field has a value. `match:` is a POSIX ERE the value is tested against,
+**anchored** — pidly asks `^(<pattern>)$`, so `S|M|L` cannot half-match
+`M extra`. No `match:` means anything, an empty value is never matched
+against one, and `note:` is one line.
+
+Everything after `match: ` is the pattern, so `|`, spaces, brackets and
+braces need no escaping. That is the reason this is not a markdown table:
+a table separates its cells on `|` and an ERE alternates on `|`.
+
+Read it the way everything here is read:
+
+```sh
+awk '$1 == "field:" { print $2 }' .pidly/schema
+awk '$1=="field:" { cur=$2 } $1=="required:" && $2=="yes" { print cur }' \
+    .pidly/schema
+```
+
+Two things the implementation is stuck with, and so are you:
+
+- **Patterns go through `grep -E`, never awk.** mawk has no interval
+  expressions — `[0-9]{4}` matches `2026` under `grep -E` and does not under
+  mawk, in a literal `/re/` or a dynamic `$0 ~ p` — and gawk differs again.
+  A pattern's meaning must not depend on which awk is installed.
+- **Keep to POSIX ERE.** `\d`, `\w`, `\s`, `\b` and `(?...)` are PCRE.
+  Some greps take them anyway — ugrep does — so a pattern written against
+  whatever is installed here can mean something else on the next machine.
+  `pidly check` reports them rather than trusting the local tool, along with
+  a pattern grep cannot compile and a stanza with no `field:`.
+
+`claim:`, `needs:` and `title:` are lines 1, 2 and 3 of every ticket: they
+belong to the format, not to the project, and are not declared here. Neither
+are `created:` and `updated:`.
 
 ## Finding work
 
@@ -171,16 +221,16 @@ the most recent stop.
 ## Creating
 
 A project with no tracker starts one with `pidly init`, which seeds this
-file, `schema.md` and the ignore rules. Re-running it refreshes the generated
-files and leaves `schema.md` alone.
+file, `schema` and the ignore rules. Re-running it refreshes the generated
+files and leaves `schema` alone.
 
 ```sh
 pidly new -f effort=M -f area=cli "Do the thing"     # body from stdin
 ```
 
 `-f` sets a project field. `pidly new` writes a line for **every field the
-schema declares**, in the table's order, whether or not it has a value: an
-empty slot shows what the project expects without opening `schema.md`, and it
+schema declares**, in declaration order, whether or not it has a value: an
+empty slot shows what the project expects without opening the schema, and it
 makes two tickets line up when they are diffed. A field marked `required: yes`
 must have a value — `new` refuses without one, and `check` reports a ticket
 whose required field is empty as well as one where it is missing. Required
@@ -243,7 +293,7 @@ pidly release -m "..." 7      # the one that matters: it writes handoff
 pidly fields                  # give every ticket a slot for every declared field
 ```
 
-`fields` is the migration for a row added to `schema.md` after tickets
+`fields` is the migration for a stanza added to the schema after tickets
 already exist. It **adds keys and nothing else**: it never drops a field the
 schema stopped declaring, because that is data; it never moves a line that is
 already there, because a ticket written by hand may order its fields however

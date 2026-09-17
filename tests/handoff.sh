@@ -12,11 +12,13 @@ PIDLY_PID=$$; export PIDLY_PID
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"; mkdir .pidly
-cat > .pidly/schema.md <<'EOF'
-| field   | required | values |
-|---------|----------|--------|
-| effort  | yes      | S,M,L  |
-| handoff | no       | one line |
+cat > .pidly/schema <<'EOF'
+field: effort
+required: yes
+match: S|M|L
+
+field: handoff
+note: one line
 EOF
 printf 'Body line.\n' | $PIDLY new -f effort=M "A ticket" >/dev/null
 

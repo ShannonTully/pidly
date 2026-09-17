@@ -4,7 +4,7 @@ title: Validate the structural lines and pidly's own fields by pattern too
 effort: M
 area: format
 created: 2026-09-17T07:03:28Z
-updated: 2026-09-17T07:03:28Z
+updated: 2026-09-17T15:58:40Z
 handoff:
 
 Once 28 makes a pattern the way a value is checked, the hardcoded checks in
@@ -51,3 +51,13 @@ that keeps a permissive grep from hiding a bad pattern.
 Done when the structural lines and created, updated and handoff are checked
 against declared patterns, the project cannot weaken them, a malformed claim
 is a finding, and the tests cover each line being wrong in its own way.
+
+
+What 28 shipped, for whoever picks this up: .pidly/schema holds stanzas;
+schema_table parses them and schema_cached is the per-command cache;
+value_matches is the anchored grep -Eq matcher — ^(<pattern>)$, never awk;
+schema_faults is the lint, and it is where a built-in stanza set for the
+structural lines would be applied, since it already reports the schema's own
+faults before any ticket is read. The project cannot weaken those by editing
+.pidly/schema: check already reports a stanza that declares created or
+updated, and the same rule is what claim, needs and title need.

@@ -15,7 +15,7 @@ cd "$tmp"
 echo "creating"
 $PIDLY init >/dev/null
 check "makes .pidly" "$([ -d .pidly ] && echo yes)" "yes"
-check "seeds schema.md" "$([ -f .pidly/schema.md ] && echo yes)" "yes"
+check "seeds the schema" "$([ -f .pidly/schema ] && echo yes)" "yes"
 check "writes the reference" "$(count 'State is location' .pidly/README.md)" "1"
 check "writes the AGENTS.md summary" "$(count '<!-- pidly:begin -->' AGENTS.md)" "1"
 
@@ -27,9 +27,14 @@ check "and the fallback id" "$(grep -c '^\.id$' .pidly/.gitignore)" "1"
 check "nothing is written to a root .gitignore" "$([ -f .gitignore ] && echo yes || echo no)" "no"
 
 echo "the seeded schema"
-check "documents the header lines" "$(count '| 3 | `title:`' .pidly/schema.md)" "1"
-check "ships the handoff field" "$(count '| handoff ' .pidly/schema.md)" "1"
-check "and nothing else opinionated" "$(grep -c '^| effort' .pidly/schema.md || true)" "0"
+check "has no extension, so no editor reflows it" \
+	"$([ -f .pidly/schema.md ] && echo yes || echo no)" "no"
+check "explains the structural lines it does not declare" \
+	"$(count 'claim:, needs: and title:' .pidly/schema)" "1"
+check "ships the handoff field as a stanza" \
+	"$(grep -c '^field: handoff$' .pidly/schema)" "1"
+check "and nothing else opinionated" "$(grep -c '^field: effort' .pidly/schema || true)" "0"
+check "which check reads without complaint" "$($PIDLY check >/dev/null && echo clean)" "clean"
 
 echo "the number registry"
 check "init creates it" "$([ -d .pidly/.n ] && echo yes)" "yes"
@@ -56,11 +61,11 @@ n=$($PIDLY new "after a delete" </dev/null | cut -f1)
 check "a deleted ticket's number is never reissued" "$n" "10"
 
 echo "refreshing"
-printf '| effort | yes | S,M,L |\n' >> .pidly/schema.md
+printf '\nfield: effort\nrequired: yes\nmatch: S|M|L\n' >> .pidly/schema
 printf 'clobbered\n' > .pidly/README.md
 printf 'stale\n' > .pidly/.gitignore
 $PIDLY init >/dev/null
-check "schema.md is left alone once it exists" "$(count '| effort ' .pidly/schema.md)" "1"
+check "the schema is left alone once it exists" "$(count 'field: effort' .pidly/schema)" "1"
 check "the reference is regenerated" "$(count 'State is location' .pidly/README.md)" "1"
 check "the ignore rules are regenerated" "$(grep -c '^\.lock$' .pidly/.gitignore)" "1"
 check "existing tickets survive" "$([ -f .pidly/1/info ] && echo yes)" "yes"

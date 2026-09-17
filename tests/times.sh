@@ -1,6 +1,6 @@
 #!/bin/sh
 # Tests for created: the one timestamp the format records. It is written
-# once, never updated, valid whether or not schema.md declares it, and
+# once, never updated, valid without the schema declaring it, and
 # backfilled by init for tickets that predate it.
 set -eu
 PIDLY=$(cd "$(dirname "$0")/.." && pwd)/bin/pidly
@@ -28,12 +28,14 @@ check "on line 4, ahead of the project's own fields" \
 check "and the ticket is valid" "$($PIDLY check >/dev/null && echo clean)" "clean"
 
 echo "it is pidly's field, not the project's"
-check "schema.md does not have to declare it" \
-	"$(grep -c '^| created' .pidly/schema.md || true)" "1"
-sed -i '/^| created/d' .pidly/schema.md
-check "and a schema without it still passes check" \
+check "the schema does not declare it at all" \
+	"$(grep -c '^field: created' .pidly/schema || true)" "0"
+check "and a ticket carrying it still passes check" \
 	"$($PIDLY check >/dev/null && echo clean)" "clean"
-$PIDLY init >/dev/null 2>&1 || true
+printf '\nfield: created\nnote: not yours to declare\n' >> .pidly/schema
+has "declaring it is a finding" "$($PIDLY check 2>&1 || true)" \
+	"schema: 'created' is pidly's own and is not declared here"
+sed -i '/^field: created$/,+1d' .pidly/schema
 
 echo "nothing updates created"
 was=$(created 1)
