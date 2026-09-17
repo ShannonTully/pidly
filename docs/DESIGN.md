@@ -874,9 +874,24 @@ Both lead with the format rather than the CLI, because they have to work for
 an agent in a checkout where `pidly` was never installed. Commands are the
 convenient path; `find`, `sed` and `mv` are the guaranteed one.
 
-**Both are copies, and copies go stale.** Nothing yet notices when a command
-changes and the installed text does not. `pidly check` should regenerate both
-and compare — cheap, since each comes from a single function.
+**Both are copies, and copies go stale.** `pidly check` regenerates both and
+compares — cheap, since each comes from a single function — so a command that
+changes without its documentation is a finding.
+
+That covers the two generated documents and nothing else, and the gap has
+been expensive. The same fault has been found three times: `schema.md` told
+every project "Four header lines" from the day `desc:` was dropped until it
+was noticed while doing 17; this document, the README and *both generated
+documents* still said "four header lines, then the body, then project
+fields" until later the same day, directly above examples showing the
+opposite order; and `schema.md` was the file that could not be fixed by an
+upgrade, because `init` correctly refuses to rewrite what the project owns.
+
+The rule that falls out: **pidly's prose belongs in files pidly regenerates
+and `check` compares.** Anything explaining the format that lives in a
+project-owned file will eventually be wrong with no way to correct it, which
+is why 28 moves the schema to a stanza file whose only prose is one `note:`
+line per field.
 
 ## Not doing
 
@@ -898,6 +913,14 @@ oversights.
   process. Saying "this is someone's ticket" while nothing is running is a
   planning concern, and the `handoff` field covers the note that usually
   goes with it.
+
+- **A query language, or statistics.** `pidly field <name>` hands over one
+  field across every ticket in a single pass and stops there; the average,
+  the tally and the grouping are a shell pipeline over well-formed output.
+  Not on purity grounds — every aggregate pidly owned would be one somebody
+  wanted computed differently, and the pipeline is already the thing they
+  would reach for. The commands are a thin wrapper over the format, not a
+  layer on top of it.
 
 Worth noting the direction is not all one way: **`bd` has no claim
 liveness.** `bd update --claim` sets an assignee and a status, and if that

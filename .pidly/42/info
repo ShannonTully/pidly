@@ -1,0 +1,46 @@
+claim:
+needs:
+title: A deferred ticket is not ready work, and list cannot tell
+effort: M
+area: format
+created: 2026-09-17T07:13:14Z
+updated: 2026-09-17T07:13:14Z
+
+34, 35, 36 and 37 are deferred design questions: each body opens by naming
+the trigger that would justify starting it. pidly list shows all four as
+ready, because ready means unclaimed and unblocked and they are both.
+
+Before them, list was the one view an agent could trust without reading
+bodies: everything it printed was something to pick up. Now a quarter of it
+is work nobody should start, and the only way to tell is to open each
+ticket — which is exactly the unbounded reading the format exists to
+prevent.
+
+The obvious fix fits what list already does. Ready, blocked and claimed are
+not locations: blocked is computed from needs:, claimed from claim:, and
+only open-versus-closed is structural. Deferred belongs in that set, as a
+field holding the trigger:
+
+  defer: picking among unblocked tickets needs a sort that reads fields
+
+A ticket with a non-empty defer: is not ready; list -a shows it as deferred
+with its trigger; clearing the field makes it ready again, which is what
+happens when the trigger fires. The trigger then lives on the ticket rather
+than in a design document nobody reads while choosing work.
+
+Costs: one more field read per ticket in survey, which today reads only the
+first three lines. Measured 2026-09-17 over 2000 synthetic tickets, reading
+a field costs 0.44s against 0.43s for a fixed-position read in the same
+single pass, so the concern is the shape of survey rather than the time.
+
+The alternative is a third location — .pidly/d/ beside c/ — which is what
+"state is location" would suggest. It is wrong here: deferred is not a
+state of the work, it is a statement about candidacy, and the two states
+that are locations are the two that change what a ticket *is*. A deferred
+ticket is an open ticket that nobody should pick.
+
+Recorded rather than decided: it came out of opening 34 through 37 on
+2026-09-17 and noticing list had stopped being a list of work.
+
+Done when a deferred ticket is visibly not ready without opening it, the
+trigger is on the ticket, and 34 through 37 carry theirs.

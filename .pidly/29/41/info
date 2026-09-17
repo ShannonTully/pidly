@@ -1,0 +1,43 @@
+claim:
+needs:
+title: find -printf is GNU-only, so pidly does not run on macOS
+effort: M
+area: cli
+created: 2026-09-17T07:12:58Z
+updated: 2026-09-17T07:12:58Z
+
+map() is how every traversal in pidly works — list, tree, check, new, reap,
+init, and anything 25 or 27 adds — and it is written as:
+
+  find "$1" -mindepth 1 -type d '!' -name c '!' -name '.*' -printf '%f %p\n'
+
+-printf is a GNU extension. BSD find, which is what macOS ships, does not
+have it. So on the platform Homebrew exists to serve, every one of those
+commands fails, and 29 cannot ship until this is fixed.
+
+This has never been noticed because the machine pidly was written on has
+bfs 4.1.1 as find, which implements the GNU options. Checked 2026-09-17:
+find --version reports bfs, not GNU findutils, and the format's own
+documents assume nothing more than POSIX while the script quietly does not.
+
+A candidate replacement, verified byte-identical on this tracker's 40
+tickets on 2026-09-17:
+
+  find "$1" -mindepth 1 -type d '!' -name c '!' -name '.*' -print |
+      awk -F/ '{ print $NF" "$0 }'
+
+-mindepth is BSD as well as GNU, so it stays. The basename moves into the
+awk that every caller already pipes through. Verify on a real macOS find
+rather than on bfs, and check the rest of the script for the same habit
+while there — the reference and AGENTS.md publish find idioms that agents
+will run, so those have to be portable too, and they are the ones nobody
+tests.
+
+Worth deciding at the same time: whether the test suite can assert this at
+all. A suite running on one machine cannot prove portability, but it can
+refuse the specific extensions — a grep over bin/pidly for -printf and
+friends is a cheap guard against the habit coming back.
+
+Done when map and every other traversal run under a POSIX find, verified on
+macOS, the published idioms are portable too, and something in the suite
+notices if a GNU-only option reappears.
