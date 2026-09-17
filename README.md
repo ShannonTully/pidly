@@ -16,23 +16,25 @@ agent that died.
 .pidly/
   schema.md
   1/
-    t             # ticket 1 itself
+    info          # ticket 1 itself
     3/            # an open child
-      t
+      info
       8/
-        t
+        info
     c/
       5/          # a closed child
-        t
+        info
   c/
     2/            # a closed root, moved here whole
-      t
+      info
 ```
 
-A ticket's content is a file called `t` — no extension, because the content
-isn't markdown or YAML or anything else with a renderer, and one character
-because it repeats in every path. It can't be confused with a ticket number,
-so `find .pidly -name t` lists every ticket and `find .pidly -name 8` finds
+What's known about a ticket lives in the file `info` inside its directory. Not
+`ticket` — the *directory* is the ticket, and it carries the identity, the
+position, the children and the state; the file just holds the information. No
+extension either, since the content is four header lines, a body, then fields,
+which no renderer understands. `info` can't be mistaken for a ticket number, so
+`find .pidly -name info` lists every ticket and `find .pidly -name 8` finds
 exactly one.
 
 **State is location.** A ticket is open if it sits directly in its container,
@@ -89,10 +91,10 @@ Until the `pidly` script exists, these are the primitives it will wrap:
 
 ```sh
 # every open ticket, at any depth, never descending into finished work
-find .pidly -type d -name c -prune -o -name t -print
+find .pidly -type d -name c -prune -o -name info -print
 
 # what can I start right now? — two lines per ticket, no bodies read
-find .pidly -type d -name c -prune -o -name t -print | sort -V |
+find .pidly -type d -name c -prune -o -name info -print | sort -V |
   while read -r f; do
     [ -n "$(sed -n '1s/^claim://p' "$f")" ] && continue     # already claimed
     for dep in $(sed -n '2s/^needs://p' "$f"); do
@@ -105,16 +107,16 @@ find .pidly -type d -name c -prune -o -name t -print | sort -V |
   done
 
 # the body of one ticket, exactly
-f=.pidly/2/t; n=$(sed -n '4s/^desc://p' "$f"); sed -n "5,${n}p" "$f"
+f=.pidly/2/info; n=$(sed -n '4s/^desc://p' "$f"); sed -n "5,${n}p" "$f"
 
 # its custom fields
 tail -n +$((n+1)) "$f"
 
 # claim it (pidly takes a lock around this; by hand, just don't race)
-sed -i "1s/.*/claim:$$@$(cat .pidly/.id)/" .pidly/2/t
+sed -i "1s/.*/claim:$$@$(cat .pidly/.id)/" .pidly/2/info
 
 # is a claim still alive? (only answerable for claims from this checkout)
-c=$(sed -n '1s/^claim://p' .pidly/2/t)
+c=$(sed -n '1s/^claim://p' .pidly/2/info)
 [ "${c#*@}" = "$(cat .pidly/.id)" ] &&
   { kill -0 "${c%@*}" 2>/dev/null && echo live || echo dead; } ||
   echo "foreign claim — cannot check"

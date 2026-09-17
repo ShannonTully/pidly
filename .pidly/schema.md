@@ -1,6 +1,6 @@
 # Ticket schema
 
-Every ticket is a directory; its content is the file `t` inside it.
+Every ticket is a directory; its content is the file `info` inside it.
 Four header lines are structural and always present, in this order:
 
 | line | field | meaning |

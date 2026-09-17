@@ -34,42 +34,50 @@ this list in order.
 .pidly/
   schema.md       # the ticket schema for this project
   1/
-    t             # ticket 1 itself
+    info          # ticket 1 itself
     3/            # an open child
-      t
+      info
       8/
-        t
+        info
     c/
       5/          # a closed child
-        t
+        info
   c/
     2/            # a closed root, moved here whole
-      t
+      info
       4/
-        t
+        info
 ```
 
-**Every ticket is a directory, and its content is a file called `t`.** Leaves
-too. The alternative — a leaf is a file, a parent is a directory — means
-promoting a leaf to a parent rewrites its path, and means every tool needs two
-code paths. Uniformity is worth one extra inode.
+**Every ticket is a directory, and what's known about it is the file `info`
+inside.** Leaves too. The alternative — a leaf is a file, a parent is a
+directory — means promoting a leaf to a parent rewrites its path, and means
+every tool needs two code paths. Uniformity is worth one extra inode.
 
-`t` has no extension because the content isn't any established format: four
+The file is not called `ticket`, because it isn't one: the *directory* is the
+ticket. It has the identity, the position in the tree, the children and the
+state, none of which live in the file. What the file holds is the ticket's
+information, so that is what it is called.
+
+`info` has no extension because the content isn't any established format: four
 header lines, a markdown body, then fields. Calling it `.md` would promise a
 rendering that turns the header into one mangled paragraph, which is worse than
 no rendering at all.
 
-The name matters more than it looks. `t` cannot be mistaken for a ticket
-number, which keeps two idioms unambiguous and separate:
+The name also cannot be mistaken for a ticket number, which keeps two idioms
+unambiguous and separate:
 
 ```sh
-find .pidly -name t          # every ticket
+find .pidly -name info       # every ticket
 find .pidly -name 8          # ticket 8, and only it
 ```
 
 Naming the file after its own number — `8/8` — would break both: the second
 lookup would return a directory and a file, and the first would have no single
-name left to match.
+name left to match. A one-letter name would work too, but the saving is
+illusory: the filename is rarely typed, since you `cd` to the directory and
+`find` should print `%h`, while an opaque name costs something every time
+someone opens the tree without having read this document.
 
 ## State is location
 
@@ -90,7 +98,7 @@ work sinks one level out of the way at whatever depth it finished. And because
 
 ```sh
 # every open ticket, at any depth, without descending into finished work
-find .pidly -type d -name c -prune -o -name t -print
+find .pidly -type d -name c -prune -o -name info -print
 ```
 
 That single idiom is both the query and the performance story. A mature project
@@ -256,7 +264,7 @@ A pid is checkable — `kill -0 <pid>` — so a stale claim is detectable rather
 than merely suspicious, and `pidly check` reports claims whose holder is gone.
 
 **Claiming is the one operation the format does not make atomic.** Because the
-claim lives inside `t`, taking it is read-modify-write, and two agents
+claim lives inside `info`, taking it is read-modify-write, and two agents
 can both see `claim:` and both write their pid, with the loser never finding
 out. A separate claim file would have made this free (`set -C` fails when the
 file exists) at the cost of another file per ticket.
@@ -355,9 +363,9 @@ This remains the weakest part of the design: a markdown table is parseable by
 ## Why this shape suits agents
 
 The tree is the work breakdown, so it's also the delegation graph. A lead agent
-claims `1` by writing its pid to line 1 of `.pidly/1/t`. Each child
+claims `1` by writing its pid to line 1 of `.pidly/1/info`. Each child
 directory under it is a unit of work a subagent can claim independently, and the
-subagent's working context is one directory — its own `t` plus whatever
+subagent's working context is one directory — its own `info` plus whatever
 children it spawns. Parent completion is a question about the filesystem: are
 there any children left outside my `c/`?
 
