@@ -1,0 +1,37 @@
+claim:
+needs:
+title: Put fields before the body and drop desc:
+desc:37
+desc: is not a necessary cost. It exists to serve one layout choice —
+fields after the body — and that choice is what creates the derived data.
+
+Invert it. Header lines, then fields, then a blank line, then the body to
+EOF:
+
+  claim:
+  needs: 3 8
+  title: Write the pidly shell script
+  effort: L
+  handoff: Parser works; lexer fails on nested quotes.
+
+  Body from here to the end of the file.
+
+The body now ends at EOF, which nothing can spoof. Fields end at the first
+blank line after line 3, which is positionally anchored before the body
+starts, so body content cannot reach it — the objection that killed a
+delimiter earlier does not apply. Verified against a body containing blank
+lines and body lines that read as fields, plus empty-body and empty-field
+tickets.
+
+Every bounded read survives. Lines 1-2 still answer "can I take this",
+line 3 is still the listing. Reading fields gets cheaper: a short scan from
+the top rather than tail -n +N. Reading the body is a scan to the first
+blank instead of a seek to a stored number — the same one lookup either way.
+
+The payoff is that appending to a body needs no bookkeeping, which is the
+operation the retraction in 19 made central, and principle 5 loses its only
+exception.
+
+Cost: every existing ticket must be rewritten, plus new, edit, get_field,
+set_field, the tests and both documents. Mechanical, and there are only
+about twenty tickets.
