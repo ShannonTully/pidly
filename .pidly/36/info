@@ -4,8 +4,9 @@ title: Whether lease durations want tuning per project
 effort: M
 area: format
 created: 2026-09-17T06:47:32Z
-updated: 2026-09-17T06:47:32Z
+updated: 2026-09-17T20:36:20Z
 handoff:
+defer: a project wanting a different default, or a lease long enough to wedge a ticket
 
 Leases stop a remote claim from wedging a ticket, but nothing can confirm a
 remote agent is alive right now — that would need a shared medium updating

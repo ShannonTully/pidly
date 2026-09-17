@@ -4,8 +4,9 @@ title: Priority as a header line
 effort: M
 area: format
 created: 2026-09-17T06:47:32Z
-updated: 2026-09-17T06:47:32Z
+updated: 2026-09-17T20:37:18Z
 handoff:
+defer: picking among unblocked tickets needing a sort that reads every candidate's fields
 
 Deferred. Do not start this without the trigger below; it is recorded so the
 reasoning is not re-derived.

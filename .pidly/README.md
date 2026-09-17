@@ -143,6 +143,9 @@ required: yes
 match: .+
 note: one line, and never empty
 
+field: defer
+note: why this is not work yet, and what would make it work
+
 field: created
 match: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
 note: an ISO-8601 UTC timestamp
@@ -183,6 +186,25 @@ field effort | awk '{print $2}' | sort | uniq -c`, and the tickets missing it
 are the `-` rows. It reads the field by name in a single pass over the
 tracker: a loop that runs a command per ticket costs 17.4s over 2000 tickets
 where this costs 0.44s.
+
+A ticket with a `defer:` is **not ready**: it is open work that nobody should
+pick up yet, and the field says what would change that.
+
+```sh
+pidly set 34 defer "picking among unblocked tickets needing a sort"
+pidly list -a    # 34  deferred  Priority as a header line (until picking ...)
+pidly set 34 defer               # the trigger fired: it is ready again
+```
+
+`list` leaves it out, `list -a` shows it with its trigger, and `claim` prints
+the trigger rather than refusing — a blocker is a fact about the tracker, and
+this is an opinion about the work, so the person asking gets to decide. The
+trigger lives on the ticket instead of in a design document nobody reads
+while choosing what to do next.
+
+`defer` is pidly's field, like `created` and `updated`: it is not declared in
+`.pidly/schema`, `new` does not stub it, and `fields` does not add it. Only
+`list` and `claim` read it.
 
 `--stale` takes the same durations a lease does — `90s`, `30m`, `2h`, `7d` —
 and lists the oldest first. A ticket with no `updated` line is listed too,

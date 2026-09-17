@@ -506,6 +506,11 @@ cmd_claim() {
 	# to know it is there.
 	_hand=$(get_field "$_d/info" handoff)
 	[ -n "$_hand" ] && printf 'handoff: %s\n' "$_hand"
+	# Deferred is an opinion about the work, not a fact about the tracker,
+	# so it does not refuse the claim the way a blocker does. It says so
+	# and lets whoever asked decide whether the trigger has fired.
+	_defer=$(get_field "$_d/info" defer)
+	[ -n "$_defer" ] && printf 'deferred until: %s\n' "$_defer"
 	return 0
 }
 
@@ -773,7 +778,10 @@ open_children() {
 # The fields a ticket may carry, in the order the schema declares them, minus
 # pidly's own stamps: created records one event and updated means "when pidly
 # last wrote here", so neither is a value anyone sets.
-settable_fields() {
+# The slate: the fields every ticket gets a line for. The project's, and only
+# the project's — new writes them, fields backfills them, and check counts the
+# tickets missing one.
+slate_fields() {
 	_st_own=$(format_fields)
 	schema_fields "$1" | while read -r _st_f; do
 		[ -n "$_st_f" ] || continue
@@ -783,6 +791,16 @@ settable_fields() {
 		printf '%s\n' "$_st_own" | grep -qx "$_st_f" && continue
 		printf '%s\n' "$_st_f"
 	done
+}
+
+# What set will write: the slate, plus the format's own fields that are
+# neither a line of their own nor a stamp pidly maintains. That is defer —
+# a field nobody has to declare, because it is list that reads it, and a
+# tracker whose schema never heard of it still has a list.
+settable_fields() {
+	slate_fields "$1"
+	format_cached |
+		awk -F'\t' '$4 == "-" && $1 != "created" && $1 != "updated" { print $1 }'
 }
 
 # Refuse a value the field's pattern rejects. check would report it a moment
@@ -826,7 +844,8 @@ cmd_set() {
 	set_field "$_sd/info" "$_sk" "$_sv"
 	mark_updated "$_sd/info"
 	unlock "$_sd"
-	printf '%s %s %s\n' "$_sn" "$_sk" "${_sv:+set}${_sv:-cleared}"
+	if [ -n "$_sv" ]; then printf '%s %s set\n' "$_sn" "$_sk"
+	else printf '%s %s cleared\n' "$_sn" "$_sk"; fi
 	return 0
 }
 
@@ -863,7 +882,7 @@ missing_fields() {
 cmd_fields() {
 	[ $# -eq 0 ] || die 'usage: pidly fields'
 	_r=$(root)
-	_fdecl=$(settable_fields "$_r")
+	_fdecl=$(slate_fields "$_r")
 	[ -n "$_fdecl" ] || { printf 'the schema declares no fields\n'; return 0; }
 
 	_fout="${TMPDIR:-/tmp}/pidly.fields.$$"
@@ -1171,6 +1190,25 @@ field effort | awk '{print $2}' | sort | uniq -c`, and the tickets missing it
 are the `-` rows. It reads the field by name in a single pass over the
 tracker: a loop that runs a command per ticket costs 17.4s over 2000 tickets
 where this costs 0.44s.
+
+A ticket with a `defer:` is **not ready**: it is open work that nobody should
+pick up yet, and the field says what would change that.
+
+```sh
+pidly set 34 defer "picking among unblocked tickets needing a sort"
+pidly list -a    # 34  deferred  Priority as a header line (until picking ...)
+pidly set 34 defer               # the trigger fired: it is ready again
+```
+
+`list` leaves it out, `list -a` shows it with its trigger, and `claim` prints
+the trigger rather than refusing — a blocker is a fact about the tracker, and
+this is an opinion about the work, so the person asking gets to decide. The
+trigger lives on the ticket instead of in a design document nobody reads
+while choosing what to do next.
+
+`defer` is pidly's field, like `created` and `updated`: it is not declared in
+`.pidly/schema`, `new` does not stub it, and `fields` does not add it. Only
+`list` and `claim` read it.
 
 `--stale` takes the same durations a lease does — `90s`, `30m`, `2h`, `7d` —
 and lists the oldest first. A ticket with no `updated` line is listed too,
@@ -1997,6 +2035,9 @@ required: yes
 match: .+
 note: one line, and never empty
 
+field: defer
+note: why this is not work yet, and what would make it work
+
 field: created
 match: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
 note: an ISO-8601 UTC timestamp
@@ -2153,10 +2194,22 @@ survey() {
 			for (n in path) {
 				if (closed[n]) continue
 				f = path[n] "/info"
-				claim = ""; needs = ""; title = ""
+				claim = ""; needs = ""; title = ""; defer = ""
 				getline claim < f
 				getline needs < f
 				getline title < f
+				# The one field this view reads. It stops at the
+				# blank line that ends the block, so the body is
+				# never touched — and it is the same single pass,
+				# which is what the cost is about.
+				while ((getline line < f) > 0) {
+					if (line == "") break
+					if (index(line, "defer:") == 1) {
+						defer = substr(line, 7)
+						sub(/^ +/, "", defer)
+						break
+					}
+				}
 				close(f)
 				sub(/^claim:/, "", claim)
 				sub(/^needs:[ ]?/, "", needs)
@@ -2166,11 +2219,18 @@ survey() {
 				for (i = 1; i <= k; i++)
 					if (!(d[i] in path) || !closed[d[i]])
 						blockers = blockers (blockers ? "," : "") d[i]
-				state = blockers != "" ? "blocked" : (claim != "" ? "claimed" : "ready")
+				# Blocked first: a dependency is a fact about the
+				# tracker, and deferred is an opinion about the
+				# work. Claimed last, because someone holding a
+				# deferred ticket has already decided.
+				state = blockers != "" ? "blocked" : \
+					(claim != "" ? "claimed" : \
+					(defer != "" ? "deferred" : "ready"))
 				# "-" rather than empty: tab is IFS whitespace, so a
 				# shell read collapses two tabs into one and every
 				# later field shifts left.
-				printf "%s\t%s\t%s\t%s\n", n, state, blockers ? blockers : "-", title
+				why = blockers ? blockers : (defer ? defer : "-")
+				printf "%s\t%s\t%s\t%s\n", n, state, why, title
 			}
 		}'
 }
@@ -2218,6 +2278,8 @@ cmd_list() {
 			printf '%-5s %s\n' "$_n" "$_ti"
 		elif [ "$_st" = blocked ]; then
 			printf '%-5s %-8s %s (needs %s)\n' "$_n" "$_st" "$_ti" "$_bl"
+		elif [ "$_st" = deferred ]; then
+			printf '%-5s %-8s %s (until %s)\n' "$_n" "$_st" "$_ti" "$_bl"
 		else
 			printf '%-5s %-8s %s\n' "$_n" "$_st" "$_ti"
 		fi
@@ -2440,7 +2502,7 @@ cmd_check() {
 	#
 	# Required fields are left out: a ticket without a value for one is
 	# already reported above, by ticket, and by value rather than by slot.
-	_decl=$(settable_fields "$_r")
+	_decl=$(slate_fields "$_r")
 	_req=$(schema_required "$_r")
 	if [ -n "$_decl" ]; then
 		printf '%s\n' "$_m" | while read -r _num _path; do
@@ -2538,9 +2600,9 @@ usage: pidly <command> [args]
   close <n>      finish it: move it into its container's c/
   reopen <n>     move it back, reopening any closed ancestors
   list [-a] [--stale 7d]
-                 takeable work; -a shows every open ticket with its state;
-                 --stale shows open work untouched for that long, oldest
-                 first
+                 takeable work — unclaimed, unblocked and not deferred; -a
+                 shows every open ticket with its state; --stale shows open
+                 work untouched for that long, oldest first
   field [-a] <name>
                  that field's value in every open ticket, one row each, - for
                  a ticket that has no value; -a includes closed work

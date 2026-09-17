@@ -60,6 +60,27 @@ mv .pidly/c/2 .pidly/; rmdir .pidly/c
 $PIDLY field >/dev/null 2>&1 && rc=0 || rc=$?
 check "a name is required" "$rc" "1"
 
+echo "deferred"
+# 34, 35, 36 and 37 in this tracker: open, unclaimed, unblocked, and nobody
+# should start any of them. Before defer: they were a quarter of what list
+# offered, and the only way to tell was to open each one.
+$PIDLY set 1 defer "someone actually wanting it" >/dev/null
+out=$($PIDLY list)
+hasnt "list stops offering a deferred ticket" "$out" "root one"
+out=$($PIDLY list -a)
+has "-a shows the state" "$out" "deferred"
+has "with the trigger that would end it" "$out" "(until someone actually wanting it)"
+out=$($PIDLY claim 1)
+has "claim takes it anyway: deferring is an opinion, not a blocker" "$out" "1 claimed"
+has "and prints the trigger" "$out" "deferred until: someone actually wanting it"
+$PIDLY release 1 >/dev/null
+$PIDLY set 1 defer >/dev/null
+has "clearing the field makes it ready again" "$($PIDLY list)" "root one"
+check "nothing offers to write defer into every ticket" \
+	"$($PIDLY check 2>&1 | grep -c "no 'defer' line" || true)" "0"
+out=$($PIDLY fields)
+hasnt "and the migration leaves it alone" "$out" "defer"
+
 echo "tree"
 out=$($PIDLY tree)
 has "shows a root" "$out" "[ ] 1"

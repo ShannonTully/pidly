@@ -780,6 +780,38 @@ takes the same durations a lease does, lists the oldest first, and includes
 tickets with no `updated` line at all: an undated ticket cannot be shown to
 be fresh, and the question being asked is what has been forgotten.
 
+**`defer` is the fourth state, and it is a field rather than a location.**
+`list` was the one view an agent could trust without opening anything: every
+line it printed was something to pick up. Four deferred design questions —
+34, 35, 36, 37, each opening with the trigger that would justify starting it
+— broke that, because *ready* meant unclaimed and unblocked and they were
+both. A quarter of the list was work nobody should start, and the only way to
+tell was to read four bodies, which is the unbounded reading the format
+exists to prevent.
+
+"State is location" would suggest a `.pidly/d/` beside `c/`. That is wrong
+here. The two states that are locations are the two that change what a ticket
+*is*; deferred does not — a deferred ticket is an open ticket that nobody
+should pick. It belongs with `blocked` and `claimed`, which are also computed
+rather than structural: from `needs:` and `claim:` respectively, and now from
+`defer:`, which holds the trigger.
+
+Putting the trigger *on the ticket* is the half that pays. It used to live in
+a design document nobody reads while choosing what to do next; now it is the
+thing `list -a` prints, and clearing the field is what "the trigger fired"
+looks like.
+
+`claim` prints the trigger and takes the ticket anyway. A blocker is a fact
+about the tracker and refusing is right; a deferral is an opinion about the
+work, and the person asking for it by number has already looked.
+
+`defer` is pidly's own field, like `created` and `updated`: declared in
+`format_text()`, not in the project's schema, not stubbed by `new` and not
+backfilled by `fields` — an empty `defer:` on every ticket would be noise on
+a field that is almost always absent. That split is why `settable_fields`
+(what `set` will write) is no longer the same list as `slate_fields` (what
+every ticket gets a line for).
+
 No `closed` field. Where a ticket is *is* whether it is closed, and a second
 record of that can disagree with the first — `reopen` would have to clear it,
 and a hand-run `mv` never would. The date of a close is the commit that made

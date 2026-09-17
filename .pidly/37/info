@@ -4,8 +4,9 @@ title: Whether acceptance criteria deserve structure
 effort: M
 area: format
 created: 2026-09-17T06:47:32Z
-updated: 2026-09-17T06:47:32Z
+updated: 2026-09-17T20:36:20Z
 handoff:
+defer: agents guessing wrong about when a ticket is done
 
 Deferred. The body is free markdown and stays that way until the trigger.
 
