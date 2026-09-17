@@ -916,7 +916,32 @@ the trigger that would force each one.
 - **The schema table.** A markdown table is parseable by `awk` in a pinch, but
   only while the schema stays flat key/value. Enums with per-value behaviour
   would outgrow it and force a real config format, which would cost the
-  zero-parser property.
+  zero-parser property. That trigger has been pulled: enforcing the `values`
+  column starts as a comma-separated set, which a cell holds fine, and ends
+  at patterns, which it does not — a regex alternates on `|` and the table
+  separates cells on `|`. The collision is the container's, not the regex's.
+  The candidate that does not need escaping is the format's own shape applied
+  to its own configuration: one field per stanza, `key: value` lines, blank
+  line between, read by the same idioms tickets are read with. What it costs
+  is the rendered table.
+- **Padded multi-line field values.** Proposed as a way to keep every
+  ticket's lines at fixed positions: a field declares a maximum line count
+  and is padded up to it. Two things rule it out. Fields end at the first
+  blank line, so blank padding would terminate the field block and every
+  ticket would read as truncated — padding would have to be a filler
+  character every reader learns to strip. And the padding exists to hold
+  positions steady, which is derived data maintained by pidly and falsifiable
+  by any hand-edit: `desc:` again, with the line number living in the
+  reader rather than in the file. Measured, positions are worth nothing to
+  buy — over 2000 tickets, one `awk` pass reading a fixed line is 0.43s and
+  the same pass matching a field by name is 0.44s, while a process per ticket
+  is 17.4s. The win is the single pass, which needs no fixed offsets.
+  If a genuinely multi-line value is ever needed, the shape that survives is
+  continuation lines — a leading space continues the previous field, no
+  padding and no maximum — which keeps every boundary rule intact. The
+  trigger is a field that cannot be one line and does not belong in the body;
+  note that `handoff` is deliberately one line, because a multi-line field
+  invites an agent to paste its reasoning, and a cap does not prevent that.
 - **Labels.** Project fields are single-line `key: value`, so they cannot
   hold a set, and there is no equivalent of `bd`'s label filtering. A
   comma-separated field covers the simple case badly. The trigger is wanting

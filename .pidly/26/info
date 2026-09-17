@@ -4,7 +4,7 @@ title: schema.md holds declarations, not prose
 effort: S
 area: docs
 created: 2026-09-17T06:21:54Z
-updated: 2026-09-17T06:21:54Z
+updated: 2026-09-17T06:26:19Z
 
 schema.md mixes two kinds of content with opposite ownership rules. The
 table is the project's: init seeds it and then never touches the file again,
@@ -42,3 +42,12 @@ which is why it is worth doing before there are many of them.
 Done when the seeded schema.md is heading, pointer and table; the reference
 covers what the prose used to; and init.sh still proves an owned schema.md
 is left alone.
+
+28 reopens part of this: it decides whether the schema stays a markdown
+table at all. Stripping the prose is right either way — pidly's
+documentation does not belong in a project-owned file whatever its shape —
+so this ticket stands, but do not treat "keep it markdown and keep it a
+table" above as settled. That paragraph argued against a flat key: value
+list on the grounds that the table parses cheaply and renders; 28 argues
+that a pattern in a cell collides with the delimiter, which is an argument
+about the container that this ticket assumed away.

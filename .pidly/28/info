@@ -1,0 +1,56 @@
+claim:
+needs: 26
+title: Validate field values, and decide what the schema file becomes
+effort: M
+area: format
+created: 2026-09-17T06:26:19Z
+updated: 2026-09-17T06:26:19Z
+
+The values column is documentation. Nothing checks that effort is one of S,
+M, L — check enforces that a field is declared and, after 24, that a
+required one has a value, but never what the value is.
+
+Enums are the cheap half. "S, M, L" splits on commas, check reports
+"effort is 'XL', which the schema does not allow", and a cell with prose in
+it rather than a list — "one line: where the last agent got to" — has to
+keep meaning "anything", so the column needs a way to say unconstrained.
+That is the first sign the column is becoming a grammar.
+
+Patterns are where it breaks, and the reason is the container, not the
+pattern. A regex uses | for alternation and the markdown table uses | to
+separate cells. Escaping is possible and takes the file out of "awk parses
+it in a pinch", which is the property 26 exists to protect. The design
+document already called this: the table holds while the schema stays flat
+key/value, and per-value behaviour forces a real config format.
+
+So decide the container, and this ticket is that decision:
+
+- Keep the table and cap the grammar at enums. Cheapest, renders on a
+  forge, and says patterns are not coming.
+- Keep the table and escape \| in cells. Buys patterns, costs the
+  no-parser property and produces cells nobody wants to read or write.
+- Line-oriented stanzas in the format pidly already uses: one field per
+  block, key: value lines, blank line between. The whole system then has
+  one grammar, get_field-style reads work on it, and a pattern can contain
+  anything but a newline. Loses the rendered table.
+
+  field: effort
+  required: yes
+  values: S, M, L
+
+The third is the one to beat. It is the format's own shape applied to the
+format's own configuration, and it removes the delimiter problem instead of
+escaping around it.
+
+If patterns land, pin the dialect in the same breath — POSIX ERE, as grep -E
+and awk read it — or the same schema validates differently on two machines.
+And decide what check does with a pattern the local awk rejects: a broken
+schema must be a finding, not a crash.
+
+Needs 26 because the prose comes out either way, and because deciding the
+container on a file that still has pidly's documentation in it means
+deciding two things at once.
+
+Done when values are enforced, the container is decided and written down in
+the design with the reasoning, and the tests cover a value outside an enum,
+an unconstrained field, and a schema the parser cannot read.
