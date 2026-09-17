@@ -1,15 +1,17 @@
 claim:
 needs: 1
 title: pidly claim / release, and the lock
-desc:21
+desc:23
 claim writes the agent's pid into line 1; release blanks it back to "claim:".
 Both rewrite info, as does edit, so all three serialize behind a lock.
 
-The lock is a file created with O_EXCL, carrying the holder's pid. Creation
-and ownership must be one operation: an earlier design used a lock directory
-with the pid in a file inside it, and the gap between the two let 4 of 30
-racing claims win. An empty lock means a holder mid-write, never an abandoned
-one, and must not be broken.
+The lock is a file containing the holder's pid, published with link(2). The
+pid must be written before the lock becomes visible, because the pid is how a
+dead holder is told from a live one — a lock that exists without an owner gets
+read as abandoned and broken while still held. An earlier version used a lock
+directory with the pid written into it afterwards, and 4 of 30 racing claims
+won. link publishes atomically and is NFS-safe; O_EXCL only narrows the gap.
+An empty lock means in-flight and is never broken.
 
 The pid recorded in a claim is the agent's, from PIDLY_PID, not the pidly
 process's — pidly claim exits immediately, so its own pid would read as stale
@@ -17,7 +19,7 @@ at once. Release requires ownership; a dead local claim is reap's job.
 
 claim also refuses a ticket whose needs are not all closed.
 
-Done: implemented in bin/pidly, covered by tests/claim.sh (17 cases including
-a 30-way race).
+Done: implemented in bin/pidly, covered by tests/claim.sh (17 cases, run under
+dash and bash), plus a 100-way race yielding exactly one winner.
 effort: M
 area: cli

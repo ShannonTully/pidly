@@ -84,26 +84,37 @@ agent_pid() {
 # rather than wedging the ticket forever.
 
 lock() {
-	_d=$1 _n=0
+	_d=$1 _t="$_d/.lock.$$" _n=0
+
+	# Write the pid FIRST, into a private file nobody else looks at, then
+	# publish it with link(2). A hard link either appears whole or not at
+	# all, so the moment .lock exists it already names its owner: there is
+	# no instant where the lock is visible but anonymous. link() is also
+	# the primitive that stays atomic over NFS, where O_EXCL historically
+	# is not.
+	printf '%s\n' "$$" > "$_t" || return 1
+
 	while [ "$_n" -lt 100 ]; do
 		_n=$((_n+1))
-		# O_EXCL: creation and ownership are one operation. The pid written
-		# is this process's, not the agent's — the lock belongs to the
-		# short-lived command, and is alive exactly as long as it runs.
-		if ( set -C; printf '%s\n' "$$" > "$_d/.lock" ) 2>/dev/null; then
+		if ln "$_t" "$_d/.lock" 2>/dev/null; then
+			rm -f "$_t"
 			return 0
 		fi
 		_owner=""
 		[ -r "$_d/.lock" ] && read -r _owner < "$_d/.lock" 2>/dev/null || true
 		if [ -z "$_owner" ]; then
-			# The holder created the lock but has not written its pid yet.
-			# An empty lock means in-flight, never abandoned: breaking it
-			# here would hand the same lock to two processes.
+			# Should be unreachable now that publishing is atomic. Kept
+			# because the cost of being wrong is two writers: an empty
+			# lock is treated as in-flight, never as abandoned.
 			continue
 		fi
-		kill -0 "$_owner" 2>/dev/null && return 1   # a live holder
+		if kill -0 "$_owner" 2>/dev/null; then
+			rm -f "$_t"
+			return 1                            # a live holder
+		fi
 		rm -f "$_d/.lock"                           # a dead one: break it
 	done
+	rm -f "$_t"
 	return 1
 }
 

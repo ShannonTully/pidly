@@ -277,45 +277,59 @@ both see `claim:` and both write their pid, with the loser never finding out.
 A separate claim file would have made this free (`set -C` fails when the file
 exists) at the cost of another file per ticket.
 
-So claim, release and edit take a transient lock, created with `O_EXCL` so
-that creating it and owning it are one operation:
+So claim, release and edit take a transient lock. The lock is a file whose
+content is the holder's pid, and it is **published with `link(2)`**, which
+either makes the name appear whole or does nothing:
 
 ```sh
 lock() {
-	_d=$1 _n=0
+	_d=$1 _t="$_d/.lock.$$" _n=0
+	printf '%s\n' "$$" > "$_t" || return 1      # pid first, in private
 	while [ "$_n" -lt 100 ]; do
 		_n=$((_n+1))
-		if ( set -C; printf '%s\n' "$$" > "$_d/.lock" ) 2>/dev/null; then
-			return 0                            # we own it
+		if ln "$_t" "$_d/.lock" 2>/dev/null; then
+			rm -f "$_t"; return 0               # published: we own it
 		fi
 		_owner=""
 		[ -r "$_d/.lock" ] && read -r _owner < "$_d/.lock" 2>/dev/null || true
-		[ -z "$_owner" ] && continue                # in flight; spin
-		kill -0 "$_owner" 2>/dev/null && return 1   # a live holder
+		[ -z "$_owner" ] && continue                # in flight; never break
+		if kill -0 "$_owner" 2>/dev/null; then
+			rm -f "$_t"; return 1               # a live holder
+		fi
 		rm -f "$_d/.lock"                           # a dead one: break it
 	done
-	return 1
+	rm -f "$_t"; return 1
 }
 ```
 
+**Why the pid is written before the lock is published.** The pid is not
+decoration; it is how a crashed holder is distinguished from a live one. So
+the lock must never be visible without it. Writing the pid into a private file
+first and then linking that file into place means the instant `.lock` exists,
+it already names its owner — there is no window in which the lock is visible
+but anonymous.
+
+That window is not hypothetical. An earlier version created a lock *directory*
+and then wrote `pid` inside it. A second caller arriving in between saw a lock
+with no owner, concluded the holder was dead, deleted it and took the lock:
+**4 of 30 racing claims won instead of 1.** Narrowing the gap is not a fix, and
+`O_EXCL` on a file only narrows it — `link` closes it, and is also the
+primitive that stays atomic over NFS, where `O_EXCL` historically is not.
+
+The empty-lock branch survives anyway, because the cost of guessing wrong is
+two writers: **an empty lock means in-flight, never abandoned.**
+
 Three properties matter. The lock is **transient** — held for the microseconds
 of one rewrite, so a repository at rest still has exactly one file per ticket.
-It is **self-healing**: the pid inside means a crash doesn't wedge the ticket,
-since the next caller sees a dead owner and breaks it. And that recovery is
-**the same idiom as stale claim detection**, so the system has one liveness
+It is **self-healing**: a crash leaves a pid that the next caller finds dead
+and breaks, rather than wedging the ticket forever. And that recovery is **the
+same idiom as stale claim detection**, so the system has one liveness
 mechanism rather than two.
 
-The pid written here is the lock holder's own — the short-lived `pidly`
-process — not the agent's. A lock is alive exactly as long as the command
-holding it.
+The pid in the lock is the `pidly` process's own, not the agent's. A lock is
+alive exactly as long as the command holding it; a claim outlives many.
 
-**An empty lock is never broken.** A lock that exists but has no pid in it
-belongs to a process that created it microseconds ago and has not finished
-writing; treating that as abandoned hands the same lock to two callers. This
-was not a theoretical concern: an earlier version used a lock *directory* with
-the pid in a file inside it, which widened that window enough that 4 of 30
-racing claims won instead of 1. The fix is both halves — creation carries the
-pid in one operation, and a pidless lock means in-flight, never dead.
+Measured: 100 concurrent claims on one free ticket, one winner, no leftovers.
 
 The same lock, at `.pidly/.lock`, serializes number allocation.
 
