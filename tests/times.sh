@@ -34,7 +34,7 @@ check "and a ticket carrying it still passes check" \
 	"$($PIDLY check >/dev/null && echo clean)" "clean"
 printf '\nfield: created\nnote: not yours to declare\n' >> .pidly/schema
 has "declaring it is a finding" "$($PIDLY check 2>&1 || true)" \
-	"schema: 'created' is pidly's own and is not declared here"
+	"schema: 'created' is the format's own and is not declared here"
 sed -i '/^field: created$/,+1d' .pidly/schema
 
 echo "nothing updates created"
@@ -93,7 +93,8 @@ echo "check"
 sed -i 's/^created: .*/created: yesterday/' .pidly/1/info
 out=$($PIDLY check 2>&1) && rc=0 || rc=$?
 check "a timestamp that is not one is a finding" "$rc" "1"
-has "saying what is wrong with it" "$out" "1: created is not an ISO-8601 UTC timestamp"
+has "saying what is wrong with it" "$out" \
+	"1: created is 'yesterday', which is not an ISO-8601 UTC timestamp"
 sed -i "s/^created: .*/created: $was/" .pidly/1/info
 keep=$(updated 1)
 sed -i 's/^updated: .*/updated: 2000-01-01T00:00:00Z/' .pidly/1/info

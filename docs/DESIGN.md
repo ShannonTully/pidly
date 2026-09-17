@@ -623,6 +623,42 @@ than 1 says it does not, which makes a broken schema a finding instead of a
 crash. Both are properties of the tools rather than of this checkout, so
 re-test them wherever the work happens.
 
+### The format's own fields
+
+`claim`, `needs`, `title`, `created` and `updated` are declared in the same
+language, in `format_text()`, **compiled into the script**. Until then they
+were three greps written by hand in `check` — `^claim:`, `^needs:`,
+`^title: .` — each weaker than what any project could ask for its own
+fields: `claim:garbage` was a valid ticket, and `needs: yesterday` was caught
+only later and indirectly, when the dependency resolver failed to find a
+ticket called "yesterday". The project could say `effort` must match
+`S|M|L`; pidly could not say what its own claim line looked like.
+
+Compiled in rather than seeded, and not overridable: a schema that could
+redeclare `title` could say it may be empty, and every listing prints it.
+`check` reports a stanza that names one of them, and `pidly fields` and
+`pidly set` will not write one into the field block whatever the schema says.
+The alternative — seeded stanzas a project may tighten but not loosen —
+needs a rule for what tightening means, which is more machinery than the
+problem deserves.
+
+`line:` is the one key only the format has. A pattern cannot say "this is the
+first line", and position is real for exactly these three: the takeable scan
+reads lines 1 and 2 by number without parsing anything. A schema using
+`line:` is a finding.
+
+A finding about one of these prints the stanza's `note:` rather than its
+pattern — `claim is 'garbage', which is not <pid>.<starttime>@<runtime>,
+alone or followed by a lease expiry, or <agent>@- <expiry>`. The pattern is
+in the script, not in a file the reader can open, so quoting a 130-character
+ERE at them helps nobody; a project's pattern is in a file the project wrote,
+so naming it points at the line to go and read.
+
+`handoff` is deliberately left without a `match:`. It is the project's field,
+it ships in the seeded schema, and any one line is a valid handoff — a
+pattern for it could only be `.*`, which checks nothing, since an empty value
+is never matched against a pattern anyway.
+
 A fault in the schema is reported once, by `check`, before any ticket: one
 mistake there would otherwise be a finding against every ticket that carries
 the field. `new -f` and `set` refuse a value the pattern rejects, so the two

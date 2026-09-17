@@ -181,14 +181,6 @@ lease_expiry() {
 	iso_at "$(( $(date -u +%s) + _le_s ))"
 }
 
-# An ISO-8601 UTC timestamp, or nothing at all. Both are fine: the field is
-# optional, and what is not fine is something in between.
-is_iso() {
-	[ -n "$1" ] || return 0
-	printf '%s\n' "$1" |
-		grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
-}
-
 # Is $1 strictly before $2? Both ISO-8601 UTC, where lexical order is
 # chronological order, so this is a string comparison and needs no date
 # arithmetic — which is the half of date(1) that is not portable.
@@ -339,12 +331,35 @@ get_body() { awk 'b { print } !b && $0 == "" { b = 1 }' "$1"; }
 # are facts about the tracker, and check owns those.
 info_faults() {
 	_if_r=$1 _if_f=$2 _if_n=$3
-	sed -n 1p "$_if_f" | grep -q '^claim:' ||
-		printf '%s: line 1 is not claim:\n' "$_if_n"
-	sed -n 2p "$_if_f" | grep -q '^needs:' ||
-		printf '%s: line 2 is not needs:\n' "$_if_n"
-	sed -n 3p "$_if_f" | grep -q '^title: .' ||
-		printf '%s: line 3 is not a title\n' "$_if_n"
+
+	# The format's own lines, checked the way the project's fields are: by
+	# a declared pattern, from format_text. They were three greps written
+	# by hand, each weaker than what any project could ask for — claim:
+	# accepted anything after the colon, so a claim nothing could parse
+	# was a valid ticket.
+	format_cached | while IFS='	' read -r _if_k _if_req _if_pat _if_ln _if_note; do
+		[ "$_if_ln" != - ] || continue        # not a line of its own
+		_if_l=$(sed -n "${_if_ln}p" "$_if_f")
+		case $_if_l in
+		"$_if_k:"*) ;;
+		*) printf '%s: line %s is not %s:\n' "$_if_n" "$_if_ln" "$_if_k"
+		   continue ;;
+		esac
+		# claim: is written without a space after the colon and the
+		# others with one, so one optional space comes off either.
+		_if_v=${_if_l#"$_if_k":}
+		_if_v=${_if_v# }
+		if [ -z "$_if_v" ]; then
+			[ "$_if_req" = yes ] &&
+				printf "%s: %s is empty\n" "$_if_n" "$_if_k"
+			continue
+		fi
+		_if_st=0
+		value_matches "$_if_pat" "$_if_v" || _if_st=$?
+		[ "$_if_st" -eq 1 ] &&
+			printf "%s: %s is '%s', which is not %s\n" \
+				"$_if_n" "$_if_k" "$_if_v" "$_if_note"
+	done
 
 	# Everything between there and the first blank must be a field the
 	# schema declares. A stray line here is usually a body that lost its
@@ -364,23 +379,22 @@ info_faults() {
 		# matched — absence is required:'s question, not match:'s — and a
 		# pattern grep cannot compile is a fault in the schema, reported
 		# once by schema_faults rather than against every ticket.
-		_if_p=$(schema_match "$_if_r" "$_if_k")
+		_if_p=$(field_match "$_if_r" "$_if_k")
 		[ -n "$_if_p" ] || continue
 		_if_v=$(get_field "$_if_f" "$_if_k")
 		[ -n "$_if_v" ] || continue
 		_if_st=0
 		value_matches "$_if_p" "$_if_v" || _if_st=$?
 		[ "$_if_st" -eq 1 ] &&
-			printf "%s: %s is '%s', which does not match %s\n" \
-				"$_if_n" "$_if_k" "$_if_v" "$_if_p"
+			printf "%s: %s is '%s', which %s\n" "$_if_n" "$_if_k" \
+				"$_if_v" "$(match_complaint "$_if_k" "$_if_p")"
 	done
 
-	# A timestamp that is not one is worse than none: it sorts wrong and
-	# reads right. ISO-8601 UTC, so lexical order is chronological order.
+	# created and updated carry patterns of their own, so the block loop
+	# above has already judged their shape. What is left is the one thing a
+	# pattern cannot say: that they agree with each other.
 	_if_c=$(get_field "$_if_f" created)
 	_if_u=$(get_field "$_if_f" updated)
-	is_iso "$_if_c" || printf '%s: created is not an ISO-8601 UTC timestamp\n' "$_if_n"
-	is_iso "$_if_u" || printf '%s: updated is not an ISO-8601 UTC timestamp\n' "$_if_n"
 	before "$_if_u" "$_if_c" &&
 		printf '%s: updated is before created\n' "$_if_n"
 
@@ -751,8 +765,13 @@ open_children() {
 # pidly's own stamps: created records one event and updated means "when pidly
 # last wrote here", so neither is a value anyone sets.
 settable_fields() {
-	known_fields "$1" | while read -r _st_f; do
-		case $_st_f in ''|created|updated) continue ;; esac
+	_st_own=$(format_fields)
+	schema_fields "$1" | while read -r _st_f; do
+		[ -n "$_st_f" ] || continue
+		# Not one of the format's, whatever the schema says. A project
+		# that declared title would otherwise have pidly writing a
+		# second title: into the field block, under the real one.
+		printf '%s\n' "$_st_own" | grep -qx "$_st_f" && continue
 		printf '%s\n' "$_st_f"
 	done
 }
@@ -1097,6 +1116,29 @@ Two things the implementation is stuck with, and so are you:
 `claim:`, `needs:` and `title:` are lines 1, 2 and 3 of every ticket: they
 belong to the format, not to the project, and are not declared here. Neither
 are `created:` and `updated:`.
+
+pidly declares those in the same language, compiled into the script:
+
+```
+GUIDE
+	format_text
+	cat <<'GUIDE'
+```
+
+That is the whole grammar of a ticket's header, in one place, and `check`
+applies it to every ticket. `line:` is what says a field is read by position
+rather than by name — the takeable scan reads lines 1 and 2 by number — and
+it is the one key your schema may not use. Declaring any of these names in
+`.pidly/schema` is a finding too: a project that could redeclare `title`
+could say it may be empty, and every listing prints it.
+
+A finding about one of these shows the `note:` rather than the pattern,
+because the pattern is not in a file you can open:
+
+```
+7: claim is 'garbage', which is not <pid>.<starttime>@<runtime>, alone or
+   followed by a lease expiry, or <agent>@- <expiry>
+```
 
 ## Finding work
 
@@ -1849,7 +1891,10 @@ cmd_init() {
 # tracker gets dated tickets without its schema, which the project owns,
 # being rewritten underneath it.
 known_fields() {
-	printf 'created\nupdated\n'
+	# Only the format's fields that sit in the block. claim, needs and
+	# title are lines of their own, so a second one inside the block is a
+	# stray, not a field.
+	format_cached | awk -F'\t' '$4 == "-" && $1 != "" { print $1 }'
 	schema_fields "$1"
 }
 
@@ -1871,15 +1916,22 @@ mark_updated() { set_field "$1" updated "$(now_iso)"; }
 # markdown will reflow it.
 schema_file() { printf '%s/schema\n' "$1"; }
 
-# "name<TAB>required<TAB>match" per field, in declaration order. A pattern
-# holding a tab would break this line, which is what schema_faults reports.
-schema_table() {
-	_sc_f=$(schema_file "$1")
-	[ -f "$_sc_f" ] || return 0
+# Stanzas in, "name<TAB>required<TAB>match<TAB>line" out, in declaration
+# order. Reads stdin, because the project's schema is a file and the format's
+# own declarations are compiled into this script, and they are the same
+# language. A pattern holding a tab would break this line, which is what
+# schema_faults reports.
+parse_stanzas() {
 	awk '
+		# "-" for an absent column, never an empty one: tab is IFS
+		# whitespace, so a shell read collapses two tabs into one and
+		# every later column shifts left. Same reason survey() does it.
+		function dash(v) { return v == "" ? "-" : v }
 		function flush() {
-			if (name != "") printf "%s\t%s\t%s\n", name, req, pat
-			name = ""; req = "no"; pat = ""
+			if (name != "")
+				printf "%s\t%s\t%s\t%s\t%s\n",
+					name, req, dash(pat), dash(ln), dash(nt)
+			name = ""; req = "no"; pat = ""; ln = ""; nt = ""
 		}
 		{ sub(/^[ \t]+/, "") }
 		/^#/ { next }
@@ -1887,12 +1939,89 @@ schema_table() {
 		# belongs to nothing rather than to whatever came before it.
 		# schema_faults reports that stanza; this one just ignores it.
 		$0 == "" { flush(); next }
-		$1 == "field:" { flush(); name = $2; next }
+		# line: comes before field:, so it is held until the stanza it
+		# opens is flushed.
+		$1 == "line:" { pending = $2; next }
+		$1 == "field:" { flush(); name = $2; ln = pending; pending = ""; next }
 		name == "" { next }
 		$1 == "required:" { req = $2; next }
 		index($0, "match:") == 1 { pat = substr($0, 7); sub(/^ /, "", pat); next }
+		index($0, "note:") == 1 { nt = substr($0, 6); sub(/^ /, "", nt); next }
 		END { flush() }
-	' "$_sc_f"
+	'
+}
+
+schema_table() {
+	_sc_f=$(schema_file "$1")
+	[ -f "$_sc_f" ] || return 0
+	parse_stanzas < "$_sc_f"
+}
+
+# The format's own fields, in the language a project declares its own.
+#
+# Compiled in rather than seeded, because a project that could edit these
+# could say a title may be empty, and every listing in the tracker depends on
+# it not being. claim, needs and title are lines 1, 2 and 3 by position
+# rather than by name — the takeable scan reads them by number — so line:
+# says so, and it is the one key the project's schema may not use.
+format_text() {
+	cat <<'FORMAT'
+line: 1
+field: claim
+match: [0-9]+(\.[0-9]+)?@[0-9a-z]+\.u[0-9]+(\.n[0-9]+)?( [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?|[^ @]+@- [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
+note: <pid>.<starttime>@<runtime>, alone or followed by a lease expiry, or <agent>@- <expiry>
+
+line: 2
+field: needs
+match: [0-9]+( [0-9]+)*
+note: ticket numbers separated by spaces
+
+line: 3
+field: title
+required: yes
+match: .+
+note: one line, and never empty
+
+field: created
+match: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
+note: an ISO-8601 UTC timestamp
+
+field: updated
+match: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
+note: an ISO-8601 UTC timestamp
+FORMAT
+}
+
+format_cached() {
+	if [ -z "${_format_read:-}" ]; then
+		_format_tab=$(format_text | parse_stanzas)
+		_format_read=yes
+	fi
+	printf '%s\n' "$_format_tab"
+}
+
+# Every name the format claims, positional or not.
+format_fields() { format_cached | cut -f1; }
+
+# What a finding says when a value does not match. The format's patterns are
+# compiled into this script, so nobody can open the file they live in: the
+# finding shows the note, which is the same grammar in words. A project's
+# pattern is in a file the project wrote, so naming it points at the line to
+# go and read.
+match_complaint() {
+	_mc_note=$(format_cached | awk -F'\t' -v k="$1" '$1 == k { print $5; exit }')
+	if [ -n "$_mc_note" ] && [ "$_mc_note" != - ]
+	then printf 'is not %s\n' "$_mc_note"
+	else printf 'does not match %s\n' "$2"; fi
+}
+
+# The pattern for one field, from the format if it owns the name and from the
+# project's schema otherwise. The format wins, which is what "the project
+# cannot weaken these" comes down to at the one place it is read.
+field_match() {
+	_fm_p=$(format_cached | awk -F'\t' -v k="$2" '$1 == k && $3 != "-" { print $3; exit }')
+	[ -n "$_fm_p" ] && { printf '%s\n' "$_fm_p"; return 0; }
+	schema_match "$1" "$2"
 }
 
 # Parsed once per command. check asks for it per ticket and info_faults per
@@ -1911,7 +2040,7 @@ schema_fields() { schema_cached "$1" | awk -F'\t' '$1 != "" { print $1 }'; }
 
 # The pattern one field's value must match, or nothing.
 schema_match() {
-	schema_cached "$1" | awk -F'\t' -v k="$2" '$1 == k { print $3; exit }'
+	schema_cached "$1" | awk -F'\t' -v k="$2" '$1 == k && $3 != "-" { print $3; exit }'
 }
 
 # Does this value match this pattern? 0 yes, 1 no, 2 the pattern is unusable —
@@ -1938,21 +2067,32 @@ schema_faults() {
 
 	# \047 is the apostrophe: the program is inside single quotes, so it
 	# cannot contain one.
-	awk '
-		BEGIN { q = "\047" }
+	awk -v mine="$(format_fields)" '
+		BEGIN {
+			q = "\047"
+			n = split(mine, f, "\n")
+			for (i = 1; i <= n; i++) if (f[i] != "") owned[f[i]] = 1
+		}
 		function say(msg) { print "schema: " msg ", at line " NR }
 		{ sub(/^[ \t]+/, "") }
 		/^#/ { next }
 		$0 == "" { open = 0; next }
 		{
+			# line: is rejected wherever it appears, and without
+			# disturbing the stanza: the field: under it is still
+			# the line that opens one.
+			if ($1 == "line:") {
+				say("line: is the format" q "s own, not a schema key")
+				next
+			}
 			if (!open) {
 				open = 1
 				if ($1 != "field:") { say("a stanza with no field:"); next }
 				if (NF != 2) { say("field: takes one name"); next }
 				if ($2 in seen) say(q $2 q " is declared twice")
 				seen[$2] = 1
-				if ($2 == "created" || $2 == "updated")
-					say(q $2 q " is pidly" q "s own and is not declared here")
+				if ($2 in owned)
+					say(q $2 q " is the format" q "s own and is not declared here")
 				next
 			}
 			if ($1 == "field:") { say("a second field: inside a stanza"); next }
@@ -1973,8 +2113,8 @@ schema_faults() {
 	# so a pattern written against whichever tool is installed here can mean
 	# something else on the next machine. Lint the text, then ask grep
 	# whether it compiles at all — exit 2 rather than 1 says it does not.
-	schema_cached "$_sf_r" | while IFS='	' read -r _sf_k _sf_req _sf_pat; do
-		[ -n "$_sf_k" ] && [ -n "$_sf_pat" ] || continue
+	schema_cached "$_sf_r" | while IFS='	' read -r _sf_k _sf_req _sf_pat _sf_rest; do
+		[ -n "$_sf_k" ] && [ "$_sf_pat" != - ] || continue
 		case $_sf_pat in
 		*'\d'*|*'\w'*|*'\s'*|*'\b'*|*'(?'*)
 			printf "schema: '%s' uses a PCRE escape, which is not ERE\n" "$_sf_k" ;;

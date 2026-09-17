@@ -118,6 +118,49 @@ Two things the implementation is stuck with, and so are you:
 belong to the format, not to the project, and are not declared here. Neither
 are `created:` and `updated:`.
 
+pidly declares those in the same language, compiled into the script:
+
+```
+line: 1
+field: claim
+match: [0-9]+(\.[0-9]+)?@[0-9a-z]+\.u[0-9]+(\.n[0-9]+)?( [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?|[^ @]+@- [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
+note: <pid>.<starttime>@<runtime>, alone or followed by a lease expiry, or <agent>@- <expiry>
+
+line: 2
+field: needs
+match: [0-9]+( [0-9]+)*
+note: ticket numbers separated by spaces
+
+line: 3
+field: title
+required: yes
+match: .+
+note: one line, and never empty
+
+field: created
+match: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
+note: an ISO-8601 UTC timestamp
+
+field: updated
+match: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
+note: an ISO-8601 UTC timestamp
+```
+
+That is the whole grammar of a ticket's header, in one place, and `check`
+applies it to every ticket. `line:` is what says a field is read by position
+rather than by name — the takeable scan reads lines 1 and 2 by number — and
+it is the one key your schema may not use. Declaring any of these names in
+`.pidly/schema` is a finding too: a project that could redeclare `title`
+could say it may be empty, and every listing prints it.
+
+A finding about one of these shows the `note:` rather than the pattern,
+because the pattern is not in a file you can open:
+
+```
+7: claim is 'garbage', which is not <pid>.<starttime>@<runtime>, alone or
+   followed by a lease expiry, or <agent>@- <expiry>
+```
+
 ## Finding work
 
 ```sh

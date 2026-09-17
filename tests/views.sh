@@ -79,7 +79,7 @@ echo "check catches"
 sed -i '3s/.*/not a title/' .pidly/2/info
 out=$($PIDLY check 2>&1) && rc=0 || rc=$?
 check "exit 1 when something is wrong" "$rc" "1"
-has "a missing title" "$out" "2: line 3 is not a title"
+has "a missing title" "$out" "2: line 3 is not title:"
 $PIDLY init >/dev/null 2>&1 || true
 sed -i '3s/.*/title: root two/' .pidly/2/info
 

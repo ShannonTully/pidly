@@ -76,7 +76,7 @@ chmod +x ed-mangle
 before=$(cat .pidly/1/info)
 out=$(EDITOR="$tmp/ed-mangle" $PIDLY edit 1 2>&1) && rc=0 || rc=$?
 check "a saved file that is not a ticket is refused" "$rc" "1"
-has "naming the fault" "$out" "1: line 3 is not a title"
+has "naming the fault" "$out" "1: line 3 is not title:"
 has "and where the edit was kept" "$out" "your edit is in"
 check "the ticket is untouched" "$(cat .pidly/1/info)" "$before"
 draft=$(printf '%s' "$out" | sed -n 's/.*your edit is in //p')
