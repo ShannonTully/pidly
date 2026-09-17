@@ -4,7 +4,7 @@ title: schema.md holds declarations, not prose
 effort: S
 area: docs
 created: 2026-09-17T06:21:54Z
-updated: 2026-09-17T06:26:19Z
+updated: 2026-09-17T06:36:43Z
 
 schema.md mixes two kinds of content with opposite ownership rules. The
 table is the project's: init seeds it and then never touches the file again,
@@ -51,3 +51,23 @@ table" above as settled. That paragraph argued against a flat key: value
 list on the grounds that the table parses cheaply and renders; 28 argues
 that a pattern in a cell collides with the delimiter, which is an argument
 about the container that this ticket assumed away.
+
+Folded into 28 and closed without separate work.
+
+28 replaces schema.md with .pidly/schema, a stanza file in the format
+tickets already use, because a regex cannot live in a markdown table cell.
+That settles everything this ticket asked for, structurally rather than by
+editing: the new file has nowhere to put pidly's prose except a note: line
+per field, created and updated are not declared in it at all, and it is a
+program input by construction — 25's pidly fields reads the declared set and
+its order straight out of it.
+
+What this ticket got right and is worth keeping: pidly's documentation must
+not live in a file pidly has promised not to rewrite. That is how "Four
+header lines" survived from the day desc: was dropped until 17 noticed it.
+The reference covers what the prose said, and 28 carries the requirement
+that it names the new file.
+
+What it got wrong: "keep it markdown and keep it a table" argued the
+container from parsing convenience and rendering, without asking what the
+file would have to hold next.

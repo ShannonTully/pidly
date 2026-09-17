@@ -1,56 +1,96 @@
 claim:
 needs: 26
-title: Validate field values, and decide what the schema file becomes
+title: Regex validation, and schema becomes stanzas
 effort: M
 area: format
 created: 2026-09-17T06:26:19Z
-updated: 2026-09-17T06:26:19Z
+updated: 2026-09-17T06:36:31Z
 
-The values column is documentation. Nothing checks that effort is one of S,
-M, L — check enforces that a field is declared and, after 24, that a
-required one has a value, but never what the value is.
+The values column is documentation: nothing checks that effort is one of S,
+M, L. Making it a check is what forces the file's shape, because the only
+validator worth having is a regex, and a regex cannot live in a markdown
+table — it alternates on | and the table separates cells on |. That is the
+container's fault, not the regex's, and the design already predicted it: the
+table holds while the schema stays flat key/value, and per-value behaviour
+forces something else.
 
-Enums are the cheap half. "S, M, L" splits on commas, check reports
-"effort is 'XL', which the schema does not allow", and a cell with prose in
-it rather than a list — "one line: where the last agent got to" — has to
-keep meaning "anything", so the column needs a way to say unconstrained.
-That is the first sign the column is becoming a grammar.
+So the file becomes the format's own grammar applied to its own
+configuration, and loses the extension for the same reason info has none —
+the content is key: value lines no renderer understands, and a .md suffix
+invites an editor to reflow it.
 
-Patterns are where it breaks, and the reason is the container, not the
-pattern. A regex uses | for alternation and the markdown table uses | to
-separate cells. Escaping is possible and takes the file out of "awk parses
-it in a pinch", which is the property 26 exists to protect. The design
-document already called this: the table holds while the schema stays flat
-key/value, and per-value behaviour forces a real config format.
-
-So decide the container, and this ticket is that decision:
-
-- Keep the table and cap the grammar at enums. Cheapest, renders on a
-  forge, and says patterns are not coming.
-- Keep the table and escape \| in cells. Buys patterns, costs the
-  no-parser property and produces cells nobody wants to read or write.
-- Line-oriented stanzas in the format pidly already uses: one field per
-  block, key: value lines, blank line between. The whole system then has
-  one grammar, get_field-style reads work on it, and a pattern can contain
-  anything but a newline. Loses the rendered table.
+.pidly/schema:
 
   field: effort
+  match: S|M|L
+  note: rough size
+
+  field: area
   required: yes
-  values: S, M, L
+  match: format|cli|docs
+  note: which part of the project
 
-The third is the one to beat. It is the format's own shape applied to the
-format's own configuration, and it removes the delimiter problem instead of
-escaping around it.
+  field: due
+  match: [0-9]{4}-[0-9]{2}-[0-9]{2}
+  note: a date, if the work has one
 
-If patterns land, pin the dialect in the same breath — POSIX ERE, as grep -E
-and awk read it — or the same schema validates differently on two machines.
-And decide what check does with a pattern the local awk rejects: a broken
-schema must be a finding, not a crash.
+  field: handoff
+  note: where the last agent got to
 
-Needs 26 because the prose comes out either way, and because deciding the
-container on a file that still has pidly's documentation in it means
-deciding two things at once.
+Stanzas separated by a blank line, field: opens one, declaration order is the
+order new writes slots in. Nothing after "match: " is a delimiter, so a
+pattern can hold |, spaces, brackets and braces with no escaping. Read with
+the idioms already in use:
 
-Done when values are enforced, the container is decided and written down in
-the design with the reasoning, and the tests cover a value outside an enum,
-an unconstrained field, and a schema the parser cannot read.
+  awk '$1 == "field:" { print $2 }' .pidly/schema
+  awk '$1=="field:" { cur=$2 } $1=="required:" && $2=="yes" { print cur }' \
+      .pidly/schema
+
+Semantics:
+
+- match: is a POSIX ERE, evaluated anchored — pidly tests ^(<pattern>)$, so
+  S|M|L cannot half-match "M extra", and a pattern the author anchored
+  already still works.
+- No match: means anything, which is what a values cell holding prose means
+  today.
+- required: stays and is not folded into the pattern. match is shape,
+  required is presence; collapsing them makes every optional field carry a
+  trailing ? and read like a mistake. An empty value skips the match and is
+  a finding only when required: yes.
+- note: is one line, per handoff.
+
+Two portability findings, both measured on this machine, both of which the
+implementation has to respect:
+
+- awk cannot be the matcher. [0-9]{4} matches 2026 under grep -E and does
+  not under this machine's awk, which has no interval expressions. Patterns
+  go through grep -Eq, never through one of check's existing awk passes.
+- grep here is ugrep, which accepted \d. GNU grep -E does not, so a pattern
+  written here can behave differently elsewhere. check lints the pattern for
+  \d \w \s \b and (?...) and reports them rather than trusting the local
+  tool. A pattern grep cannot compile is rc=2, distinguishable from rc=1
+  no-match, so a broken schema is a finding rather than a crash.
+
+Findings check gains:
+
+  7: effort is 'XL', which does not match S|M|L
+  schema: field 'effort' has a match grep cannot compile
+  schema: 'due' uses \d, which is not ERE
+  schema: a stanza with no field:
+
+No migration path. The project is new and installed nowhere else, so init
+writes .pidly/schema and nothing reads schema.md — this repo's own file is
+converted as part of the work, and so are the fifteen references in the
+script, five in the design, two in the README and thirteen across the
+suites.
+
+This absorbs 26, which asked for the prose to come out of schema.md: the new
+file has nowhere to put prose except a note: line per field, and pidly's own
+created and updated are not declared in it at all.
+
+Done when .pidly/schema is the seeded file, values are validated against
+anchored EREs through grep, check reports the four findings above, the
+reference and AGENTS block name the new file, and the tests cover a value
+outside its pattern, an empty optional field, an empty required one, a
+pattern containing |, a pattern grep cannot compile, and a pattern using a
+PCRE escape.
