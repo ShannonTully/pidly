@@ -117,6 +117,13 @@ then its parent isn't finished either, and neither is the root above it. The
 constraint the filesystem imposes and the constraint the work imposes are the
 same one.
 
+`reopen` therefore takes a ticket that is already open, if a closed ancestor
+holds it. That state is reachable — a `mkdir`/`mv` close done by hand does not
+check for open children — and the cascade is exactly its repair, so refusing
+it as "already open" would leave the one command that can fix it unable to.
+`check` reports the state; `reopen` clears it. A ticket with no `c/` anywhere
+between it and the surface is the only one that is already open.
+
 Reopening does *not* cascade downward: a reopened parent keeps its finished
 children in its `c/`. And a reopened ticket does not reopen tickets that
 `needs` it — dependencies constrain when work may *start*, not whether

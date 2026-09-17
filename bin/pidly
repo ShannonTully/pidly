@@ -408,6 +408,76 @@ cmd_status() {
 	return 0
 }
 
+# --- close / reopen --------------------------------------------------------
+#
+# Both commands are moves and nothing else. Neither writes to an info file,
+# because there is no status field to keep in step: state is the path, so
+# moving the directory is the whole operation.
+
+# A ticket is closed when it sits in its container's c/ — that is, when its
+# immediate parent directory is named c. Not "the path contains /c/": that is
+# also true of an open child of a closed parent, which is the broken state
+# check reports rather than a ticket to treat as finished.
+is_closed() { case $(dirname "$1") in */c) return 0 ;; *) return 1 ;; esac; }
+
+# Numbered directories sitting directly in a ticket — its open children. A
+# finished child is in the ticket's c/, so it is not one of these.
+open_children() {
+	for _oc in "$1"/*/; do
+		[ -d "$_oc" ] || continue
+		_oc=${_oc%/}; _oc=${_oc##*/}
+		case $_oc in ''|*[!0-9]*) continue ;; esac
+		printf '%s\n' "$_oc"
+	done
+}
+
+cmd_close() {
+	[ $# -eq 1 ] || die 'usage: pidly close <number>'
+	_r=$(root); _d=$(ticket_dir "$_r" "$1")
+	is_closed "$_d" && die "$1 is already closed"
+
+	# An open child in a finished tree is the one thing the layout rules
+	# out, and the parent is the only place that can refuse it.
+	_kids=$(open_children "$_d" | tr '\n' ' ')
+	[ -z "$_kids" ] || die "$1 has open children: ${_kids%% } — close them first"
+
+	_cdir=$(dirname "$_d")/c
+	mkdir -p "$_cdir"
+	mv "$_d" "$_cdir/"
+	printf '%s closed\n' "$1"
+	return 0
+}
+
+cmd_reopen() {
+	[ $# -eq 1 ] || die 'usage: pidly reopen <number>'
+	_r=$(root)
+	# Closed, or open inside a closed ancestor: either way there is a c/
+	# between the ticket and the surface, and lifting those out is what
+	# reopening means. A ticket with none of them is already open.
+	_rel=$(ticket_dir "$_r" "$1"); _rel=${_rel#"$_r"/}
+	case $_rel in c/*|*/c/*) ;; *) die "$1 is already open" ;; esac
+
+	# Outermost first. A closed ancestor holding live work is exactly what
+	# the cascade exists to prevent, so each pass re-locates the ticket and
+	# lifts the highest closed level out — one mv per level, and the state
+	# is consistent between any two of them.
+	while :; do
+		_d=$(ticket_dir "$_r" "$1")
+		# Relative to .pidly: an absolute path may have its own c/ in it.
+		_rel=${_d#"$_r"/}
+		case $_rel in c/*|*/c/*) ;; *) break ;; esac
+		_head=${_rel%%c/*}
+		_seg=${_rel#*c/}; _seg=${_seg%%/*}
+		mv "$_r/${_head}c/$_seg" "$_r/$_head$_seg"
+		# An emptied c/ is what a person would have been left with too;
+		# removing it keeps the tree readable and cannot lose anything,
+		# since rmdir refuses a directory that still holds work.
+		rmdir "$_r/${_head}c" 2>/dev/null || true
+		printf '%s reopened\n' "$_seg"
+	done
+	return 0
+}
+
 # --- agent instructions ----------------------------------------------------
 #
 # Written into AGENTS.md (or equivalent) between markers, so re-running
@@ -633,16 +703,21 @@ want to see in the tracker tomorrow.
 Closing is a move into the container's `c/`:
 
 ```sh
-mkdir -p .pidly/7/c && mv .pidly/7/12 .pidly/7/c/
+pidly close 12    # or: mkdir -p .pidly/7/c && mv .pidly/7/12 .pidly/7/c/
+pidly reopen 12
 ```
 
 A ticket **cannot close while it has children outside its own `c/`**. That is
 what keeps a finished tree from containing live work.
 
-Reopening moves it back, and **cascades upward**: if a closed ancestor holds
+`reopen` moves it back, and **cascades upward**: if a closed ancestor holds
 it, that ancestor reopens too, one move per level. If a subtask needs redoing
 then its parent is not finished either. Reopening does not cascade downward,
 and does not reopen tickets that `needs` it.
+
+Reopen also takes a ticket that is *already open* but sits inside a closed
+ancestor — a state a hand-run `mv` can leave behind, and one `check` reports.
+The cascade is its repair.
 
 ## Rules that will bite you
 
@@ -704,7 +779,7 @@ pidly release -m "Where I got to" 7   # if you stop before finishing
 PIDLY_AGENT=$SESSION_ID PIDLY_LEASE=2h pidly claim 7
 
 # finish: move into the container's c/
-mkdir -p .pidly/c && mv .pidly/7 .pidly/c/
+pidly close 7                 # by hand: mkdir -p .pidly/c && mv .pidly/7 .pidly/c/
 ```
 
 Claim before starting; release or close when done. Delegating real work to a
@@ -1179,7 +1254,14 @@ cmd_check() {
 			_sn=$(basename "$_sub")
 			[ "$_sn" = c ] && continue
 			case $_sn in
-			''|*[!0-9]*) flag "$_num: '$_sn/' is neither a number nor c" ;;
+			''|*[!0-9]*) flag "$_num: '$_sn/' is neither a number nor c"
+			             continue ;;
+			esac
+			# A numbered directory sitting here is an open child, and a
+			# finished tree may not hold live work. Only the parent can
+			# see this: the child's own path says c/ and looks closed.
+			case ${_path#"$_r"/} in
+			c/*|*/c/*) flag "$_num: closed, but child $_sn is open" ;;
 			esac
 		done
 
@@ -1281,6 +1363,8 @@ usage: pidly <command> [args]
   release [-m note] <n>
                  give it back, optionally recording where you got to
   status <n>     who holds it, and whether that can be verified
+  close <n>      finish it: move it into its container's c/
+  reopen <n>     move it back, reopening any closed ancestors
   list [-a]      takeable work; -a shows every open ticket with its state
   tree           the hierarchy, closed tickets marked [x]
   check          report anything wrong; changes nothing, nonzero if it finds
@@ -1296,7 +1380,7 @@ environment:
                  Requires PIDLY_LEASE: nothing else can show it is alive.
   PIDLY_LEASE    how long the claim is good for: 90s, 30m, 2h, 3d.
 
-not yet implemented: close, reopen, edit, reap
+not yet implemented: edit, reap
 USAGE
 	exit 2
 }
@@ -1309,6 +1393,8 @@ new)     cmd_new "$@" ;;
 claim)   cmd_claim "$@" ;;
 release) cmd_release "$@" ;;
 status)  cmd_status "$@" ;;
+close)   cmd_close "$@" ;;
+reopen)  cmd_reopen "$@" ;;
 list)    cmd_list "$@" ;;
 tree)    cmd_tree "$@" ;;
 check)   cmd_check "$@" ;;

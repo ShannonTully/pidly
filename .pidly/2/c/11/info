@@ -11,3 +11,7 @@ Reopening does not cascade downward — a reopened parent keeps its finished
 children in its c/ — and does not reopen tickets that need it, since
 dependencies constrain when work may start, not whether completed work
 stays completed.
+
+Done with 4, which is the same move in the other direction. The cascade, the
+repair of an open ticket buried in a closed ancestor, and the tests are all
+recorded there.

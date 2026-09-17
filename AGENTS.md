@@ -42,7 +42,7 @@ pidly release -m "Where I got to" 7   # if you stop before finishing
 PIDLY_AGENT=$SESSION_ID PIDLY_LEASE=2h pidly claim 7
 
 # finish: move into the container's c/
-mkdir -p .pidly/c && mv .pidly/7 .pidly/c/
+pidly close 7                 # by hand: mkdir -p .pidly/c && mv .pidly/7 .pidly/c/
 ```
 
 Claim before starting; release or close when done. Delegating real work to a

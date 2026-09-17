@@ -21,3 +21,19 @@ Done when both commands exist, check confirms nothing inside a c/ tree has
 open children outside a c/, and the tests cover closing a leaf, closing a
 parent with all children closed, refusing a parent with an open child, and a
 reopen that relocates ancestors.
+
+Both commands are moves and nothing else; neither writes to an info file,
+because there is no status field to keep in step. close refuses while the
+ticket has children sitting outside its own c/. reopen lifts every closed
+level between the ticket and the surface, outermost first, one mv per level,
+and removes each emptied c/.
+
+Closed is "the parent directory is named c", not "the path contains a c/".
+The second is also true of an open child of a closed parent, which is a
+broken state rather than a finished ticket: check now reports it as "N:
+closed, but child M is open", and reopen is its repair — which is why reopen
+accepts a ticket that is already open when a closed ancestor holds it.
+
+Done: implemented in bin/pidly, covered by tests/close.sh (26 cases,
+including that closing writes no bytes to info and that the pair leaves
+exactly what mkdir and mv leave by hand).

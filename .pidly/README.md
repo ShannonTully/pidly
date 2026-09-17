@@ -206,16 +206,21 @@ want to see in the tracker tomorrow.
 Closing is a move into the container's `c/`:
 
 ```sh
-mkdir -p .pidly/7/c && mv .pidly/7/12 .pidly/7/c/
+pidly close 12    # or: mkdir -p .pidly/7/c && mv .pidly/7/12 .pidly/7/c/
+pidly reopen 12
 ```
 
 A ticket **cannot close while it has children outside its own `c/`**. That is
 what keeps a finished tree from containing live work.
 
-Reopening moves it back, and **cascades upward**: if a closed ancestor holds
+`reopen` moves it back, and **cascades upward**: if a closed ancestor holds
 it, that ancestor reopens too, one move per level. If a subtask needs redoing
 then its parent is not finished either. Reopening does not cascade downward,
 and does not reopen tickets that `needs` it.
+
+Reopen also takes a ticket that is *already open* but sits inside a closed
+ancestor — a state a hand-run `mv` can leave behind, and one `check` reports.
+The cascade is its repair.
 
 ## Rules that will bite you
 
