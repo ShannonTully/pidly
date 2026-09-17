@@ -57,6 +57,15 @@ Appending to a body needs no bookkeeping.
 ## Finding work
 
 ```sh
+pidly list        # ready work: unclaimed and unblocked
+pidly list -a     # every open ticket, with its state
+pidly tree        # the hierarchy, closed tickets marked [x]
+pidly check       # report anything wrong; changes nothing
+```
+
+By hand, or when pidly is not installed:
+
+```sh
 find .pidly -type d -name c -prune -o -name info -print
 ```
 

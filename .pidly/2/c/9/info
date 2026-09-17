@@ -1,0 +1,43 @@
+claim:
+needs: 7
+title: pidly list / tree / check
+effort: L
+area: cli
+
+Read-only views.
+
+list defaults to takeable work — unclaimed and unblocked — computed from one
+traversal plus the first three lines of each ticket. No bodies are read. -a
+shows every open ticket with its state and, for blocked ones, what is
+blocking them.
+
+tree renders the hierarchy with closed tickets marked [x].
+
+check validates the three structural lines, that every line before the first
+blank is a declared field, that required fields are present, that every needs
+entry resolves, that the needs graph is acyclic, that no number is issued
+twice, that every number has a registry entry and every entry a ticket, that
+no directory inside a ticket is anything but a number or c, that claims and
+locks have living holders, and that both generated documents match what would
+be generated now. It changes nothing and exits nonzero on findings.
+
+Four shell faults found by running it, all recorded in the design.
+
+check reported into a shell variable incremented inside pipelines, so the
+subshells lost every increment and it exited 0 whatever it found. Findings go
+to a file now.
+
+tree sorted structural keys under the ambient locale, which ignores the / in
+a path key and put children ahead of their own parents. Forced to LC_ALL=C.
+
+survey emitted an empty field between tabs; tab is IFS whitespace, so read
+collapsed two tabs into one and every later field shifted left, blanking
+every title. It writes - for no blockers.
+
+tree was recursive, and a recursive shell function cannot hold loop state —
+the inner call clobbers the outer cursor, and per-function prefixes do not
+help against a function colliding with itself. It sorts a precomputed key
+instead.
+
+Done: implemented in bin/pidly, covered by tests/views.sh (26 cases,
+including that check leaves the tracker byte-identical).

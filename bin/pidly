@@ -484,6 +484,15 @@ Appending to a body needs no bookkeeping.
 ## Finding work
 
 ```sh
+pidly list        # ready work: unclaimed and unblocked
+pidly list -a     # every open ticket, with its state
+pidly tree        # the hierarchy, closed tickets marked [x]
+pidly check       # report anything wrong; changes nothing
+```
+
+By hand, or when pidly is not installed:
+
+```sh
 find .pidly -type d -name c -prune -o -name info -print
 ```
 
@@ -991,6 +1000,273 @@ cmd_init() {
 	return 0
 }
 
+# --- views -----------------------------------------------------------------
+
+# Field names the schema declares, one per line.
+schema_fields() {
+	[ -f "$1/schema.md" ] || return 0
+	awk -F'|' '
+		/^[[:space:]]*\|/ {
+			f = $2
+			gsub(/^[ \t]+|[ \t]+$/, "", f)
+			if (f == "" || f == "field" || f ~ /^-+$/) next
+			if (f ~ /^[0-9]+$/) next          # the structural-lines table
+			print f
+		}' "$1/schema.md"
+}
+
+# "number<TAB>state<TAB>blockers<TAB>title" for every open ticket, computed
+# from one traversal and the first three lines of each file. No bodies are
+# read. state is ready, blocked or claimed.
+survey() {
+	_sv_r=$1
+	map "$_sv_r" | awk -v root="$_sv_r" '
+		{ closed[$1] = ($2 ~ /\/c\//); path[$1] = $2 }
+		END {
+			for (n in path) {
+				if (closed[n]) continue
+				f = path[n] "/info"
+				claim = ""; needs = ""; title = ""
+				getline claim < f
+				getline needs < f
+				getline title < f
+				close(f)
+				sub(/^claim:/, "", claim)
+				sub(/^needs:[ ]?/, "", needs)
+				sub(/^title:[ ]?/, "", title)
+				blockers = ""
+				k = split(needs, d, " ")
+				for (i = 1; i <= k; i++)
+					if (!(d[i] in path) || !closed[d[i]])
+						blockers = blockers (blockers ? "," : "") d[i]
+				state = blockers != "" ? "blocked" : (claim != "" ? "claimed" : "ready")
+				# "-" rather than empty: tab is IFS whitespace, so a
+				# shell read collapses two tabs into one and every
+				# later field shifts left.
+				printf "%s\t%s\t%s\t%s\n", n, state, blockers ? blockers : "-", title
+			}
+		}'
+}
+
+cmd_list() {
+	_all=no
+	case ${1:-} in
+	-a|--all) _all=yes; shift ;;
+	esac
+	[ $# -eq 0 ] || die 'usage: pidly list [-a]'
+	_r=$(root)
+	survey "$_r" | sort -n | while IFS='	' read -r _n _st _bl _ti; do
+		if [ "$_all" = no ]; then
+			[ "$_st" = ready ] || continue
+			printf '%-5s %s\n' "$_n" "$_ti"
+		elif [ "$_st" = blocked ]; then
+			printf '%-5s %-8s %s (needs %s)\n' "$_n" "$_st" "$_ti" "$_bl"
+		else
+			printf '%-5s %-8s %s\n' "$_n" "$_st" "$_ti"
+		fi
+	done
+}
+
+# Children under their parent, closed ones marked.
+#
+# Not recursive. A recursive shell function cannot hold loop state: POSIX
+# shell has one variable namespace, so the inner call clobbers the outer
+# one's cursor, and prefixing names per function does not help when the
+# function collides with itself. Instead each ticket's path becomes a sort
+# key of zero-padded ancestor numbers, which puts parents before children
+# and siblings in numeric order in a single pass.
+#
+# The sort runs under LC_ALL=C. A locale-aware collation ignores the "/"
+# between segments, which puts a child ahead of its own parent.
+cmd_tree() {
+	[ $# -eq 0 ] || die 'usage: pidly tree'
+	_r=$(root)
+	map "$_r" | awk -v root="$_r" '
+		{
+			rel = $2
+			sub("^" root "/", "", rel)
+			n = split(rel, seg, "/")
+			key = ""; depth = 0; closed = 0
+			for (i = 1; i <= n; i++) {
+				if (seg[i] == "c") { closed = 1; continue }
+				key = key sprintf("%09d/", seg[i])
+				depth++
+			}
+			f = $2 "/info"
+			title = ""
+			getline title < f; getline title < f; getline title < f
+			close(f)
+			sub(/^title:[ ]?/, "", title)
+			printf "%s\t%d\t%s\t%s\t%s\n", key, depth, closed, $1, title
+		}' | LC_ALL=C sort | while IFS='	' read -r _k _depth _closed _num _title; do
+		_ind=''
+		_i=1
+		while [ "$_i" -lt "$_depth" ]; do _ind="$_ind  "; _i=$((_i + 1)); done
+		[ "$_closed" = 1 ] && _mk='[x]' || _mk='[ ]'
+		printf '%s%s %-4s %s\n' "$_ind" "$_mk" "$_num" "$_title"
+	done
+}
+
+# --- check -----------------------------------------------------------------
+#
+# Reports; never modifies. That is what lets it run in CI and what lets
+# anyone run it without thinking about what it might do.
+
+# Findings go to a file, not a variable. Almost every check below runs
+# inside a pipeline, and a pipeline's commands run in subshells, so a counter
+# incremented there never reaches this one.
+flag() { printf '%s\n' "$*" >> "$PIDLY_REPORT"; }
+
+cmd_check() {
+	[ $# -eq 0 ] || die 'usage: pidly check'
+	_r=$(root)
+	PIDLY_REPORT="${TMPDIR:-/tmp}/pidly.report.$$"
+	export PIDLY_REPORT
+	: > "$PIDLY_REPORT"
+	_m=$(map "$_r")
+	_decl=$(schema_fields "$_r")
+
+	# One number, one ticket.
+	printf '%s\n' "$_m" | awk '{print $1}' | sort | uniq -d | while read -r _d; do
+		[ -n "$_d" ] || continue
+		flag "$_d: issued to more than one ticket"
+	done
+
+	printf '%s\n' "$_m" | while read -r _num _path; do
+		[ -n "$_num" ] || continue
+		# A non-numeric directory is flagged by its parent below. Checking
+		# it as a ticket would report the same fault three more times.
+		case $_num in *[!0-9]*) continue ;; esac
+		_f="$_path/info"
+
+		[ -f "$_f" ] || { flag "$_num: no info file in $_path"; continue; }
+
+		# The three structural lines, in order.
+		sed -n 1p "$_f" | grep -q '^claim:' || flag "$_num: line 1 is not claim:"
+		sed -n 2p "$_f" | grep -q '^needs:' || flag "$_num: line 2 is not needs:"
+		sed -n 3p "$_f" | grep -q '^title: .' || flag "$_num: line 3 is not a title"
+
+		# Everything between there and the first blank must be a field the
+		# schema declares. A stray line here is usually a body that lost
+		# its blank separator.
+		awk 'NR>3 { if ($0 == "") exit; print }' "$_f" | while read -r _line; do
+			case $_line in
+			*:*) _k=${_line%%:*} ;;
+			*)   flag "$_num: '$_line' is not a field"; continue ;;
+			esac
+			printf '%s\n' "$_decl" | grep -qx "$_k" ||
+				flag "$_num: field '$_k' is not in schema.md"
+		done
+
+		# Required fields present.
+		schema_required "$_r" | while read -r _req; do
+			[ -n "$_req" ] || continue
+			awk -v k="$_req" 'NR>3 { if ($0=="") exit; if (index($0, k ":")==1) found=1 }
+				END { exit !found }' "$_f" ||
+				flag "$_num: required field '$_req' is missing"
+		done
+
+		# Dependencies resolve.
+		for _dep in $(sed -n '2s/^needs: *//p' "$_f"); do
+			printf '%s\n' "$_m" | awk -v d="$_dep" '$1==d{f=1} END{exit !f}' ||
+				flag "$_num: needs $_dep, which does not exist"
+		done
+
+		# A ticket holds its info, child tickets, c/ and attachments-free
+		# directories only. Anything else is read as a phantom ticket.
+		for _sub in "$_path"/*/; do
+			[ -d "$_sub" ] || continue
+			_sn=$(basename "$_sub")
+			[ "$_sn" = c ] && continue
+			case $_sn in
+			''|*[!0-9]*) flag "$_num: '$_sn/' is neither a number nor c" ;;
+			esac
+		done
+
+		# Claims and locks whose holder is gone.
+		_held=$(sed -n '1s/^claim://p' "$_f")
+		case $(claim_state "$_r" "$_held") in
+		dead) flag "$_num: claimed by $_held, which is gone" ;;
+		esac
+		if [ -e "$_path/.lock" ]; then
+			_lo=""
+			read -r _lo < "$_path/.lock" 2>/dev/null || true
+			if [ -z "$_lo" ]; then
+				flag "$_num: a lock with no owner"
+			elif ! kill -0 "$_lo" 2>/dev/null; then
+				flag "$_num: a lock held by $_lo, which is gone"
+			fi
+		fi
+	done
+
+	# The registry, both directions.
+	printf '%s\n' "$_m" | while read -r _num _path; do
+		[ -n "$_num" ] || continue
+		case $_num in *[!0-9]*) continue ;; esac
+		[ -e "$(registry_dir "$_r")/$_num" ] ||
+			flag "$_num: no registry entry, so nothing stops a branch reusing it"
+	done
+	if [ -d "$(registry_dir "$_r")" ]; then
+		ls "$(registry_dir "$_r")" 2>/dev/null | while read -r _e; do
+			[ -n "$_e" ] || continue
+			printf '%s\n' "$_m" | awk -v n="$_e" '$1==n{f=1} END{exit !f}' ||
+				flag "registry has $_e with no ticket (deleted?)"
+		done
+	fi
+
+	# Cycles, by peeling nodes with no unresolved dependency.
+	printf '%s\n' "$_m" | while read -r _num _path; do
+		[ -n "$_num" ] || continue
+		case $_num in *[!0-9]*) continue ;; esac
+		[ -f "$_path/info" ] || continue
+		printf '%s %s\n' "$_num" "$(sed -n '2s/^needs: *//p' "$_path/info")"
+	done | awk '
+		{ node[$1] = 1; for (i = 2; i <= NF; i++) dep[$1] = dep[$1] " " $i }
+		END {
+			changed = 1
+			while (changed) {
+				changed = 0
+				for (n in node) {
+					if (done[n]) continue
+					k = split(dep[n], d, " "); ok = 1
+					for (i = 1; i <= k; i++)
+						if (d[i] in node && !done[d[i]]) ok = 0
+					if (ok) { done[n] = 1; changed = 1 }
+				}
+			}
+			for (n in node) if (!done[n]) print n
+		}' | sort -n | while read -r _c; do
+		[ -n "$_c" ] || continue
+		flag "$_c: in a needs cycle"
+	done
+
+	# The generated documents, against what would be generated now.
+	_tmp="${TMPDIR:-/tmp}/pidly.check.$$"
+	guide_text > "$_tmp"
+	cmp -s "$_tmp" "$_r/README.md" ||
+		flag "README.md is out of date — run 'pidly agents'"
+	for _cand in AGENTS.md CLAUDE.md GEMINI.md .cursorrules; do
+		[ -f "$_cand" ] || continue
+		grep -qF "$AGENTS_BEGIN" "$_cand" || continue
+		awk -v b="$AGENTS_BEGIN" -v e="$AGENTS_END" '
+			index($0, b) { p = 1 } p { print } index($0, e) { exit }
+		' "$_cand" > "$_tmp"
+		agents_block | cmp -s - "$_tmp" ||
+			flag "$_cand's pidly section is out of date — run 'pidly agents'"
+	done
+	rm -f "$_tmp"
+
+	if [ -s "$PIDLY_REPORT" ]; then
+		sort "$PIDLY_REPORT"
+		printf '%s problem(s)\n' "$(wc -l < "$PIDLY_REPORT" | tr -d ' ')"
+		rm -f "$PIDLY_REPORT"
+		return 1
+	fi
+	rm -f "$PIDLY_REPORT"
+	printf 'ok: %s tickets\n' "$(printf '%s\n' "$_m" | grep -c . || true)"
+	return 0
+}
+
 # --- entry point -----------------------------------------------------------
 
 usage() {
@@ -1005,6 +1281,10 @@ usage: pidly <command> [args]
   release [-m note] <n>
                  give it back, optionally recording where you got to
   status <n>     who holds it, and whether that can be verified
+  list [-a]      takeable work; -a shows every open ticket with its state
+  tree           the hierarchy, closed tickets marked [x]
+  check          report anything wrong; changes nothing, nonzero if it finds
+                 something, so it can run in CI
   agents [-f F]  write .pidly/README.md and a summary into AGENTS.md (or F),
                  replacing the summary if already present
 
@@ -1016,7 +1296,7 @@ environment:
                  Requires PIDLY_LEASE: nothing else can show it is alive.
   PIDLY_LEASE    how long the claim is good for: 90s, 30m, 2h, 3d.
 
-not yet implemented: close, reopen, edit, list, tree, check, reap
+not yet implemented: close, reopen, edit, reap
 USAGE
 	exit 2
 }
@@ -1029,6 +1309,9 @@ new)     cmd_new "$@" ;;
 claim)   cmd_claim "$@" ;;
 release) cmd_release "$@" ;;
 status)  cmd_status "$@" ;;
+list)    cmd_list "$@" ;;
+tree)    cmd_tree "$@" ;;
+check)   cmd_check "$@" ;;
 agents)  cmd_agents "$@" ;;
 *)       usage ;;
 esac

@@ -627,8 +627,9 @@ are read until something has actually been chosen.
 
 Deliberately thin, and deliberately optional.
 
-`pidly` is a POSIX shell script — `new`, `claim`, `release`, `status`,
-`close`, `reopen`, `edit`, `list`, `tree`, `check`, `reap`, `agents`. It is
+`pidly` is a POSIX shell script — `init`, `new`, `claim`, `release`,
+`status`, `close`, `reopen`, `edit`, `list`, `tree`, `check`, `reap`,
+`agents`. It is
 not a runtime dependency of the format; it's an ergonomics layer. The acceptance
 test for every command is that a person could have done the same thing with
 `mkdir`, `mv` and a text editor, and the repository would be byte-identical.
@@ -639,6 +640,25 @@ sandbox gives out long before a workstation does. `PIDLY_TEST_RACE` carries
 it, defaulting to 32 and overridable through a gitignored `.env`, so a
 constrained environment turns itself down without weakening the suite
 everywhere else.
+
+**`check` reports into a file, not a variable.** Almost every check runs
+inside a pipeline, and a pipeline's commands run in subshells, so a counter
+incremented there never reaches the caller — the first version always exited
+0 no matter what it found. Findings append to a temp file and the exit code
+comes from its size.
+
+**Sorting structural keys runs under `LC_ALL=C`.** `tree` orders tickets by
+a key of zero-padded ancestor numbers, and a locale-aware collation ignores
+the `/` between segments, which put children ahead of their own parents.
+
+**Tab-separated output never emits an empty field.** Tab is IFS whitespace,
+so a shell `read` collapses two tabs into one and every later field shifts
+left. `survey` writes `-` for "no blockers" rather than nothing.
+
+**`tree` is iterative, not recursive.** A recursive shell function cannot
+hold loop state: the inner call clobbers the outer one's cursor, and
+per-function variable prefixes do not help when a function collides with
+itself. Sorting a precomputed key does the same job in one pass.
 
 **Every function prefixes its variables.** POSIX shell has one global
 namespace, so a helper's locals and its caller's locals are the same
