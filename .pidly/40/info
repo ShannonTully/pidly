@@ -1,0 +1,52 @@
+claim:
+needs: 28
+title: Validate the structural lines and pidly's own fields by pattern too
+effort: M
+area: format
+created: 2026-09-17T07:03:28Z
+updated: 2026-09-17T07:03:28Z
+
+Once 28 makes a pattern the way a value is checked, the hardcoded checks in
+info_faults are the odd ones out. Today they are greps written by hand, one
+per line, and they are weaker than what the project gets for its own fields:
+
+  sed -n 1p | grep -q '^claim:'      anything after the colon passes
+  sed -n 2p | grep -q '^needs:'      anything after the colon passes
+  sed -n 3p | grep -q '^title: .'    any non-empty rest of line
+  created / updated                  an ISO-8601 pattern, inline in the code
+
+So claim:garbage is a valid ticket and needs: yesterday is caught only
+later, indirectly, by the dependency resolver failing to find a ticket
+called "yesterday". The project can say effort must match S|M|L; pidly
+cannot say what its own claim line looks like.
+
+Express them the same way. The claim grammar is the one that earns it:
+
+  empty
+  <pid>.<starttime>@<runtime>
+  <pid>@<runtime>                    no start time available
+  <agent>@- <expiry>                 a lease
+
+which is a pattern, and one that would have caught every malformed claim the
+tests fabricate by hand.
+
+The design question is whose patterns they are. These lines are pidly's, not
+the project's, so a project must not be able to weaken them — a schema that
+let title be empty would break every listing. Options: a built-in stanza set
+compiled into the script that check always applies and the project's schema
+cannot override; or seeded stanzas that the project can tighten but not
+loosen, which needs a rule for what "tighten" means and is probably not
+worth it. The first is likely right, and it puts the format's grammar in one
+readable place instead of scattered across check.
+
+Watch the ordering: claim, needs and title are lines 1, 2 and 3 by position,
+not by name, so their stanzas need to say so — a pattern alone does not
+express "this is the first line". That is the one place position is real,
+because the takeable scan depends on it.
+
+Needs 28 for the pattern machinery, the ERE dialect decision and the lint
+that keeps a permissive grep from hiding a bad pattern.
+
+Done when the structural lines and created, updated and handoff are checked
+against declared patterns, the project cannot weaken them, a malformed claim
+is a finding, and the tests cover each line being wrong in its own way.

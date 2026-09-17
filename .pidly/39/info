@@ -4,7 +4,7 @@ title: Audit what still has to be done by hand
 effort: M
 area: cli
 created: 2026-09-17T06:54:30Z
-updated: 2026-09-17T06:54:30Z
+updated: 2026-09-17T07:03:09Z
 
 Two properties, and they are not the same one:
 
@@ -51,3 +51,39 @@ something breaks the first property while satisfying the second.
 Done when every operation in the reference and every gap above has one of
 the three answers, the gaps worth closing are child tickets of this one, and
 the reference and the command set agree with each other.
+
+The test to apply: any bash a human or an agent writes to interact with
+tickets is a missing command. Not "could pidly do this" but "did someone
+have to write a loop".
+
+This session is the evidence, and these are the commands actually typed
+while working in this tracker, each of them a gap:
+
+  find .pidly -type d -name 17            resolve a number to a path, over
+                                          and over, because nothing prints it
+  cat .pidly/2/11/info                    read one ticket
+  sed -i '3a effort: M\narea: cli'        add fields to a ticket new just made
+  sed -i '3s/.*/title: .../'              retitle 28
+  sed -n 's/^created: //p' <path>/info    read one field from one ticket
+  for n in 1 7 17 23; do ... done         read one field from several
+  find .pidly -name info | while read f;  list number, claim and title
+    do sed -n 1p; sed -n 3p; done         together, which no view prints
+  awk 'NR>3 {if($0=="")exit;print}'       read the field block
+  mkdir -p .pidly/c && mv .pidly/2 ...    close, before close existed
+
+The last one is the pattern to notice: it stopped appearing the day 4
+landed. Every other line above is still the only way to do that thing.
+
+Your example — "what is the average effort across my open tickets" — is 27
+plus arithmetic: one command hands over every effort value with its number,
+and the agent does the rest. That is the line this audit should draw and
+then hold. pidly hands over data in one pass; it does not compute
+statistics, and it does not grow a query language. The reason is not purity:
+a tally is one shell pipeline over well-formed output, and every aggregate
+pidly owned would be one someone else wanted differently.
+
+The other line worth holding is that the wrapper stays thin. Each of these
+is a command over the format, not a new abstraction on top of it — pidly
+path, pidly show, pidly title, pidly needs, pidly move — and every one of
+them must still print, or do, exactly what the hand idiom in the reference
+does.
