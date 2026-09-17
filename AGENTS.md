@@ -35,6 +35,7 @@ sed -n 1,2p .pidly/7/info
 PIDLY_PID=$$ pidly claim 7    # $$ is your process, not the CLI's
 pidly status 7                # who holds it, and if that is checkable
 pidly release 7
+pidly release -m "Where I got to" 7   # if you stop before finishing
 
 # no local process (cloud, CI)? claim with a lease and renew before it ends
 PIDLY_AGENT=$SESSION_ID PIDLY_LEASE=2h pidly claim 7

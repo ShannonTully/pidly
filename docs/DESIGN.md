@@ -470,6 +470,26 @@ fields, which live after the body:
 Those are validated by `pidly check` rather than by the format, so a ticket
 missing a required field is still a readable ticket.
 
+**`handoff` ships in the default schema.** One line, written by
+`pidly release -m`, holding where the last agent got to when it stopped
+without finishing. `pidly claim` prints it to whoever picks the ticket up,
+which is the whole point: a note nobody is shown is a note nobody reads.
+
+It is a field rather than a header line for the same reason priority is. It
+does not help answer *can I start this?*, which is what the header's fixed
+positions are for, and every structural line is a cost every ticket carries
+forever. It is read after a ticket has already been chosen, alongside the
+body.
+
+It is one line on purpose. A multi-line dump invites an agent to paste its
+reasoning, which is exactly the context bloat the format is built to avoid;
+anything longer belongs in the body, where `desc:` already bounds it. And it
+is overwritten rather than accumulated, so it always describes the most
+recent stop rather than growing into an unread log.
+
+This also covers what closing lost when the marker file went away: a project
+wanting a written resolution has somewhere to put one.
+
 **Priority is a project field, not a structural one.** The header earns its
 fixed positions by answering *can I start this?* in two lines, and priority
 doesn't help with that — it answers *which of these should I pick?*, a sort over

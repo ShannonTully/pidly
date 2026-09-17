@@ -75,6 +75,10 @@ pidly status 7
 pidly release 7
 ```
 
+Export `PIDLY_PID` once for the life of your agent. A release only succeeds
+for the process that made the claim, so claiming and releasing from separate
+invocations have to agree on who you are.
+
 A claim records `<pid>.<starttime>@<runtime>`. The start time is what stops a
 recycled pid from looking like the original process; the runtime is boot id,
 uid and pid namespace, so a pid is only ever checked against the process
@@ -103,6 +107,19 @@ on one ticket.
 Claiming rewrites line 1, so it is the one operation that is not safe to do
 by hand while other agents are running: `pidly claim` serializes it behind a
 lock. Everything else here is safe with `find`, `sed` and `mv`.
+
+### Handing off
+
+If you stop before finishing, say where you got to:
+
+```sh
+pidly release -m "Parser works; lexer still fails on nested quotes." 7
+```
+
+That lands in the `handoff` field, and `pidly claim` prints it to whoever
+picks the ticket up next. One line — anything longer belongs in the body. It
+is overwritten by the next handoff, not accumulated, so it always describes
+the most recent stop.
 
 ## Creating
 
@@ -147,3 +164,5 @@ and does not reopen tickets that `needs` it.
 - **Parents and dependencies are different things.** `needs` blocks starting;
   children block closing. Neither implies the other, and a parent is never an
   implicit dependency of its own children.
+- **Leave a handoff when you stop early.** A dropped claim with no note makes
+  the next agent reconstruct your progress from the diff.

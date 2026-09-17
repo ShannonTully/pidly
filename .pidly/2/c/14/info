@@ -1,0 +1,32 @@
+claim:
+needs:
+title: handoff: what the last agent left behind
+desc:30
+A place for an agent to record where it got to when it drops a claim without
+finishing, so the next agent does not reconstruct it from the diff.
+
+A project field, not a header line. It fails the test the header has to pass
+— it does not help answer "can I start this?" — and a structural line is a
+cost every ticket carries forever, the same reason priority stayed a field.
+Ships in the default schema; costs nothing for projects that drop it.
+
+One line, deliberately. A multi-line dump invites an agent to paste its
+reasoning, which is the context bloat the format fights. Overwritten rather
+than accumulated, so it describes the most recent stop instead of growing
+into an unread log.
+
+Written by `pidly release -m`, shown by `status`, and printed by `claim` —
+that last one is the point, since a note nobody is shown is a note nobody
+reads.
+
+Also covers the resolution note that closing lost when the marker file went
+away.
+
+Writing the tests surfaced that release only succeeds for the process that
+claimed, so an agent must export PIDLY_PID once for its lifetime rather than
+per invocation. That was already the design; it is now written down in the
+shipped reference, where it was missing.
+
+Done: implemented in bin/pidly, covered by tests/handoff.sh (14 cases).
+effort: S
+area: format

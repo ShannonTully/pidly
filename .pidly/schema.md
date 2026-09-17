@@ -13,7 +13,8 @@ Four header lines are structural and always present, in this order:
 The body runs from line 5 to `desc`. Everything after `desc` is a project
 field from the table below.
 
-| field  | required | values             |
-|--------|----------|--------------------|
-| effort | no       | S, M, L            |
-| area   | no       | format, cli, docs  |
+| field   | required | values                        |
+|---------|----------|-------------------------------|
+| effort  | no       | S, M, L                       |
+| area    | no       | format, cli, docs             |
+| handoff | no       | one line: where the last agent got to |
