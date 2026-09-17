@@ -82,9 +82,13 @@ files.
 
 ## Status
 
-Early. The design is settled enough to build against — see
-[docs/DESIGN.md](docs/DESIGN.md) for the layout, the reasoning behind it, and
-the questions still open. The work itself is tracked in `.pidly/`, using pidly.
+Early, but whole. The format is settled and the script implements every
+command it is meant to have — `init`, `new`, `claim`, `release`, `status`,
+`reap`, `edit`, `close`, `reopen`, `list`, `tree`, `check`, `agents` — each
+of them something a person could have done with `mkdir`, `mv` and an editor.
+See [docs/DESIGN.md](docs/DESIGN.md) for the layout, the reasoning behind it,
+and the questions still open. The work itself is tracked in `.pidly/`, using
+pidly.
 
 ## Getting started
 
@@ -133,7 +137,8 @@ machine rather than to the project.
 
 ## Reading the tracker
 
-Until the `pidly` script exists, these are the primitives it will wrap:
+These are the primitives the script wraps. They are also the fallback: in a
+checkout where pidly was never installed, this is the whole interface.
 
 ```sh
 # every open ticket, at any depth, never descending into finished work

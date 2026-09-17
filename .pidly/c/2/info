@@ -1,0 +1,30 @@
+claim:
+needs: 1
+title: Write the pidly shell script
+effort: L
+area: cli
+
+A single POSIX shell script providing the ergonomics layer over the format.
+Not a runtime dependency: every command must be something a person could
+have done by hand with mkdir, mv, and an editor, leaving the repository
+byte-identical.
+
+The one exception is claiming, which needs the lock in 8 to be safe under
+concurrent agents. Everything else stays hand-doable.
+
+Subcommands are broken out as child tickets. 13 is the entry point for a
+project that has no tracker yet.
+
+Done. Every subcommand is implemented and closed under this ticket: new (7),
+claim/release and the lock (8), list/tree/check (9), edit (10), reopen (11),
+reap (12), init (13), handoff (14), and two that came out of building them —
+test concurrency as a machine property (15) and closed-ness matched relative
+to .pidly (22). close came in with 11, since they are one move each way.
+
+The acceptance test held for all of them: every command is something a
+person could have done with mkdir, mv and an editor, leaving the repository
+byte-identical. Claiming is the exception the ticket allowed for, and it is
+the only thing behind the lock.
+
+1655 lines of POSIX shell, 12 suites, 258 cases. What is left is the
+workflow around the script rather than the script: 6, 17 and 23.
