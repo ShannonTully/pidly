@@ -1,28 +1,32 @@
 claim:
 needs:
-title: Attachments: durable results inside a ticket
-desc:26
-A subagent's output is ephemeral — it lands in the lead agent's context,
-gets summarised, and is gone at the next compaction. Wanting a file for it
-is right; making it a ticket is not.
+title: Attachments: retracted
+desc:30
+Retracted. An earlier revision made any file in a ticket directory an
+attachment, on the grounds that a ticket is a directory and the affordance
+was free. It was permission, not a mechanism, and for agents permission
+without convention produces inconsistency.
 
-A ticket is a directory, so any other file in it is an attachment:
-.pidly/7/review.md sits with the work it documents and is committed with it.
-Verified harmless — a file attachment does not appear in the tree scan, does
-not affect numbering, and is not counted as a ticket.
+Three reasons it was wrong. No naming convention, so a reading agent has to
+ls and guess, which is the unbounded poking the format exists to prevent.
+Nothing in info announces an attachment, so a bounded read misses it, and
+the obvious fix — a field listing them — is derived data that can drift,
+which desc: already is. And the location is wrong: an artifact worth keeping
+is usually about the code, not the ticket, so it belongs next to the code
+where everyone finds it and where closing the ticket does not archive it.
 
-Attachments must be files, not directories. A directory is read as a child
-ticket, so .pidly/7/notes/ becomes a phantom with no info file. Added to 9:
-check rejects any directory in a ticket that is neither a number nor c.
+The need behind it was real. A subagent's output is ephemeral, and the
+answer is that findings go in the body of the ticket it worked on, written
+before the context is gone. desc: already bounds a long body, so it costs
+only the agent that committed to the ticket. A standalone artifact goes in
+the repo and the body references the path.
 
-Most of the time no attachment is needed. A subagent usually worked on an
-existing ticket, so its findings belong in that ticket's body via pidly
-edit. Attachments are for results too big for a body, or that are their own
-artifact.
+What survives is one rule, kept in 9 because the tree scan needs it
+regardless: a directory inside a ticket that is neither a number nor c is
+invalid, since the scan reads it as a phantom ticket.
 
-Never deleted and kept forever in closed trees, so the same test applies as
-for tickets: attach what is worth having tomorrow.
-
-Done: documented in the reference and the design; the check rule is 9's.
+This also raises the priority of 10 — writing findings into a body by hand
+means fixing desc: by hand, which is the drift the format is worst at
+detecting.
 effort: S
 area: format

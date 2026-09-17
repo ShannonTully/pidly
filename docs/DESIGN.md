@@ -128,37 +128,39 @@ resolution it used to carry. Git records when the move happened and in which
 commit, which covers the common case; a project that wants a written resolution
 can add it as a schema field.
 
-## Attachments
+## Where results go
 
-A ticket is a directory, and until now only `info` and child tickets lived
-in it. Any other **file** there is an attachment: `.pidly/7/review.md` sits
-with the work it documents, is committed with it, and is found by anyone who
-opens the ticket. This costs nothing to support — a file attachment does not
-appear in the tree scan, does not affect numbering, and is not counted as a
-ticket.
+A subagent's output is ephemeral — it lands in the lead agent's context, is
+summarised, and is gone at the next compaction. That is a real problem, and
+the answer is that findings go in the **body** of the ticket the subagent
+worked on, written before the context is lost. `desc:` already bounds a long
+body, so it costs only the agent that committed to the ticket, not anyone
+scanning.
 
-**Attachments are files, never directories.** A directory inside a ticket is
-read as a child, so `notes/` becomes a phantom ticket with no `info`. That is
-a rule `check` enforces rather than something the format can prevent.
+A standalone artifact goes in the repo, and the body references it by path.
 
-The motivating case is a subagent's output, which is otherwise ephemeral —
-it lands in the lead agent's context, gets summarised, and is gone at the
-next compaction. The instinct to give it a file is right. Giving it a
-*ticket* is not: a ticket created and closed in the same breath is a log
-entry wearing a ticket costume, and it costs a number that can never be
-reused, in a tracker that never deletes.
+An earlier draft made any file in a ticket directory an attachment —
+`.pidly/7/review.md` — on the grounds that a ticket is a directory and the
+affordance was free. It was withdrawn, for three reasons worth keeping:
 
-Most of the time no attachment is needed either. A subagent usually worked
-on a ticket that already exists, so its findings belong in that ticket's
-body. The attachment is for a result too big for a body, or one that is its
-own artifact — a review, a benchmark, a transcript.
+- **No convention.** Everything else here is fixed: line 1 is the claim, the
+  file is always `info`. An attachment is whatever the writing agent named
+  it, so a reading agent has to `ls` and guess — the unbounded poking the
+  format exists to prevent.
+- **Nothing announces it.** A reader taking the header and the body gets no
+  signal that another file exists. The obvious fix, a field listing them, is
+  derived data that can drift, and `desc:` is already one of those.
+- **Wrong location.** An artifact worth keeping is usually about the *code*,
+  not the ticket. A parser review belongs next to the parser, where everyone
+  finds it; filed in a ticket it is visible only to that ticket's readers,
+  and closing the ticket drags it into `c/` while the parser stays put.
 
-The honest cost: attachments are never deleted and closed trees keep them
-forever, so a habit of dumping large output into tickets grows the
-repository without bound. The same test applies as for tickets — attach what
-is worth having tomorrow.
+So attachments were neither in the repo where artifacts are findable nor in
+the body where they are read. What survives is the rule `check` enforces
+anyway: a directory inside a ticket that is neither a number nor `c` is
+invalid, because the tree scan reads it as a phantom ticket.
 
-## Names
+## Names## Names
 
 **A ticket's name is one number, unique across the whole project, never
 zero-padded and never reused.** Parentage is not in the name; it's the path.
