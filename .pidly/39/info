@@ -4,7 +4,7 @@ title: Audit what still has to be done by hand
 effort: M
 area: cli
 created: 2026-09-17T06:54:30Z
-updated: 2026-09-17T07:03:09Z
+updated: 2026-09-17T07:06:42Z
 
 Two properties, and they are not the same one:
 
@@ -15,75 +15,65 @@ Two properties, and they are not the same one:
   should never have to reach past the CLI to get ordinary work done. This is
   not true today and nobody has ever listed the gaps.
 
-The audit is the inverse of the reference: every hand idiom documented in
-.pidly/README.md is a claim about what the format can do, so each one should
-have a command beside it, or a written reason it does not.
-
-Known gaps, as a starting list rather than the answer:
-
-- needs: is edited by hand. There is no command to add or drop a
-  dependency, and it is line 2 — the line the takeable scan depends on.
-- Re-parenting is a mv. Nothing stops that mv landing an open ticket inside
-  a closed tree; check reports it afterwards, which is the wrong end.
-- The title is line 3, edited in the editor or with sed. No pidly title.
-- A field cannot be set from the CLI at all (25).
-- There is no pidly show. Reading one ticket is cat, or the awk idiom for a
-  bounded read, which is exactly the kind of thing a command should own.
-- list is open-only. There is no way to ask what closed, or what closed
-  recently, without find or git.
-- Nothing searches bodies. bd has search; pidly has grep -r, which is fine
-  until an agent has to know to exclude c/.
-- Bulk anything: closing several tickets, or setting a field across a
-  selection, is a shell loop.
-- Moving a ticket between two trackers is a mv plus a registry entry by
-  hand, and the numbers will collide.
-
-Three outcomes per item, and the third is a real answer: a command exists, a
-command should exist and here is its ticket, or this stays manual on
-purpose. Deleting a ticket is the model for the third — it is deliberately
-not a command and never will be.
-
-Where a command is added, the reference must keep documenting the hand form
-beside it. The commands are the convenient path; find, sed and mv are the
-guaranteed one, and a command that quietly becomes the only way to do
-something breaks the first property while satisfying the second.
-
-Done when every operation in the reference and every gap above has one of
-the three answers, the gaps worth closing are child tickets of this one, and
-the reference and the command set agree with each other.
-
 The test to apply: any bash a human or an agent writes to interact with
 tickets is a missing command. Not "could pidly do this" but "did someone
 have to write a loop".
 
-This session is the evidence, and these are the commands actually typed
-while working in this tracker, each of them a gap:
+The evidence is b5444d3..373a546, nineteen commits on 2026-09-16 and
+2026-09-17 that implemented 4, 10, 11, 12, 17 and 22, closed 2, and opened
+23 through 40. Everything below was needed during that work and has no
+command today. The operation is the fact; the suggested name is not.
 
-  find .pidly -type d -name 17            resolve a number to a path, over
-                                          and over, because nothing prints it
-  cat .pidly/2/11/info                    read one ticket
-  sed -i '3a effort: M\narea: cli'        add fields to a ticket new just made
-  sed -i '3s/.*/title: .../'              retitle 28
-  sed -n 's/^created: //p' <path>/info    read one field from one ticket
-  for n in 1 7 17 23; do ... done         read one field from several
-  find .pidly -name info | while read f;  list number, claim and title
-    do sed -n 1p; sed -n 3p; done         together, which no view prints
-  awk 'NR>3 {if($0=="")exit;print}'       read the field block
-  mkdir -p .pidly/c && mv .pidly/2 ...    close, before close existed
+  operation                     what it takes today
+  --------------------------------------------------------------------
+  resolve a number to a path    find .pidly -type d -name 17
+  read one ticket               cat "$(find .pidly -type d -name 11)/info"
+  read one field, one ticket    sed -n 's/^created: //p' <path>/info
+  read one field, many tickets  a for loop around the above (27 covers this)
+  read the field block          awk 'NR>3 { if ($0=="") exit; print }'
+  set a field on a new ticket   sed -i '3a effort: M\narea: cli'
+  retitle                       sed -i '3s/.*/title: .../'
+  add or drop a dependency      sed -i '2s/.*/needs: 24/'
+  number, claim and title       find .pidly -name info | while read f, then
+    in one listing               sed -n 1p and sed -n 3p per file
+  re-parent a ticket            mv, with nothing checking where it lands
+  what closed, or closed last   find, or git log
+  search bodies                 grep -r, and knowing to exclude c/
+  anything in bulk              a shell loop
 
-The last one is the pattern to notice: it stopped appearing the day 4
-landed. Every other line above is still the only way to do that thing.
+Two of those are worth singling out. Setting a field on a ticket new just
+made happened for every one of the eighteen tickets opened in that range —
+it is the most repeated manual step in the tracker's history, and 24 and 25
+are why. And resolving a number to a path was needed to do almost anything
+else, including by the audit's own commands above.
 
-Your example — "what is the average effort across my open tickets" — is 27
-plus arithmetic: one command hands over every effort value with its number,
-and the agent does the rest. That is the line this audit should draw and
-then hold. pidly hands over data in one pass; it does not compute
-statistics, and it does not grow a query language. The reason is not purity:
-a tally is one shell pipeline over well-formed output, and every aggregate
-pidly owned would be one someone else wanted differently.
+The pattern to aim for: mkdir -p .pidly/c && mv .pidly/2 .pidly/c/ appears
+throughout the history until b5444d3, which added close and reopen, and
+never again. That is what closing a gap looks like. Every other line above
+is still the only way.
 
-The other line worth holding is that the wrapper stays thin. Each of these
-is a command over the format, not a new abstraction on top of it — pidly
-path, pidly show, pidly title, pidly needs, pidly move — and every one of
-them must still print, or do, exactly what the hand idiom in the reference
-does.
+The boundary, because it will be tested by the first request that does not
+fit: "what is the average effort across my open tickets" is 27 plus
+arithmetic. One command hands over every effort value with its ticket
+number, and the caller does the rest. pidly hands over data in one pass; it
+does not compute statistics and it does not grow a query language. Not on
+purity grounds — a tally is one pipeline over well-formed output, and every
+aggregate pidly owned would be one somebody wanted differently.
+
+The wrapper stays thin for the same reason. Each of these is a command over
+the format, not an abstraction on top of it, and every one must do exactly
+what the hand idiom in the reference does, with the reference still
+documenting that idiom beside it. A command that quietly becomes the only
+way to do something satisfies the second property by breaking the first.
+
+Three outcomes per item, and the third is a real answer: a command exists, a
+command should exist and here is its ticket, or this stays manual on
+purpose. Deleting a ticket is the model for the third — deliberately not a
+command, and never will be.
+
+To redo this audit later rather than trust this list: work in the tracker
+for a day and write down every command that does not begin with pidly.
+
+Done when every operation in the reference and every row above has one of
+the three answers, the gaps worth closing are child tickets of this one, and
+the reference and the command set agree with each other.
