@@ -3,6 +3,8 @@ needs: 7
 title: pidly list / tree / check
 effort: L
 area: cli
+created: 2026-09-17T04:43:59Z
+updated: 2026-09-17T05:25:48Z
 
 Read-only views.
 

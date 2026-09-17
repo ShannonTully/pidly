@@ -609,6 +609,54 @@ recent stop rather than growing into an unread log.
 This also covers what closing lost when the marker file went away: a project
 wanting a written resolution has somewhere to put one.
 
+**`created` is pidly's field, not the project's.** It is written by `new`,
+sits in the field block like any other, and is valid whether or not
+`schema.md` declares it — otherwise every tracker that predates the field
+would fail `check` until someone edited a file the project owns.
+
+It records something no other part of the format carries. A path gives
+identity, parentage and state; the registry gives the number; `git` gives
+history, but only to a checkout that has it, and only at the cost of a `log`
+per ticket. So `created` is not a second copy of anything, which is the test
+that `desc:` failed: a field that duplicates something in the same file can
+disagree with it, and a field that records an event cannot.
+
+Nothing updates it, and it is ISO-8601 UTC so lexical order is chronological
+order — the same reason lease expiries are.
+
+`init` backfills a missing one from the commit that added the file, and from
+the file's mtime outside a repo. That dating uses `git log --follow`, because
+closing is a move and a move without it reads as an add: every finished
+ticket would be dated the day it finished. A ticket it cannot date keeps no
+`created` line at all — a guess that cannot be told apart from a record is
+worse than the gap it fills.
+
+**`updated` is maintained, and that makes it the one field that can lie.**
+Every pidly command that writes to an info file bumps it; `close` and
+`reopen` do not, because they move a directory without opening the file, and
+a hand-edit cannot bump anything at all. So it means *when pidly last wrote
+here*, which is a good proxy for activity and not the same as mtime.
+
+This is the trade `desc:` was rejected for, taken deliberately. The
+difference is what a wrong value costs. A stale `desc:` broke a bounded read
+— the body was cut short and nothing said so. A stale `updated` makes one
+ticket look quieter than it is in one query, and the query is a prompt for
+attention rather than an input to anything. The alternative was deriving it
+from `git log` per ticket at query time: always truthful, and useless in a
+checkout without history, which is exactly the situation pidly is meant to
+survive.
+
+`pidly list --stale 7d` is what the field is for. Without it the field is
+dead weight, and without the field the query is a `git log` per ticket. It
+takes the same durations a lease does, lists the oldest first, and includes
+tickets with no `updated` line at all: an undated ticket cannot be shown to
+be fresh, and the question being asked is what has been forgotten.
+
+No `closed` field. Where a ticket is *is* whether it is closed, and a second
+record of that can disagree with the first — `reopen` would have to clear it,
+and a hand-run `mv` never would. The date of a close is the commit that made
+the move.
+
 **Priority is a project field, not a structural one.** The header earns its
 fixed positions by answering *can I start this?* in two lines, and priority
 doesn't help with that — it answers *which of these should I pick?*, a sort over
@@ -712,6 +760,14 @@ finished: `claim` sees nothing blocked, `list` offers everything as ready.
 The failure is silent and in the direction that loses work, which is why the
 test suite now runs a checkout at `$TMPDIR/c/proj`. The rule is written once,
 in `in_closed`, because it was wrong in three places at once.
+
+**A loop's exit status becomes its caller's.** `init`'s backfill ended with
+`[ "$did" = yes ] && printf ... >> log`, which is an AND-list `set -e`
+ignores — but it was the last command in a `while` body, so its status became
+the loop's, the loop was a pipeline, and the pipeline was a plain command in
+`cmd_init`. Every `init` with nothing left to date exited 1. The fix is an
+`if`, which is 0 when its condition is false. The general rule: an AND-list
+is only exempt from `set -e` where it stands, not where its status ends up.
 
 **`tree` is iterative, not recursive.** A recursive shell function cannot
 hold loop state: the inner call clobbers the outer one's cursor, and

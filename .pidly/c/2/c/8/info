@@ -3,6 +3,8 @@ needs: 1
 title: pidly claim / release, and the lock
 effort: M
 area: cli
+created: 2026-09-17T03:26:25Z
+updated: 2026-09-17T05:25:48Z
 
 claim writes the agent's pid into line 1; release blanks it back to "claim:".
 Both rewrite info, as does edit, so all three serialize behind a lock.

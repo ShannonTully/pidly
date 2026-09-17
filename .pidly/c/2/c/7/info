@@ -3,6 +3,8 @@ needs: 1
 title: pidly new
 effort: M
 area: cli
+created: 2026-09-17T03:54:52Z
+updated: 2026-09-17T05:25:48Z
 
 Allocate the next number, create the directory under the target parent, and
 write the four header lines with the schema's required fields stubbed below

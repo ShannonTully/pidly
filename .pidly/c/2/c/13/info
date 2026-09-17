@@ -3,6 +3,8 @@ needs: 5
 title: pidly init
 effort: M
 area: cli
+created: 2026-09-17T04:02:31Z
+updated: 2026-09-17T05:25:48Z
 
 Create a .pidly tree in a project that has none: the directory itself, a
 seeded schema.md documenting the four structural header lines and shipping

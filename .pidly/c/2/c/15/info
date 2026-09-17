@@ -3,6 +3,8 @@ needs:
 title: Make test concurrency configurable
 effort: S
 area: cli
+created: 2026-09-17T04:05:06Z
+updated: 2026-09-17T05:25:48Z
 
 The concurrency tests fork a process per racer. How many a machine tolerates
 is a property of the machine, not of pidly: a proot sandbox falls over well

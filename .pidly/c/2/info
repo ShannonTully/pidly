@@ -3,6 +3,8 @@ needs: 1
 title: Write the pidly shell script
 effort: L
 area: cli
+created: 2026-09-17T05:25:48Z
+updated: 2026-09-17T05:25:48Z
 
 A single POSIX shell script providing the ergonomics layer over the format.
 Not a runtime dependency: every command must be something a person could

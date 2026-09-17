@@ -31,14 +31,28 @@ made of ticket numbers and `c`, so `.pidly/7/12/` is ticket 12 under 7.
 ## The info file
 
 ```
-claim:                     1  empty, or who holds it
-needs: 3 8                 2  tickets that must close before this starts
-title: Short human title   3
-effort: M                  4  project fields, defined in schema.md
-handoff: where I got to    5  ...as many as the schema declares, or none
-                           6  one blank line
-The body, from here        7  ...to the end of the file
+claim:                        1  empty, or who holds it
+needs: 3 8                    2  tickets that must close before this starts
+title: Short human title      3
+created: 2026-09-16T21:43:59Z 4  when the ticket was made
+updated: 2026-09-17T08:02:11Z 5  when pidly last wrote to it
+effort: M                     6  project fields, defined in schema.md
+handoff: where I got to       7  ...as many as the schema declares, or none
+                              8  one blank line
+The body, from here           9  ...to the end of the file
 ```
+
+`created` and `updated` are pidly's own fields rather than the project's, so
+they are valid whether or not `schema.md` mentions them. Both are ISO-8601
+UTC, which sorts lexically. `created` records one event and nothing touches
+it again; `updated` is bumped by every pidly command that writes to the file
+— claim, release, edit, reap — and by nothing else.
+
+That last part is the catch: `close` and `reopen` move the directory without
+opening the file, and an edit made by hand or with `sed` cannot bump
+anything. So `updated` means *when pidly last wrote here*, which is a good
+proxy for activity and not the same as the file's real mtime. Use `pidly
+edit` if you want the stamp to follow your edit.
 
 Read only as far as you need:
 
@@ -57,11 +71,17 @@ Appending to a body needs no bookkeeping.
 ## Finding work
 
 ```sh
-pidly list        # ready work: unclaimed and unblocked
-pidly list -a     # every open ticket, with its state
-pidly tree        # the hierarchy, closed tickets marked [x]
-pidly check       # report anything wrong; changes nothing
+pidly list             # ready work: unclaimed and unblocked
+pidly list -a          # every open ticket, with its state
+pidly list --stale 7d  # open work pidly has not written to in that long
+pidly tree             # the hierarchy, closed tickets marked [x]
+pidly check            # report anything wrong; changes nothing
 ```
+
+`--stale` takes the same durations a lease does — `90s`, `30m`, `2h`, `7d` —
+and lists the oldest first. A ticket with no `updated` line is listed too,
+with `-` for the date: it cannot be shown to be fresh, and the question is
+what has been forgotten.
 
 By hand, or when pidly is not installed:
 
@@ -154,11 +174,16 @@ lines:
 
 ```sh
 mkdir .pidly/7/14
-printf 'claim:\nneeds:\ntitle: %s\n\n%s\n' "Do the thing" "Why." \
-  > .pidly/7/14/info
+now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+printf 'claim:\nneeds:\ntitle: %s\ncreated: %s\nupdated: %s\n\n%s\n' \
+  "Do the thing" "$now" "$now" "Why." > .pidly/7/14/info
 printf '%s %s\n' "$(head -c8 /dev/urandom | od -An -tx1 | tr -d ' ')" \
   "Do the thing" > .pidly/.n/14
 ```
+
+Leaving the timestamps out is not an error — `pidly init` fills in missing
+ones from git, or the file's mtime outside a repo, the same way it backfills
+a missing registry entry.
 
 That last file is the **number registry**. It is what makes two branches
 issuing the same number a merge conflict instead of a silent duplicate, so a

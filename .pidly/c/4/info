@@ -3,6 +3,8 @@ needs:
 title: pidly close and reopen
 effort: M
 area: cli
+created: 2026-09-17T03:06:47Z
+updated: 2026-09-17T04:53:17Z
 
 Closing is a move, at every depth: a child goes into its parent's c/, a root
 goes into .pidly/c/. There is no marker file and no status field, so location

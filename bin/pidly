@@ -159,19 +159,43 @@ iso_at() {
 	die 'cannot compute a lease expiry: no usable date(1)'
 }
 
-# PIDLY_LEASE as 90s / 30m / 2h / 3d, or bare seconds.
-lease_expiry() {
+# 90s / 30m / 2h / 3d, or bare seconds, as a number of seconds. Returns 1
+# rather than dying: callers know what the value was for and say so.
+duration_seconds() {
 	case $1 in
-	*s) _le_n=${1%s}; _le_m=1 ;;
-	*m) _le_n=${1%m}; _le_m=60 ;;
-	*h) _le_n=${1%h}; _le_m=3600 ;;
-	*d) _le_n=${1%d}; _le_m=86400 ;;
-	*)  _le_n=$1;     _le_m=1 ;;
+	*s) _du_n=${1%s}; _du_m=1 ;;
+	*m) _du_n=${1%m}; _du_m=60 ;;
+	*h) _du_n=${1%h}; _du_m=3600 ;;
+	*d) _du_n=${1%d}; _du_m=86400 ;;
+	*)  _du_n=$1;     _du_m=1 ;;
 	esac
-	case $_le_n in
-	''|*[!0-9]*) die "PIDLY_LEASE=$1 is not a duration (e.g. 90s, 30m, 2h)" ;;
+	case $_du_n in
+	''|*[!0-9]*) return 1 ;;
 	esac
-	iso_at "$(( $(date -u +%s) + _le_n * _le_m ))"
+	printf '%s\n' "$((_du_n * _du_m))"
+}
+
+lease_expiry() {
+	_le_s=$(duration_seconds "$1") ||
+		die "PIDLY_LEASE=$1 is not a duration (e.g. 90s, 30m, 2h)"
+	iso_at "$(( $(date -u +%s) + _le_s ))"
+}
+
+# An ISO-8601 UTC timestamp, or nothing at all. Both are fine: the field is
+# optional, and what is not fine is something in between.
+is_iso() {
+	[ -n "$1" ] || return 0
+	printf '%s\n' "$1" |
+		grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
+}
+
+# Is $1 strictly before $2? Both ISO-8601 UTC, where lexical order is
+# chronological order, so this is a string comparison and needs no date
+# arithmetic — which is the half of date(1) that is not portable.
+before() {
+	[ -n "$1" ] && [ -n "$2" ] || return 1
+	[ "$1" = "$2" ] && return 1
+	[ "$(printf '%s\n%s\n' "$1" "$2" | sort | head -1)" = "$1" ]
 }
 
 # Timestamps are ISO-8601 UTC, so lexical order is chronological order.
@@ -322,7 +346,7 @@ info_faults() {
 	# Everything between there and the first blank must be a field the
 	# schema declares. A stray line here is usually a body that lost its
 	# blank separator.
-	_if_decl=$(schema_fields "$_if_r")
+	_if_decl=$(known_fields "$_if_r")
 	awk 'NR>3 { if ($0 == "") exit; print }' "$_if_f" | while read -r _if_l; do
 		case $_if_l in
 		*:*) _if_k=${_if_l%%:*} ;;
@@ -331,6 +355,15 @@ info_faults() {
 		printf '%s\n' "$_if_decl" | grep -qx "$_if_k" ||
 			printf "%s: field '%s' is not in schema.md\n" "$_if_n" "$_if_k"
 	done
+
+	# A timestamp that is not one is worse than none: it sorts wrong and
+	# reads right. ISO-8601 UTC, so lexical order is chronological order.
+	_if_c=$(get_field "$_if_f" created)
+	_if_u=$(get_field "$_if_f" updated)
+	is_iso "$_if_c" || printf '%s: created is not an ISO-8601 UTC timestamp\n' "$_if_n"
+	is_iso "$_if_u" || printf '%s: updated is not an ISO-8601 UTC timestamp\n' "$_if_n"
+	before "$_if_u" "$_if_c" &&
+		printf '%s: updated is before created\n' "$_if_n"
 
 	schema_required "$_if_r" | while read -r _if_req; do
 		[ -n "$_if_req" ] || continue
@@ -403,6 +436,7 @@ cmd_claim() {
 		_who="$_who $(lease_expiry "$PIDLY_LEASE")"
 	fi
 	set_line "$_d/info" 1 "claim:$_who"
+	mark_updated "$_d/info"
 	unlock "$_d"
 	if [ "$_state" = expired ]; then
 		printf '%s claimed by %s (previous lease had expired)\n' "$1" "$_who"
@@ -454,6 +488,7 @@ cmd_release() {
 	fi
 	set_line "$_d/info" 1 'claim:'
 	[ -n "$_note" ] && set_field "$_d/info" handoff "$_note"
+	mark_updated "$_d/info"
 	unlock "$_d"
 	printf '%s released\n' "$1"
 	return 0
@@ -505,6 +540,7 @@ reap_one() {
 		return 1
 	fi
 	set_line "$_rp_d/info" 1 'claim:'
+	mark_updated "$_rp_d/info"
 	unlock "$_rp_d"
 	parse_claim "$_rp_h"
 	printf '%s: cleared the claim by %s, which is gone\n' "$_rp_n" "$_c_holder"
@@ -599,6 +635,7 @@ cmd_edit() {
 	else
 		set_body "$_f" "$_text"
 	fi
+	mark_updated "$_f"
 	unlock "$_d"
 	printf '%s updated\n' "$1"
 	return 0
@@ -643,6 +680,7 @@ edit_in_editor() {
 	_ee_t="$_ee_f.$$"
 	cat "$_ee_draft" > "$_ee_t"
 	mv "$_ee_t" "$_ee_f"
+	mark_updated "$_ee_f"
 	unlock "$_ee_d"
 	rm -f "$_ee_draft"
 	printf '%s updated\n' "$_ee_n"
@@ -767,14 +805,28 @@ made of ticket numbers and `c`, so `.pidly/7/12/` is ticket 12 under 7.
 ## The info file
 
 ```
-claim:                     1  empty, or who holds it
-needs: 3 8                 2  tickets that must close before this starts
-title: Short human title   3
-effort: M                  4  project fields, defined in schema.md
-handoff: where I got to    5  ...as many as the schema declares, or none
-                           6  one blank line
-The body, from here        7  ...to the end of the file
+claim:                        1  empty, or who holds it
+needs: 3 8                    2  tickets that must close before this starts
+title: Short human title      3
+created: 2026-09-16T21:43:59Z 4  when the ticket was made
+updated: 2026-09-17T08:02:11Z 5  when pidly last wrote to it
+effort: M                     6  project fields, defined in schema.md
+handoff: where I got to       7  ...as many as the schema declares, or none
+                              8  one blank line
+The body, from here           9  ...to the end of the file
 ```
+
+`created` and `updated` are pidly's own fields rather than the project's, so
+they are valid whether or not `schema.md` mentions them. Both are ISO-8601
+UTC, which sorts lexically. `created` records one event and nothing touches
+it again; `updated` is bumped by every pidly command that writes to the file
+— claim, release, edit, reap — and by nothing else.
+
+That last part is the catch: `close` and `reopen` move the directory without
+opening the file, and an edit made by hand or with `sed` cannot bump
+anything. So `updated` means *when pidly last wrote here*, which is a good
+proxy for activity and not the same as the file's real mtime. Use `pidly
+edit` if you want the stamp to follow your edit.
 
 Read only as far as you need:
 
@@ -793,11 +845,17 @@ Appending to a body needs no bookkeeping.
 ## Finding work
 
 ```sh
-pidly list        # ready work: unclaimed and unblocked
-pidly list -a     # every open ticket, with its state
-pidly tree        # the hierarchy, closed tickets marked [x]
-pidly check       # report anything wrong; changes nothing
+pidly list             # ready work: unclaimed and unblocked
+pidly list -a          # every open ticket, with its state
+pidly list --stale 7d  # open work pidly has not written to in that long
+pidly tree             # the hierarchy, closed tickets marked [x]
+pidly check            # report anything wrong; changes nothing
 ```
+
+`--stale` takes the same durations a lease does — `90s`, `30m`, `2h`, `7d` —
+and lists the oldest first. A ticket with no `updated` line is listed too,
+with `-` for the date: it cannot be shown to be fresh, and the question is
+what has been forgotten.
 
 By hand, or when pidly is not installed:
 
@@ -890,11 +948,16 @@ lines:
 
 ```sh
 mkdir .pidly/7/14
-printf 'claim:\nneeds:\ntitle: %s\n\n%s\n' "Do the thing" "Why." \
-  > .pidly/7/14/info
+now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+printf 'claim:\nneeds:\ntitle: %s\ncreated: %s\nupdated: %s\n\n%s\n' \
+  "Do the thing" "$now" "$now" "Why." > .pidly/7/14/info
 printf '%s %s\n' "$(head -c8 /dev/urandom | od -An -tx1 | tr -d ' ')" \
   "Do the thing" > .pidly/.n/14
 ```
+
+Leaving the timestamps out is not an error — `pidly init` fills in missing
+ones from git, or the file's mtime outside a repo, the same way it backfills
+a missing registry entry.
 
 That last file is the **number registry**. It is what makes two branches
 issuing the same number a merge conflict instead of a silent duplicate, so a
@@ -1225,6 +1288,9 @@ cmd_new() {
 		printf 'claim:\n'
 		printf 'needs:%s\n' "${_needs:+ $_needs}"
 		printf 'title: %s\n' "$_title"
+		_now=$(now_iso)
+		printf 'created: %s\n' "$_now"
+		printf 'updated: %s\n' "$_now"
 		schema_required "$_r" | while read -r _f; do printf '%s:\n' "$_f"; done
 		if [ ! -t 0 ]; then
 			_body=$(cat)
@@ -1264,7 +1330,7 @@ schema_text() {
 # Ticket schema
 
 Every ticket is a directory; its content is the file `info` inside it.
-Four header lines are structural and always present, in this order:
+Three header lines are structural and always present, in this order:
 
 | line | field | meaning |
 |---|---|---|
@@ -1278,8 +1344,39 @@ end of the file. Add your own rows; `pidly check` enforces them.
 
 | field   | required | values                                |
 |---------|----------|---------------------------------------|
+| created | no       | ISO-8601 UTC; pidly new writes it     |
+| updated | no       | ISO-8601 UTC; every pidly write bumps it |
 | handoff | no       | one line: where the last agent got to |
 SCHEMA
+}
+
+# When a file first appeared, as ISO-8601 UTC. The commit that added it if
+# this is a git checkout, and the file's own mtime if it is not — which is
+# only the same thing for a ticket nobody has edited since.
+#
+# Both are reconstructions of something the format did not record, which is
+# why only init does this, only for a ticket with no created line, and never
+# for one it is about to write itself.
+first_seen() {
+	# --follow, because closing is a move: without it the commit that put
+	# the ticket in a c/ looks like the commit that created it, and every
+	# finished ticket is dated the day it finished.
+	_fs_w=$(TZ=UTC0 git log --follow -1 --diff-filter=A --format=%cd \
+		--date=format-local:%Y-%m-%dT%H:%M:%SZ -- "$1" 2>/dev/null) || _fs_w=""
+	[ -n "$_fs_w" ] ||
+		_fs_w=$(TZ=UTC0 date -r "$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null) || _fs_w=""
+	printf '%s\n' "$_fs_w"
+}
+
+# When a file last changed, as ISO-8601 UTC: the most recent commit touching
+# it, or its mtime outside a repo. Used only to backfill updated, and only
+# once — after that pidly maintains the field itself.
+last_seen() {
+	_ls_w=$(TZ=UTC0 git log --follow -1 --format=%cd \
+		--date=format-local:%Y-%m-%dT%H:%M:%SZ -- "$1" 2>/dev/null) || _ls_w=""
+	[ -n "$_ls_w" ] ||
+		_ls_w=$(TZ=UTC0 date -r "$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null) || _ls_w=""
+	printf '%s\n' "$_ls_w"
 }
 
 # The nearest .pidly at or above a directory, or nothing.
@@ -1330,6 +1427,38 @@ cmd_init() {
 	[ -f "$_ir/.backfilled.$$" ] &&
 		{ _added=$(wc -l < "$_ir/.backfilled.$$"); rm -f "$_ir/.backfilled.$$"; }
 
+	# Date the tickets that predate the timestamps, or that were written by
+	# hand. A ticket nothing can date keeps no line at all: a guess that
+	# cannot be told apart from a record is worse than the gap it fills.
+	_dated=0
+	map "$_ir" | while read -r _num _path; do
+		# Unreadable is not the same as undated. A file we cannot read is
+		# one we must not rewrite, so it is skipped whole.
+		[ -r "$_path/info" ] || continue
+		_did=no
+		_made=$(get_field "$_path/info" created)
+		if [ -z "$_made" ]; then
+			_made=$(first_seen "$_path/info")
+			[ -n "$_made" ] &&
+				{ set_field "$_path/info" created "$_made"; _did=yes; }
+		fi
+		if [ -z "$(get_field "$_path/info" updated)" ]; then
+			_when=$(last_seen "$_path/info")
+			# A file whose history starts after the ticket does — a
+			# move, a rewrite — would otherwise be updated before it
+			# was created, which check reads as damage.
+			before "$_when" "$_made" && _when=$_made
+			[ -n "$_when" ] &&
+				{ set_field "$_path/info" updated "$_when"; _did=yes; }
+		fi
+		# An if, not an && list: this is the last command in the loop
+		# body, so its status becomes the loop's, and the loop's becomes
+		# init's. A ticket that needed no dating is not a failure.
+		if [ "$_did" = yes ]; then printf 'x\n' >> "$_ir/.dated.$$"; fi
+	done
+	[ -f "$_ir/.dated.$$" ] &&
+		{ _dated=$(wc -l < "$_ir/.dated.$$"); rm -f "$_ir/.dated.$$"; }
+
 	if [ "$_fresh" = yes ]; then
 		printf 'created %s\n' "$_ir"
 	else
@@ -1338,11 +1467,31 @@ cmd_init() {
 	printf 'schema.md %s, .gitignore written\n' "$_schema"
 	[ "${_added:-0}" -gt 0 ] &&
 		printf 'registered %s number(s) that had no entry\n' "$_added"
+	[ "${_dated:-0}" -gt 0 ] &&
+		printf 'dated %s ticket(s) that had no timestamps\n' "$_dated"
 	cmd_agents "$@"
 	return 0
 }
 
 # --- views -----------------------------------------------------------------
+
+# Field names a ticket may carry: what the schema declares, plus the ones
+# pidly writes itself.
+#
+# created is pidly's rather than the project's. It is a fact about the ticket
+# that nothing else in the file records and that no later edit can make
+# false, so new writes it whether or not schema.md has heard of it — an older
+# tracker gets dated tickets without its schema, which the project owns,
+# being rewritten underneath it.
+known_fields() {
+	printf 'created\nupdated\n'
+	schema_fields "$1"
+}
+
+# Record that a ticket changed. Called by everything that writes to info,
+# and by nothing else: close and reopen move a directory without opening the
+# file, and a hand-edit cannot call anything at all. Callers hold the lock.
+mark_updated() { set_field "$1" updated "$(now_iso)"; }
 
 # Field names the schema declares, one per line.
 schema_fields() {
@@ -1393,12 +1542,42 @@ survey() {
 }
 
 cmd_list() {
-	_all=no
-	case ${1:-} in
-	-a|--all) _all=yes; shift ;;
-	esac
-	[ $# -eq 0 ] || die 'usage: pidly list [-a]'
+	_all=no _stale=""
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-a|--all) _all=yes; shift ;;
+		-s|--stale) [ $# -ge 2 ] || die 'usage: pidly list [-a] [--stale 7d]'
+		            _stale=$2; shift 2 ;;
+		-*) die "unknown option $1" ;;
+		*)  break ;;
+		esac
+	done
+	[ $# -eq 0 ] || die 'usage: pidly list [-a] [--stale 7d]'
 	_r=$(root)
+
+	# Work nobody has touched lately. This is the one query that reads a
+	# field rather than the first three lines, which is what the field is
+	# for: without it the same question is a git log per ticket.
+	if [ -n "$_stale" ]; then
+		_secs=$(duration_seconds "$_stale") ||
+			die "--stale takes a duration like 90s, 30m, 2h or 7d, not '$_stale'"
+		_cut=$(iso_at "$(( $(date -u +%s) - _secs ))")
+		map "$_r" | while read -r _n _p; do
+			case $_n in ''|*[!0-9]*) continue ;; esac
+			in_closed "$_r" "$_p" && continue
+			[ -f "$_p/info" ] || continue
+			_u=$(get_field "$_p/info" updated)
+			# An undated ticket cannot be shown to be fresh, and the
+			# point of the question is what has been forgotten, so it
+			# is listed rather than assumed well.
+			[ -n "$_u" ] && ! before "$_u" "$_cut" && continue
+			_day=${_u%%T*}
+			[ -n "$_day" ] || _day=-
+			printf '%-5s %-11s %s\n' "$_n" "$_day" \
+				"$(sed -n '3s/^title: //p' "$_p/info")"
+		done | LC_ALL=C sort -k2,2 -k1,1n
+		return 0
+	fi
 	survey "$_r" | sort -n | while IFS='	' read -r _n _st _bl _ti; do
 		if [ "$_all" = no ]; then
 			[ "$_st" = ready ] || continue
@@ -1616,7 +1795,10 @@ usage: pidly <command> [args]
                  appends to it
   close <n>      finish it: move it into its container's c/
   reopen <n>     move it back, reopening any closed ancestors
-  list [-a]      takeable work; -a shows every open ticket with its state
+  list [-a] [--stale 7d]
+                 takeable work; -a shows every open ticket with its state;
+                 --stale shows open work untouched for that long, oldest
+                 first
   tree           the hierarchy, closed tickets marked [x]
   check          report anything wrong; changes nothing, nonzero if it finds
                  something, so it can run in CI

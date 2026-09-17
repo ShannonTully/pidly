@@ -8,6 +8,10 @@ ok() { pass=$((pass+1)); printf '  ok    %s\n' "$1"; }
 no() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; }
 check() { if [ "$2" = "$3" ]; then ok "$1"; else no "$1 (want '$3', got '$2')"; fi; }
 fields() { awk 'NR>3 { if ($0 == "") exit; print }' "$1"; }
+# created carries a timestamp, so assertions about the field block compare
+# against its name rather than its value.
+fieldnames() { fields "$1" | sed 's/:.*/:/'; }
+iso='^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z$'
 body() { awk 'b { print } !b && $0 == "" { b = 1 }' "$1"; }
 nums() { find .pidly -mindepth 1 -type d '!' -name c '!' -name '.*' -printf '%f\n' | sort -n | tr '\n' ' '; }
 
@@ -40,15 +44,17 @@ f=.pidly/5/info
 check "line 1 is an empty claim" "$(sed -n 1p $f)" "claim:"
 check "line 2 is an empty needs" "$(sed -n 2p $f)" "needs:"
 check "line 3 is the title" "$(sed -n 3p $f)" "title: titled"
-check "required schema fields are stubbed" "$(sed -n 4p $f)" "effort:"
+check "the ticket is dated" "$(sed -n '4s/^created: //p' $f | grep -Ec "$iso")" "1"
+check "and stamped as just updated" "$(sed -n '5s/^updated: //p' $f | grep -Ec "$iso")" "1"
+check "required schema fields are stubbed" "$(sed -n 6p $f)" "effort:"
 check "optional ones are not" "$(grep -c '^area:' $f || true)" "0"
-check "an empty body writes no blank line" "$(wc -l < $f)" "4"
+check "an empty body writes no blank line" "$(wc -l < $f)" "6"
 
 printf 'line one\nline two\n' | $PIDLY new "with body" >/dev/null
 f=.pidly/6/info
-check "a blank line separates fields from the body" "$(sed -n 5p $f)" ""
+check "a blank line separates fields from the body" "$(sed -n 7p $f)" ""
 check "the body follows it" "$(body $f | tr '\n' '/')" "line one/line two/"
-check "fields come before the body" "$(fields $f)" "effort:"
+check "fields come before the body" "$(fieldnames $f | tr '\n' ' ')" "created: updated: effort: "
 check "the body ends at the end of the file" "$(tail -1 $f)" "line two"
 
 echo "no derived data"
@@ -59,7 +65,7 @@ before=$(cat $f)
 printf 'appended by hand\n' >> $f
 check "appending to a body needs no other change" \
 	"$(body $f | tr '\n' '/')" "line one/line two/appended by hand/"
-check "fields are unaffected" "$(fields $f)" "effort:"
+check "fields are unaffected" "$(fieldnames $f | tr '\n' ' ')" "created: updated: effort: "
 printf '%s\n' "$before" > $f
 
 printf 'one\n\ntwo\n' | $PIDLY new "blank inside the body" >/dev/null
@@ -69,7 +75,7 @@ printf 'x\nhandoff: not a field, this is body text\n' | \
 	$PIDLY new "field-shaped body line" >/dev/null
 check "a body line that looks like a field stays in the body" \
 	"$(body .pidly/8/info | tail -1)" "handoff: not a field, this is body text"
-check "and is not read as a field" "$(fields .pidly/8/info)" "effort:"
+check "and is not read as a field" "$(fieldnames .pidly/8/info | tr '\n' ' ')" "created: updated: effort: "
 
 echo "placement and needs"
 $PIDLY new -p 1 "a child" </dev/null >/dev/null

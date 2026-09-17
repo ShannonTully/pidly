@@ -1,0 +1,64 @@
+claim:
+needs:
+title: Record created, updated and closed times
+effort: M
+area: format
+created: 2026-09-17T04:17:09Z
+updated: 2026-09-17T05:46:05Z
+
+The format has no timestamps. Beads filters on created, updated and closed
+and has a stale query for work untouched recently, which is exactly what an
+agent supervisor wants. pidly can only answer that with git log per ticket.
+
+Project fields rather than header lines: they do not help answer "can I start
+this?", which is what the header's fixed positions are for.
+
+Open questions. Whether closed time is needed at all, given the close is a
+git commit. Whether updated is maintained by pidly or left to filesystem
+mtime, which is free but does not survive a clone.
+
+Note for whoever implements it: find on this machine is bfs, which rejects
+relative -newermt arguments like '-2 minutes' and wants an ISO timestamp.
+Any staleness query needs to avoid GNU-only find syntax.
+
+Two fields, not three, both pidly's rather than the project's — valid whether
+or not schema.md declares them, so an older tracker gets stamps without a
+file the project owns being rewritten underneath it. ISO-8601 UTC, so
+lexical order is chronological order and no date arithmetic is needed to
+compare them.
+
+created is written once by new and nothing touches it again. It is not a
+copy of anything else in the file, which is the test desc: failed.
+
+updated is bumped by every pidly command that writes to info — claim,
+release, edit, reap — and by nothing else. close and reopen move a directory
+without opening the file, and a hand-edit cannot bump anything, so the field
+means "when pidly last wrote here". That is the lie desc: was rejected for,
+taken deliberately this time: a stale desc: broke a bounded read silently,
+while a stale updated makes one ticket look quiet in one query that exists
+to prompt attention rather than to feed anything.
+
+No closed field. Where a ticket is already answers whether it is closed, and
+a second record can disagree — reopen would have to clear it and a hand-run
+mv never would. The date of a close is the commit that made the move.
+
+pidly list --stale 7d is what updated is for: open work pidly has not
+written to in that long, oldest first, same durations as a lease. A ticket
+with no stamp is listed with "-" rather than assumed fresh.
+
+init backfills both, from git log --follow (--follow because closing is a
+move, and without it every finished ticket is dated the day it finished) and
+from mtime outside a repo. A ticket it cannot date keeps no line at all.
+Unreadable files are skipped whole rather than rewritten.
+
+One shell fault found, now in the design: the backfill loop ended in an
+AND-list, which set -e ignores where it stands but not where its status ends
+up — it became the loop's status, then the pipeline's, then init's, so every
+init with nothing left to date exited 1.
+
+The staleness note in the ticket about bfs rejecting relative -newermt
+arguments did not apply in the end: nothing shells out to find for dates.
+Comparison is lexical on ISO strings.
+
+Done: bin/pidly, covered by tests/times.sh (34 cases), with new.sh and
+edit.sh updated for the extra lines.

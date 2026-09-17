@@ -3,6 +3,8 @@ needs: 2
 title: Replace beads in the clockwork workflow
 effort: L
 area: cli
+created: 2026-09-17T03:06:47Z
+updated: 2026-09-17T04:39:14Z
 
 clockwork.toml and the project's skills are wired to bd. Once the format
 and script are stable, map the concepts across, migrate any existing bd

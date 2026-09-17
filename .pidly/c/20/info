@@ -3,6 +3,8 @@ needs:
 title: Put fields before the body and drop desc:
 effort: M
 area: format
+created: 2026-09-17T04:39:14Z
+updated: 2026-09-17T04:39:14Z
 
 desc: was derived data a hand-edit could falsify, and only check would ever
 notice. It turned out not to be a necessary cost: it existed to serve one

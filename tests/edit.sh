@@ -10,7 +10,9 @@ no() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; }
 check() { if [ "$2" = "$3" ]; then ok "$1"; else no "$1 (want '$3', got '$2')"; fi; }
 has() { if printf '%s' "$2" | grep -qF "$3"; then ok "$1"; else no "$1 (missing '$3' in: $2)"; fi; }
 body() { awk 'b { print } !b && $0 == "" { b = 1 }' .pidly/1/info; }
-head3() { awk 'NR>3 && $0 == "" { exit } { print }' .pidly/1/info; }
+# The header and the project's fields. updated is left out on purpose: pidly
+# maintains it, so a write is meant to move it and nothing else.
+head3() { awk 'NR>3 && $0 == "" { exit } !/^updated: /' .pidly/1/info; }
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
@@ -27,6 +29,8 @@ check "the body is the new one" "$(body)" "A new body.
 
 With a blank line in it."
 check "the header and fields are untouched" "$(head3)" "$before"
+check "except the stamp pidly maintains" \
+	"$(sed -n 's/^updated: //p' .pidly/1/info | wc -l | tr -d ' ')" "1"
 check "check still passes" "$($PIDLY check >/dev/null && echo clean)" "clean"
 
 echo "appending"

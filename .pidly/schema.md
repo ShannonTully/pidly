@@ -15,6 +15,8 @@ end of the file.
 
 | field   | required | values                        |
 |---------|----------|-------------------------------|
+| created | no       | ISO-8601 UTC; pidly new writes it |
+| updated | no       | ISO-8601 UTC; every pidly write bumps it |
 | effort  | no       | S, M, L                       |
 | area    | no       | format, cli, docs             |
 | handoff | no       | one line: where the last agent got to |

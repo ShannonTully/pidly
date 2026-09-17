@@ -3,6 +3,8 @@ needs:
 title: Settle the on-disk format
 effort: M
 area: format
+created: 2026-09-17T03:08:16Z
+updated: 2026-09-17T04:39:14Z
 
 The layout, the header format, and the state model are written up in
 docs/DESIGN.md. What remained was closing the open questions, because

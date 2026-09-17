@@ -3,6 +3,8 @@ needs:
 title: Attachments: retracted
 effort: S
 area: format
+created: 2026-09-17T04:28:34Z
+updated: 2026-09-17T04:39:14Z
 
 Retracted. An earlier revision made any file in a ticket directory an
 attachment, on the grounds that a ticket is a directory and the affordance

@@ -3,6 +3,8 @@ needs:
 title: handoff: what the last agent left behind
 effort: S
 area: format
+created: 2026-09-17T03:59:21Z
+updated: 2026-09-17T05:25:48Z
 
 A place for an agent to record where it got to when it drops a claim without
 finishing, so the next agent does not reconstruct it from the diff.

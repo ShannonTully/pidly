@@ -3,6 +3,8 @@ needs: 1
 title: Claim identity and liveness
 effort: M
 area: format
+created: 2026-09-17T03:38:34Z
+updated: 2026-09-17T04:39:14Z
 
 A pid is meaningful only relative to a process table and only until it is
 recycled, so a claim records pid.starttime@runtime, where runtime is boot id
