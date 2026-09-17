@@ -1078,6 +1078,28 @@ Both lead with the format rather than the CLI, because they have to work for
 an agent in a checkout where `pidly` was never installed. Commands are the
 convenient path; `find`, `sed` and `mv` are the guaranteed one.
 
+**The Claude Code integration is a skill, not a server.** A tool is something
+a model calls with typed arguments, and the only way to add one is an MCP
+server: a running process the client talks to. The premise here is that there
+is nothing to run — a checkout where pidly was never installed is workable
+with `find`, `sed` and `mv`, and Bash already reaches the CLI. Wrapping it
+would add a process and a schema for no new capability. What tools would
+genuinely buy is typed arguments rejected before they run, structured results
+instead of text, and per-command permission gating so `reap` prompts while
+`list` does not; ticket 23 records that, and what would make it worth
+revisiting.
+
+So: a skill for the workflow, three slash commands, and a permissions block
+that allows the commands which cannot lose anything. `pidly claude` writes
+them and `check` compares them, because they are pidly's prose about pidly.
+`settings.json` is the exception — it is the project's file and it is JSON,
+which this script has no business parsing, so pidly writes it only when there
+is none and otherwise prints what to add.
+
+**No hooks.** A hook is enforcement, and in this project enforcement has been
+the operator's job. A hook that fires on every tool call is also a strong
+thing to install on someone's behalf from a tracker command.
+
 **Both are copies, and copies go stale.** `pidly check` regenerates both and
 compares — cheap, since each comes from a single function — so a command that
 changes without its documentation is a finding.

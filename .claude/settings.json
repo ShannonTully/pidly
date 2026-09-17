@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pidly list:*)",
+      "Bash(pidly tree:*)",
+      "Bash(pidly status:*)",
+      "Bash(pidly check:*)",
+      "Bash(pidly field:*)"
+    ]
+  }
+}

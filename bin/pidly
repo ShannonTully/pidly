@@ -1181,6 +1181,29 @@ because the pattern is not in a file you can open:
    followed by a lease expiry, or <agent>@- <expiry>
 ```
 
+## Telling Claude Code about it
+
+```sh
+pidly claude      # writes .claude/skills/pidly/SKILL.md, the slash commands
+                  # and, if there is none, a settings.json that allows the
+                  # read-only commands without a prompt
+```
+
+The skill is the **workflow** — claim before starting, release with `-m` when
+stopping early, close when done — and it points back at this file for the
+rules rather than restating them. The AGENTS.md block is the format; the
+skill is the loop. `/pidly-next`, `/pidly-mine` and `/pidly-drop` are the
+three things worth one keystroke.
+
+Both are generated, and `pidly check` compares them against what would be
+generated now, for the reason every copy here is compared: a copy that drifts
+is worse than no copy. There are no hooks: enforcement is the operator's, and
+a hook that blocks a tool call is a strong thing to install on someone's
+behalf.
+
+Not an MCP server. That is a process, and the premise is that there is
+nothing to run — Bash already reaches the CLI.
+
 ## Finding work
 
 ```sh
@@ -1567,6 +1590,215 @@ cmd_agents() {
 		[ -f "$_f" ] && [ -s "$_f" ] && printf '\n' >> "$_f"
 		agents_block >> "$_f"
 		printf 'added a pidly section to %s, and wrote %s/README.md\n' "$_f" "$_r"
+	fi
+}
+
+# --- Claude Code integration -----------------------------------------------
+#
+# A skill, slash commands and a permissions block. Not an MCP server: that is
+# a running process, and the whole premise is that there is nothing to run —
+# a checkout where pidly was never installed is still workable with find, sed
+# and mv, and Bash already reaches the CLI. What tools would buy is typed
+# arguments, structured results and per-command permission gating; ticket 23
+# records when that would be worth revisiting.
+#
+# Generated, like AGENTS.md and the reference, and compared by check for the
+# same reason: this is pidly's prose about pidly, and a copy that drifts is
+# worse than no copy. What is not generated is enforcement — no hooks. In
+# this project enforcement has been the operator's job, and a hook that
+# blocks a tool call is a strong thing to install on someone's behalf.
+
+# "path function" per line, relative to .claude. Read by the command that
+# writes them and by the check that compares them, so neither can forget one.
+claude_files() {
+	printf '%s\n' \
+		'skills/pidly/SKILL.md claude_skill_text' \
+		'commands/pidly-next.md claude_next_text' \
+		'commands/pidly-mine.md claude_mine_text' \
+		'commands/pidly-drop.md claude_drop_text'
+}
+
+claude_skill_text() {
+	cat <<'SKILL'
+---
+name: pidly
+description: Use when picking up, working on, or finishing work tracked in .pidly/ — claiming a ticket before starting, handing one back, closing one, or asking what there is to do. Covers the workflow; the format itself is in .pidly/README.md.
+---
+
+# pidly
+
+Work lives in `.pidly/` as plain files. This skill is the loop an agent
+follows; **the rules of the format are in `.pidly/README.md`**, which is
+generated and kept in step by `pidly check`. Read it when you need a rule you
+do not already know, rather than guessing from the file layout.
+
+## The loop
+
+```sh
+pidly list                    # ready work: unclaimed, unblocked, not deferred
+pidly claim 7                 # take it BEFORE you start
+# ...do the work...
+pidly close 7                 # finished
+```
+
+If you stop before finishing, say where you got to. The next agent reads it:
+
+```sh
+pidly release -m "Parser works; the lexer still loses nested quotes." 7
+```
+
+## Rules that matter more than they look
+
+- **Claim before starting.** A claim is how two agents avoid the same ticket.
+  It records your process, so a claim left by an agent that died is
+  detectable — `pidly check` reports it and `pidly reap` clears it.
+- **Never delete a ticket.** Numbers are never reused, and deleting one lets
+  its number be issued again to something else. Close it.
+- **A ticket cannot close while it has open children.**
+- **A claim you cannot verify is not a dead one.** Leave it alone.
+- **Write findings into the ticket body** — `pidly edit -a 7` — before the
+  context is gone. Anything else you learned disappears when the session does.
+
+## If you are a subagent
+
+A subagent shares its parent's process, so a pid cannot tell you apart. Claim
+as an agent, with a lease, and release when you finish:
+
+```sh
+PIDLY_AGENT=sub-review-parser PIDLY_LEASE=1h pidly claim 19
+```
+
+## Making a ticket
+
+```sh
+pidly new -f effort=M "Short title"   # body on stdin; -p N for a subtask
+```
+
+Not for work you are finishing in the same breath — a ticket opened and
+closed at once is a log entry wearing a ticket costume, and it spends a
+number that can never be reused.
+
+## Without pidly installed
+
+Everything above is files, and `.pidly/README.md` gives the `find`, `sed` and
+`mv` equivalent of every command here — for a checkout where the script was
+never installed, which the format is built to survive.
+SKILL
+}
+
+claude_next_text() {
+	cat <<'NEXT'
+---
+description: Show what is ready to start in .pidly, and claim one if asked.
+argument-hint: [ticket number to claim]
+---
+
+Run `pidly list`. That is ready work: unclaimed, unblocked and not deferred.
+
+If the user named a number, claim it with `pidly claim <n>` and say what the
+ticket asks for, reading its body with `pidly edit`-free tools — `cat` the
+`info` file or use `pidly tree` for context. Print the handoff if `claim`
+shows one; somebody stopped part-way and it says where.
+
+If the user named nothing, show the list and stop. Picking is theirs unless
+they say otherwise.
+
+`pidly list -a` is the fuller picture — blocked, claimed and deferred work
+with the reason for each — and worth showing if the ready list is empty.
+NEXT
+}
+
+claude_mine_text() {
+	cat <<'MINE'
+---
+description: Show which .pidly tickets this session is holding.
+---
+
+Find the tickets this session has claimed and report them.
+
+```sh
+pidly list -a            # the claimed ones are marked
+pidly status <n>         # who holds it, and whether that can be verified
+```
+
+A claim records the holding process, so a ticket held by this session shows
+the same pid `pidly claim` would write here. Report, for each:
+
+- the number and title,
+- whether it is still claimed by this session,
+- and whether anything has been written to it — `pidly list --stale 1h` shows
+  what has been sitting.
+
+If a ticket has been held without progress, say so and offer to release it
+with a handoff (`pidly release -m "..." <n>`) rather than leaving a claim
+nobody will clear.
+MINE
+}
+
+claude_drop_text() {
+	cat <<'DROP'
+---
+description: Hand a .pidly ticket back with a note about where you got to.
+argument-hint: <ticket number>
+---
+
+Release the ticket the user named, with a handoff that says where the work
+actually got to:
+
+```sh
+pidly release -m "Where I got to, in one line." <n>
+```
+
+The note is one line and it is overwritten by the next one, so write the
+state of the work rather than a log of the session. Anything longer belongs
+in the body: `pidly edit -a <n>`.
+
+Before releasing, put anything worth keeping into the body — findings, what
+was tried, what failed. A dropped claim with no note makes the next agent
+reconstruct your progress from the diff.
+
+If the work is finished, `pidly close <n>` instead.
+DROP
+}
+
+# Read-only commands pre-approved; everything that writes still prompts. The
+# split is deliberate: list and check cannot lose anything, and claim, close
+# and reap can.
+claude_settings_text() {
+	cat <<'SETTINGS'
+{
+  "permissions": {
+    "allow": [
+      "Bash(pidly list:*)",
+      "Bash(pidly tree:*)",
+      "Bash(pidly status:*)",
+      "Bash(pidly check:*)",
+      "Bash(pidly field:*)"
+    ]
+  }
+}
+SETTINGS
+}
+
+cmd_claude() {
+	[ $# -eq 0 ] || die 'usage: pidly claude'
+	root >/dev/null                        # refuse outside a tracker
+	claude_files | while read -r _cl_p _cl_fn; do
+		mkdir -p ".claude/$(dirname "$_cl_p")"
+		"$_cl_fn" > ".claude/$_cl_p"
+		printf 'wrote .claude/%s\n' "$_cl_p"
+	done
+
+	# settings.json is the project's, and it is JSON — which this script
+	# has no business parsing, for the same reason the schema is not. So:
+	# write it when there is none, and otherwise print what to add.
+	if [ -f .claude/settings.json ]; then
+		printf '\n.claude/settings.json exists and is yours to edit. To stop\n'
+		printf 'the prompts on the commands that cannot lose anything, add:\n\n'
+		claude_settings_text | sed 's/^/    /'
+	else
+		claude_settings_text > .claude/settings.json
+		printf 'wrote .claude/settings.json, allowing the read-only commands\n'
 	fi
 }
 
@@ -2587,6 +2819,15 @@ cmd_check() {
 	guide_text > "$_tmp"
 	cmp -s "$_tmp" "$_r/README.md" ||
 		flag "README.md is out of date — run 'pidly agents'"
+	# The Claude Code files, if this project has them. Only if: a project
+	# that never ran 'pidly claude' is not missing anything.
+	claude_files | while read -r _cf_p _cf_fn; do
+		[ -f ".claude/$_cf_p" ] || continue
+		"$_cf_fn" > "$_tmp"
+		cmp -s "$_tmp" ".claude/$_cf_p" ||
+			flag ".claude/$_cf_p is out of date — run 'pidly claude'"
+	done
+
 	for _cand in AGENTS.md CLAUDE.md GEMINI.md .cursorrules; do
 		[ -f "$_cand" ] || continue
 		grep -qF "$AGENTS_BEGIN" "$_cand" || continue
@@ -2650,6 +2891,9 @@ usage: pidly <command> [args]
                  would close — are printed without failing it
   agents [-f F]  write .pidly/README.md and a summary into AGENTS.md (or F),
                  replacing the summary if already present
+  claude         write the Claude Code integration into .claude: a skill, the
+                 slash commands, and a permissions block for the read-only
+                 commands
 
 environment:
   PIDLY_PID      the agent's process (default: $CLAUDE_PID, else $PPID).
@@ -2682,5 +2926,6 @@ fields)  cmd_fields "$@" ;;
 tree)    cmd_tree "$@" ;;
 check)   cmd_check "$@" ;;
 agents)  cmd_agents "$@" ;;
+claude)  cmd_claude "$@" ;;
 *)       usage ;;
 esac

@@ -4,7 +4,7 @@ title: Claude Code integration: a skill and permissions, not an MCP server
 effort: M
 area: cli
 created: 2026-09-17T05:18:48Z
-updated: 2026-09-17T05:18:48Z
+updated: 2026-09-17T23:19:24Z
 handoff:
 
 Agents reach pidly through Bash today, with only the AGENTS.md block telling
@@ -67,3 +67,22 @@ Open questions:
 
 Done when a fresh checkout can be handed to Claude Code and the agent
 claims, works and closes without being told how in the prompt.
+
+
+Decided while doing this, since the ticket left them open:
+
+- Generated, not hand-written, and check compares them — same argument as
+  AGENTS.md and the reference. settings.json is the exception: it is the
+  project's file and it is JSON, which this script has no business parsing,
+  so pidly writes it only when there is none and otherwise prints the block.
+- A command of its own, pidly claude, rather than part of pidly agents.
+  agents owns the prose block in whatever file a client reads; this writes a
+  directory of files for one client, and naming it after the client is what
+  makes a second client obviously a second command.
+- No hook. Enforcement has been the operator's job in this project, and a
+  hook that fires on every tool call is a strong thing to install on
+  someone's behalf from a tracker command. The skill says the loop; the
+  operator decides whether to enforce it.
+- Claude-only. pidly agents already covers the generic case for Cursor,
+  Gemini and Codex, and a second client is worth a ticket when someone
+  actually uses one rather than now.

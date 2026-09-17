@@ -170,6 +170,29 @@ because the pattern is not in a file you can open:
    followed by a lease expiry, or <agent>@- <expiry>
 ```
 
+## Telling Claude Code about it
+
+```sh
+pidly claude      # writes .claude/skills/pidly/SKILL.md, the slash commands
+                  # and, if there is none, a settings.json that allows the
+                  # read-only commands without a prompt
+```
+
+The skill is the **workflow** — claim before starting, release with `-m` when
+stopping early, close when done — and it points back at this file for the
+rules rather than restating them. The AGENTS.md block is the format; the
+skill is the loop. `/pidly-next`, `/pidly-mine` and `/pidly-drop` are the
+three things worth one keystroke.
+
+Both are generated, and `pidly check` compares them against what would be
+generated now, for the reason every copy here is compared: a copy that drifts
+is worse than no copy. There are no hooks: enforcement is the operator's, and
+a hook that blocks a tool call is a strong thing to install on someone's
+behalf.
+
+Not an MCP server. That is a process, and the premise is that there is
+nothing to run — Bash already reaches the CLI.
+
 ## Finding work
 
 ```sh
