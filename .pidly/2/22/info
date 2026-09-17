@@ -1,6 +1,8 @@
 claim:
 needs:
 title: Match closed-ness relative to .pidly, not on the absolute path
+effort: S
+area: cli
 
 Closed-ness is matched as "the path contains /c/" in two places, against a
 path that starts at the checkout root: the dependency scan in cmd_claim
