@@ -1,13 +1,23 @@
 claim:
-needs: 1
-title: Closing moves a ticket into its parent's c/
-effort: S
-area: format
+needs:
+title: pidly close and reopen
+effort: M
+area: cli
 
-Closing is a move, at every depth: a child goes into its parent's c/, a
-root goes into .pidly/c/. There is no marker file and no status field, so
-location is the only thing that answers whether a ticket is done.
+Closing is a move, at every depth: a child goes into its parent's c/, a root
+goes into .pidly/c/. There is no marker file and no status field, so location
+is the only thing that answers whether a ticket is done.
 
-Done when close performs the move, reopening is specified as the same move
-in reverse, and check confirms nothing inside a c/ tree has open children
-sitting outside a c/.
+The semantics are settled and documented. What is missing is the command:
+every close in this repository so far has been a hand-run mkdir plus mv,
+including the ones that closed tickets about closing. Pairs with 11, which is
+the same move in reverse, so do them together.
+
+close writes nothing — it only moves — and must refuse while the ticket has
+children outside its own c/. reopen moves back and cascades upward through
+any closed ancestors, one move per level.
+
+Done when both commands exist, check confirms nothing inside a c/ tree has
+open children outside a c/, and the tests cover closing a leaf, closing a
+parent with all children closed, refusing a parent with an open child, and a
+reopen that relocates ancestors.

@@ -812,6 +812,11 @@ the trigger that would force each one.
   ticket, but nothing can confirm a remote agent is alive right now — that
   needs a shared medium updating in real time, which is a server. The
   remaining question is only whether lease durations want tuning per project.
+- **A canonical name for a subagent's claim.** Whether a Claude Code
+  subagent gets a `CLAUDE_CODE_SESSION_ID` distinct from its parent's was
+  never verified — one `echo` from inside a subagent settles it. If it is
+  distinct it is the natural `PIDLY_AGENT` value, and the convention gets a
+  generated name instead of a hand-written one.
 - **Body conventions.** The body is free markdown. Whether acceptance criteria
   deserve structure is open; the trigger is agents guessing wrong about when a
   ticket is done.
