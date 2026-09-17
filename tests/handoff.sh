@@ -18,7 +18,7 @@ cat > .pidly/schema.md <<'EOF'
 | effort  | yes      | S,M,L  |
 | handoff | no       | one line |
 EOF
-printf 'Body line.\n' | $PIDLY new "A ticket" >/dev/null
+printf 'Body line.\n' | $PIDLY new -f effort=M "A ticket" >/dev/null
 
 echo "writing"
 $PIDLY claim 1 >/dev/null
@@ -62,7 +62,7 @@ two" 1 2>&1) && rc=0 || rc=$?
 check "a multi-line note is refused" "$rc" "1"
 case $out in *"in the body"*) ok "and says where longer text belongs" ;; *) no "message: $out" ;; esac
 
-printf 'Fresh.\n' | $PIDLY new "no handoff" >/dev/null
+printf 'Fresh.\n' | $PIDLY new -f effort=M "no handoff" >/dev/null
 out=$($PIDLY claim 2)
 case $out in
 *handoff*) no "a ticket with no handoff should not mention one: $out" ;;

@@ -365,11 +365,27 @@ info_faults() {
 	before "$_if_u" "$_if_c" &&
 		printf '%s: updated is before created\n' "$_if_n"
 
+	# Required means a value. A stubbed key satisfies nothing: an empty
+	# field and an absent one read the same to get_field and to awk, so a
+	# schema that only demands the line demands nothing a reader can use.
 	schema_required "$_if_r" | while read -r _if_req; do
 		[ -n "$_if_req" ] || continue
-		awk -v k="$_if_req" 'NR>3 { if ($0=="") exit; if (index($0, k ":")==1) found=1 }
-			END { exit !found }' "$_if_f" ||
-			printf "%s: required field '%s' is missing\n" "$_if_n" "$_if_req"
+		_if_st=0
+		awk -v k="$_if_req" '
+			NR > 3 {
+				if ($0 == "") exit
+				if (index($0, k ":") == 1) {
+					v = substr($0, length(k) + 2)
+					sub(/^ +/, "", v)
+					found = 1; empty = (v == "")
+					exit
+				}
+			}
+			END { exit found ? (empty ? 2 : 0) : 1 }' "$_if_f" || _if_st=$?
+		case $_if_st in
+		1) printf "%s: required field '%s' is missing\n" "$_if_n" "$_if_req" ;;
+		2) printf "%s: required field '%s' is empty\n" "$_if_n" "$_if_req" ;;
+		esac
 	done
 }
 
@@ -948,6 +964,24 @@ A project with no tracker starts one with `pidly init`, which seeds this
 file, `schema.md` and the ignore rules. Re-running it refreshes the generated
 files and leaves `schema.md` alone.
 
+```sh
+pidly new -f effort=M -f area=cli "Do the thing"     # body from stdin
+```
+
+`-f` sets a project field. `pidly new` writes a line for **every field the
+schema declares**, in the table's order, whether or not it has a value: an
+empty slot shows what the project expects without opening `schema.md`, and it
+makes two tickets line up when they are diffed. A field marked `required: yes`
+must have a value — `new` refuses without one, and `check` reports a ticket
+whose required field is empty as well as one where it is missing. Required
+means a value, because an empty field and an absent one read the same to
+anything that goes looking.
+
+The uniform blocks do **not** make line numbers dependable. Read a field by
+name: that is right for a ticket written under any schema, where counting
+lines is right only until the table changes, and then silently wrong for
+exactly the old tickets worth reading.
+
 The next number is the **highest number anywhere in the tracker plus one**,
 counting closed tickets. There is no counter file. Make the directory inside
 the parent, or in `.pidly/` for a top-level ticket, and write the three
@@ -1209,9 +1243,9 @@ registry_highest() {
 
 # --- new -------------------------------------------------------------------
 
-# Project fields the schema marks required, one per line. A ticket missing one
-# is still readable — check reports it — but new stubs them so the ticket
-# starts valid rather than starting wrong.
+# Project fields the schema marks required, one per line. A ticket without a
+# value for one is still readable — check reports it — but new refuses to
+# make one, so a ticket starts valid rather than starting wrong.
 schema_required() {
 	[ -f "$1/schema.md" ] || return 0
 	awk -F'|' '
@@ -1235,19 +1269,38 @@ highest() {
 	else printf '%s\n' "$_hi_tree"; fi
 }
 
+# The value a -f gave for one field, or nothing. The pairs are one per line,
+# which is why a value may hold spaces but not a newline. A repeated -f reads
+# as a correction: the last one wins.
+pair_value() {
+	printf '%s\n' "$2" | awk -v k="$1" '
+		index($0, k "=") == 1 { v = substr($0, length(k) + 2); seen = 1 }
+		END { if (seen) print v }'
+}
+
+NEW_USAGE='usage: pidly new [-p parent] [-n "3 8"] [-f name=value] <title>'
+
 cmd_new() {
-	_parent="" _needs=""
+	_parent="" _needs="" _pairs=""
 	while [ $# -gt 0 ]; do
 		case $1 in
-		-p) [ $# -ge 2 ] || die 'usage: pidly new [-p parent] [-n "3 8"] <title>'
+		-p) [ $# -ge 2 ] || die "$NEW_USAGE"
 		    _parent=$2; shift 2 ;;
-		-n) [ $# -ge 2 ] || die 'usage: pidly new [-p parent] [-n "3 8"] <title>'
+		-n) [ $# -ge 2 ] || die "$NEW_USAGE"
 		    _needs=$2; shift 2 ;;
+		-f) [ $# -ge 2 ] || die "$NEW_USAGE"
+		    case $2 in
+		    *"
+"*) die 'a field value is one line' ;;
+		    esac
+		    _pairs="$_pairs$2
+"
+		    shift 2 ;;
 		-*) die "unknown option $1" ;;
 		*)  break ;;
 		esac
 	done
-	[ $# -eq 1 ] || die 'usage: pidly new [-p parent] [-n "3 8"] <title>'
+	[ $# -eq 1 ] || die "$NEW_USAGE"
 	_title=$1
 	case $_title in
 	'') die 'a ticket needs a title' ;;
@@ -1274,6 +1327,42 @@ cmd_new() {
 		ticket_dir "$_r" "$_dep" >/dev/null
 	done
 
+	# Both loops read from a here-document rather than a pipe: a pipeline's
+	# while runs in a subshell, where die would kill the subshell and leave
+	# the ticket half-made.
+	_decl=$(known_fields "$_r")
+	while IFS= read -r _pair; do
+		[ -n "$_pair" ] || continue
+		case $_pair in
+		*=*) _fk=${_pair%%=*} ;;
+		*)   die "-f takes name=value, not '$_pair'" ;;
+		esac
+		# pidly's own stamps. Letting -f write them would put a value in
+		# the file that contradicts what the command just did.
+		case $_fk in
+		'') die '-f needs a field name before the =' ;;
+		created|updated) die "$_fk is pidly's own stamp, not a field to set" ;;
+		esac
+		printf '%s\n' "$_decl" | grep -qx "$_fk" ||
+			die "no field '$_fk' in schema.md"
+	done <<PAIRS
+$_pairs
+PAIRS
+
+	# A required field with no value would make every fresh ticket fail
+	# check, which is what makes required mean something: the value has to
+	# come from somewhere, and -f is where.
+	_missing=""
+	while IFS= read -r _req; do
+		[ -n "$_req" ] || continue
+		[ -n "$(pair_value "$_req" "$_pairs")" ] ||
+			_missing="$_missing $_req"
+	done <<REQ
+$(schema_required "$_r")
+REQ
+	[ -z "$_missing" ] ||
+		die "schema.md requires a value for:$_missing — supply it with -f name=value"
+
 	# Scan before locking. A stale answer only costs a few extra mkdir
 	# attempts, and it keeps the critical section down to those attempts
 	# rather than a full traversal of the tracker.
@@ -1298,7 +1387,21 @@ cmd_new() {
 		_now=$(now_iso)
 		printf 'created: %s\n' "$_now"
 		printf 'updated: %s\n' "$_now"
-		schema_required "$_r" | while read -r _f; do printf '%s:\n' "$_f"; done
+		# Every field the schema declares, in the order the table gives
+		# them, whether or not it has a value. An empty slot is a prompt
+		# — the project's expectations without opening schema.md — and it
+		# makes two tickets line up when they are diffed. The order lives
+		# in the table, so the table is the one place it is decided.
+		#
+		# It does not make line numbers dependable. Uniform tickets make
+		# "the body starts at line 5+N" true today and wrong after the
+		# next schema change, for exactly the old tickets worth reading.
+		schema_fields "$_r" | while read -r _f; do
+			case $_f in ''|created|updated) continue ;; esac
+			_fv=$(pair_value "$_f" "$_pairs")
+			if [ -n "$_fv" ]; then printf '%s: %s\n' "$_f" "$_fv"
+			else printf '%s:\n' "$_f"; fi
+		done
 		if [ ! -t 0 ]; then
 			_body=$(cat)
 			[ -n "$_body" ] && printf '\n%s\n' "$_body"
@@ -1345,9 +1448,13 @@ Three header lines are structural and always present, in this order:
 | 2 | `needs:` | space-separated ticket numbers that must be closed first |
 | 3 | `title:` | a human title, not the number |
 
-Lines 4 onward are project fields from the table below, ending at the first
-blank line. Everything after that blank line is the body, which runs to the
-end of the file. Add your own rows; `pidly check` enforces them.
+Lines 4 onward are project fields from the table below, in this order, ending
+at the first blank line. Everything after that blank line is the body, which
+runs to the end of the file. Add your own rows; `pidly check` enforces them.
+
+`required: yes` means a value, not just the line: `pidly new` will not make a
+ticket without one — pass it with `-f effort=M` — and `check` reports the
+field left empty. The values column is documentation; nothing validates it.
 
 | field   | required | values                                |
 |---------|----------|---------------------------------------|
@@ -1846,9 +1953,10 @@ usage() {
 usage: pidly <command> [args]
 
   init           create .pidly here, or refresh what it generates
-  new [-p N] [-n "3 8"] <title>
+  new [-p N] [-n "3 8"] [-f name=value] <title>
                  create a ticket, optionally under parent N, optionally
-                 blocked on other tickets; body is read from stdin
+                 blocked on other tickets; -f sets a field, and every field
+                 the schema requires needs one; body is read from stdin
   claim <n>      take ticket n
   release [-m note] <n>
                  give it back, optionally recording where you got to

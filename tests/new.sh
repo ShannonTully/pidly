@@ -20,7 +20,7 @@ cd "$tmp"; mkdir .pidly
 cat > .pidly/schema.md <<'EOF'
 | field  | required | values  |
 |--------|----------|---------|
-| effort | yes      | S, M, L |
+| effort | no       | S, M, L |
 | area   | no       | free    |
 EOF
 
@@ -46,15 +46,15 @@ check "line 2 is an empty needs" "$(sed -n 2p $f)" "needs:"
 check "line 3 is the title" "$(sed -n 3p $f)" "title: titled"
 check "the ticket is dated" "$(sed -n '4s/^created: //p' $f | grep -Ec "$iso")" "1"
 check "and stamped as just updated" "$(sed -n '5s/^updated: //p' $f | grep -Ec "$iso")" "1"
-check "required schema fields are stubbed" "$(sed -n 6p $f)" "effort:"
-check "optional ones are not" "$(grep -c '^area:' $f || true)" "0"
-check "an empty body writes no blank line" "$(wc -l < $f)" "6"
+check "every declared field gets a slot" "$(sed -n 6p $f)" "effort:"
+check "optional ones too, empty" "$(sed -n 7p $f)" "area:"
+check "an empty body writes no blank line" "$(wc -l < $f)" "7"
 
 printf 'line one\nline two\n' | $PIDLY new "with body" >/dev/null
 f=.pidly/6/info
-check "a blank line separates fields from the body" "$(sed -n 7p $f)" ""
+check "a blank line separates fields from the body" "$(sed -n 8p $f)" ""
 check "the body follows it" "$(body $f | tr '\n' '/')" "line one/line two/"
-check "fields come before the body" "$(fieldnames $f | tr '\n' ' ')" "created: updated: effort: "
+check "fields come before the body" "$(fieldnames $f | tr '\n' ' ')" "created: updated: effort: area: "
 check "the body ends at the end of the file" "$(tail -1 $f)" "line two"
 
 echo "no derived data"
@@ -65,7 +65,7 @@ before=$(cat $f)
 printf 'appended by hand\n' >> $f
 check "appending to a body needs no other change" \
 	"$(body $f | tr '\n' '/')" "line one/line two/appended by hand/"
-check "fields are unaffected" "$(fieldnames $f | tr '\n' ' ')" "created: updated: effort: "
+check "fields are unaffected" "$(fieldnames $f | tr '\n' ' ')" "created: updated: effort: area: "
 printf '%s\n' "$before" > $f
 
 printf 'one\n\ntwo\n' | $PIDLY new "blank inside the body" >/dev/null
@@ -75,7 +75,7 @@ printf 'x\nhandoff: not a field, this is body text\n' | \
 	$PIDLY new "field-shaped body line" >/dev/null
 check "a body line that looks like a field stays in the body" \
 	"$(body .pidly/8/info | tail -1)" "handoff: not a field, this is body text"
-check "and is not read as a field" "$(fieldnames .pidly/8/info | tr '\n' ' ')" "created: updated: effort: "
+check "and is not read as a field" "$(fieldnames .pidly/8/info | tr '\n' ' ')" "created: updated: effort: area: "
 
 echo "placement and needs"
 $PIDLY new -p 1 "a child" </dev/null >/dev/null
@@ -95,6 +95,60 @@ check "a missing title is refused" "$rc" "1"
 out=$($PIDLY new "two
 lines" </dev/null 2>&1) && rc=0 || rc=$?
 check "a multi-line title is refused" "$rc" "1"
+
+echo "fields"
+# A tracker of its own: required means a value here, and every other test in
+# this file would have to supply one.
+mkdir req; cd req; mkdir .pidly
+cat > .pidly/schema.md <<'EOF'
+| field  | required | values  |
+|--------|----------|---------|
+| effort | yes      | S, M, L |
+| area   | no       | free    |
+EOF
+
+out=$($PIDLY new "unvalued" </dev/null 2>&1) && rc=0 || rc=$?
+check "a required field with no value is refused" "$rc" "1"
+case $out in *effort*) ok "and the refusal names it" ;; *) no "message: $out" ;; esac
+check "and no ticket is left behind" "$(find .pidly -name info | wc -l)" "0"
+out=$($PIDLY new -f effort= "empty value" </dev/null 2>&1) && rc=0 || rc=$?
+check "an empty value is no value" "$rc" "1"
+
+$PIDLY new -f area="two words" -f effort=M "valued" </dev/null >/dev/null
+f=.pidly/1/info
+check "-f supplies the required field" "$(sed -n 's/^effort: //p' $f)" "M"
+check "a value may contain spaces" "$(sed -n 's/^area: //p' $f)" "two words"
+check "fields follow the schema, not the order of the flags" \
+	"$(fieldnames $f | tr '\n' ' ')" "created: updated: effort: area: "
+out=$($PIDLY check 2>&1 || true)
+case $out in *"required field"*) no "check still complains: $out" ;;
+             *) ok "and check is satisfied by the value" ;; esac
+
+sed -i 's/^effort: M$/effort:/' $f
+case $($PIDLY check 2>&1 || true) in
+*"1: required field 'effort' is empty"*) ok "a required field emptied by hand is reported" ;;
+*) no "check did not report the empty field" ;; esac
+sed -i '/^effort:$/d' $f
+case $($PIDLY check 2>&1 || true) in
+*"1: required field 'effort' is missing"*) ok "and so is one that is gone" ;;
+*) no "check did not report the missing field" ;; esac
+
+$PIDLY new -f effort=S -f effort=L "corrected" </dev/null >/dev/null
+check "a repeated -f is a correction: the last wins" \
+	"$(sed -n 's/^effort: //p' .pidly/2/info)" "L"
+
+out=$($PIDLY new -f nosuch=1 -f effort=M "unknown field" </dev/null 2>&1) && rc=0 || rc=$?
+check "a field the schema does not declare is refused" "$rc" "1"
+case $out in *"schema.md"*) ok "and says where the names come from" ;; *) no "message: $out" ;; esac
+out=$($PIDLY new -f effort "no equals" </dev/null 2>&1) && rc=0 || rc=$?
+check "a -f without name=value is refused" "$rc" "1"
+out=$($PIDLY new -f created=2020-01-01T00:00:00Z -f effort=M "stamp" </dev/null 2>&1) && rc=0 || rc=$?
+check "pidly's own stamps are not -f's to set" "$rc" "1"
+out=$($PIDLY new -f effort="two
+lines" "multiline value" </dev/null 2>&1) && rc=0 || rc=$?
+check "a multi-line value is refused" "$rc" "1"
+check "none of the refusals created anything" "$(find .pidly -name info | wc -l)" "2"
+cd "$tmp"
 
 echo "concurrency ($PIDLY_TEST_RACE processes)"
 before=$(find .pidly -name info | wc -l)

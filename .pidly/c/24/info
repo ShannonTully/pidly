@@ -4,7 +4,7 @@ title: required means a value, and new can supply one
 effort: M
 area: cli
 created: 2026-09-17T06:16:15Z
-updated: 2026-09-17T07:07:44Z
+updated: 2026-09-17T15:38:36Z
 
 Today required: yes means the key exists. pidly new stubs it empty and check
 is satisfied, so the one thing labelled required requires nothing a reader

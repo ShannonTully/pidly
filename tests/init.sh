@@ -38,7 +38,8 @@ check "it is not in the ignore rules" "$(grep -c '^\.n' .pidly/.gitignore || tru
 echo "usable immediately"
 n=$($PIDLY new "first" </dev/null | cut -f1)
 check "a ticket can be created straight away" "$n" "1"
-check "handoff is optional, so not stubbed" "$(grep -c '^handoff' .pidly/1/info || true)" "0"
+check "every declared field gets a slot, optional ones empty" \
+	"$(grep -c '^handoff:$' .pidly/1/info || true)" "1"
 check "the number is registered" "$([ -f .pidly/.n/1 ] && echo yes)" "yes"
 check "with a nonce and the title" \
 	"$(awk '{print (NF>=2 && $1 ~ /^[a-z0-9]+$/) ? "yes" : "no"}' .pidly/.n/1)" "yes"

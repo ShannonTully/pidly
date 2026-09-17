@@ -589,6 +589,25 @@ fields, which live after the body:
 Those are validated by `pidly check` rather than by the format, so a ticket
 missing a required field is still a readable ticket.
 
+**`required: yes` means a value, not a key.** An empty field and an absent
+one are the same thing to `get_field` and to every awk that goes looking, so
+a schema that only demanded the line would demand nothing a reader can use.
+`check` reports the empty one as well as the missing one, and `pidly new`
+refuses to create a ticket whose required field has no value — which is why
+`new` takes `-f name=value`, the first way to set a field at all.
+
+`new` writes a line for **every** field the table declares, in the table's
+order, valued or empty. An empty slot is a prompt — what the project expects,
+without opening `schema.md` — and uniform blocks make two tickets diff
+against each other. It buys nothing for readers: a field is still found by
+name, because counting lines is correct only until the table changes and then
+silently wrong for exactly the old tickets worth reading.
+
+The `values` column stays documentation; nothing checks that `effort` is one
+of S, M, L. Validating it would make the column a grammar and the schema no
+longer free-form, which is a bigger decision than this one and belongs with
+the rest of schema validation.
+
 **`handoff` ships in the default schema.** One line, written by
 `pidly release -m`, holding where the last agent got to when it stopped
 without finishing. `pidly claim` prints it to whoever picks the ticket up,

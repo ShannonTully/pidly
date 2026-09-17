@@ -174,6 +174,24 @@ A project with no tracker starts one with `pidly init`, which seeds this
 file, `schema.md` and the ignore rules. Re-running it refreshes the generated
 files and leaves `schema.md` alone.
 
+```sh
+pidly new -f effort=M -f area=cli "Do the thing"     # body from stdin
+```
+
+`-f` sets a project field. `pidly new` writes a line for **every field the
+schema declares**, in the table's order, whether or not it has a value: an
+empty slot shows what the project expects without opening `schema.md`, and it
+makes two tickets line up when they are diffed. A field marked `required: yes`
+must have a value — `new` refuses without one, and `check` reports a ticket
+whose required field is empty as well as one where it is missing. Required
+means a value, because an empty field and an absent one read the same to
+anything that goes looking.
+
+The uniform blocks do **not** make line numbers dependable. Read a field by
+name: that is right for a ticket written under any schema, where counting
+lines is right only until the table changes, and then silently wrong for
+exactly the old tickets worth reading.
+
 The next number is the **highest number anywhere in the tracker plus one**,
 counting closed tickets. There is no counter file. Make the directory inside
 the parent, or in `.pidly/` for a top-level ticket, and write the three

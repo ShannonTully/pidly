@@ -4,7 +4,7 @@ title: Regex validation, and schema becomes stanzas
 effort: M
 area: format
 created: 2026-09-17T06:26:19Z
-updated: 2026-09-17T07:08:00Z
+updated: 2026-09-17T15:38:25Z
 
 The values column is documentation: nothing checks that effort is one of S,
 M, L. Making it a check is what forces the file's shape, because the only
@@ -103,3 +103,10 @@ reference and AGENTS block name the new file, and the tests cover a value
 outside its pattern, an empty optional field, an empty required one, a
 pattern containing |, a pattern grep cannot compile, and a pattern using a
 PCRE escape.
+
+
+From 24 (required means a value): pidly new -f now sets fields, and the
+question of whether it validates against the values column was left to this
+ticket. It does not today — the column is documentation, and nothing checks
+that effort is one of S, M, L. Deciding it here keeps the grammar in one
+place rather than half of it in new.
