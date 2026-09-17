@@ -74,9 +74,16 @@ Appending to a body needs no bookkeeping.
 pidly list             # ready work: unclaimed and unblocked
 pidly list -a          # every open ticket, with its state
 pidly list --stale 7d  # open work pidly has not written to in that long
+pidly field effort     # one field across every open ticket, - where it is unset
 pidly tree             # the hierarchy, closed tickets marked [x]
 pidly check            # report anything wrong; changes nothing
 ```
+
+`field` prints rows rather than a summary, so the spread of one is `pidly
+field effort | awk '{print $2}' | sort | uniq -c`, and the tickets missing it
+are the `-` rows. It reads the field by name in a single pass over the
+tracker: a loop that runs a command per ticket costs 17.4s over 2000 tickets
+where this costs 0.44s.
 
 `--stale` takes the same durations a lease does — `90s`, `30m`, `2h`, `7d` —
 and lists the oldest first. A ticket with no `updated` line is listed too,

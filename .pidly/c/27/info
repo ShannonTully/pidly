@@ -4,7 +4,7 @@ title: read one field across every ticket, in one pass
 effort: S
 area: cli
 created: 2026-09-17T06:21:54Z
-updated: 2026-09-17T06:21:54Z
+updated: 2026-09-17T15:34:26Z
 
 Nothing in the CLI reads a field across tickets. list reads the first three
 lines, tree reads the title, and a question like "what is the effort spread

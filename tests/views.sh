@@ -1,5 +1,5 @@
 #!/bin/sh
-# Tests for list, tree and check.
+# Tests for list, field, tree and check.
 set -eu
 PIDLY=$(cd "$(dirname "$0")/.." && pwd)/bin/pidly
 pass=0; fail=0
@@ -30,6 +30,34 @@ has "-a shows the claimed one" "$out" "claimed"
 has "-a shows the blocked one with its blocker" "$out" "(needs 2)"
 check "-a sorts numerically" "$(printf '%s' "$out" | awk '{print $1}' | tr '\n' ' ')" "1 2 3 4 "
 $PIDLY release 2 >/dev/null
+
+echo "field"
+# Two tickets carry effort, in different places in their blocks, one carries
+# area instead and one carries neither: a tracker whose tickets disagree
+# about which fields they have, which is what a schema change leaves behind.
+printf '| effort  | no       | S, M, L   |\n| area    | no       | cli, docs |\n' \
+	>> .pidly/schema.md
+sed -i '3a effort: L' .pidly/1/info
+sed -i '3a area: cli\neffort: M' .pidly/2/info
+sed -i '3a area: docs' .pidly/1/3/info
+out=$($PIDLY field effort)
+check "a row per open ticket" "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" "4"
+check "sorted numerically" \
+	"$(printf '%s\n' "$out" | awk '{print $1}' | tr '\n' ' ')" "1 2 3 4 "
+has "reads the field" "$out" "1     L"
+has "wherever it sits in the block" "$out" "2     M"
+has "- where the ticket does not carry it" "$out" "3     -"
+out=$($PIDLY field area)
+has "a ticket that has this one instead" "$out" "3     docs"
+has "and - for the one that does not" "$out" "1     -"
+check "a field no ticket has is every ticket, all -" \
+	"$(printf '%s\n' "$($PIDLY field nosuch)" | awk '{print $2}' | sort -u | tr '\n' ' ')" "- "
+mkdir -p .pidly/c && mv .pidly/2 .pidly/c/
+hasnt "closed work is left out" "$($PIDLY field effort)" "2     M"
+has "-a takes it in" "$($PIDLY field -a effort)" "2     M"
+mv .pidly/c/2 .pidly/; rmdir .pidly/c
+$PIDLY field >/dev/null 2>&1 && rc=0 || rc=$?
+check "a name is required" "$rc" "1"
 
 echo "tree"
 out=$($PIDLY tree)
