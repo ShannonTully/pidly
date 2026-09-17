@@ -1,0 +1,23 @@
+claim:
+needs: 1
+title: pidly claim / release, and the lock
+desc:21
+claim writes the agent's pid into line 1; release blanks it back to "claim:".
+Both rewrite info, as does edit, so all three serialize behind a lock.
+
+The lock is a file created with O_EXCL, carrying the holder's pid. Creation
+and ownership must be one operation: an earlier design used a lock directory
+with the pid in a file inside it, and the gap between the two let 4 of 30
+racing claims win. An empty lock means a holder mid-write, never an abandoned
+one, and must not be broken.
+
+The pid recorded in a claim is the agent's, from PIDLY_PID, not the pidly
+process's — pidly claim exits immediately, so its own pid would read as stale
+at once. Release requires ownership; a dead local claim is reap's job.
+
+claim also refuses a ticket whose needs are not all closed.
+
+Done: implemented in bin/pidly, covered by tests/claim.sh (17 cases including
+a 30-way race).
+effort: M
+area: cli

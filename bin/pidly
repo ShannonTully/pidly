@@ -1,0 +1,202 @@
+#!/bin/sh
+# pidly — a file-based issue tracker
+#
+# Every command here is something a person could do with mkdir, mv and an
+# editor, leaving the repository byte-identical. The exception is claiming,
+# which needs the lock to be safe while other agents are running.
+
+set -eu
+
+die() { printf 'pidly: %s\n' "$*" >&2; exit 1; }
+
+# --- locating things -------------------------------------------------------
+
+# The .pidly directory, found by walking up from the current directory.
+root() {
+	d=$PWD
+	while [ "$d" != / ]; do
+		[ -d "$d/.pidly" ] && { printf '%s\n' "$d/.pidly"; return 0; }
+		d=$(dirname "$d")
+	done
+	die 'no .pidly directory found in this directory or any parent'
+}
+
+# The directory of one ticket, by number. One traversal, not a search per
+# call: callers needing many lookups should use map() instead.
+ticket_dir() {
+	_r=$1 _n=$2
+	_p=$(find "$_r" -type d -name "$_n" -print -quit)
+	[ -n "$_p" ] || die "no ticket $_n"
+	printf '%s\n' "$_p"
+}
+
+# Every ticket as "number path", one line each, from a single traversal.
+map() {
+	find "$1" -mindepth 1 -type d '!' -name c '!' -name '.*' -printf '%f %p\n'
+}
+
+# --- checkout identity -----------------------------------------------------
+
+# A random string identifying this checkout. Not the hostname: that is
+# routinely "localhost", which is the collision this exists to prevent.
+# Gitignored, so it never travels in a commit.
+checkout_id() {
+	_r=$1 _f="$1/.id"
+	if [ ! -f "$_f" ]; then
+		( umask 077
+		  if [ -r /dev/urandom ]; then
+			LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom 2>/dev/null | dd bs=1 count=12 2>/dev/null > "$_f"
+		  else
+			printf '%s%s' "$$" "$(date +%s)" > "$_f"
+		  fi
+		  printf '\n' >> "$_f" )
+	fi
+	read -r _id < "$_f"
+	[ -n "$_id" ] || die "could not read checkout id from $_f"
+	printf '%s\n' "$_id"
+}
+
+# --- whose pid ------------------------------------------------------------
+#
+# Not this process's. `pidly claim` exits immediately, so its own pid is dead
+# before anyone can check it, which would make every claim look stale. The pid
+# that matters belongs to the agent doing the work, and only the caller knows
+# which process that is: it sets PIDLY_PID. Falling back to the parent is right
+# for a person at a shell and wrong for `sh -c 'pidly claim 8'`, so the
+# fallback is a convenience, not a contract.
+
+agent_pid() {
+	if [ -n "${PIDLY_PID:-}" ]; then
+		kill -0 "$PIDLY_PID" 2>/dev/null ||
+			die "PIDLY_PID=$PIDLY_PID is not a running process"
+		printf '%s\n' "$PIDLY_PID"
+	else
+		printf '%s\n' "$PPID"
+	fi
+}
+
+# --- the lock --------------------------------------------------------------
+#
+# Rewriting a line in info is read-modify-write, so two agents can both see a
+# free ticket and both write their pid, with the loser never finding out.
+# mkdir is the atomic primitive that prevents it: it fails if the directory
+# exists. The lock holds a pid so a crashed holder can be detected and broken
+# rather than wedging the ticket forever.
+
+lock() {
+	_d=$1 _n=0
+	while [ "$_n" -lt 100 ]; do
+		_n=$((_n+1))
+		# O_EXCL: creation and ownership are one operation. The pid written
+		# is this process's, not the agent's — the lock belongs to the
+		# short-lived command, and is alive exactly as long as it runs.
+		if ( set -C; printf '%s\n' "$$" > "$_d/.lock" ) 2>/dev/null; then
+			return 0
+		fi
+		_owner=""
+		[ -r "$_d/.lock" ] && read -r _owner < "$_d/.lock" 2>/dev/null || true
+		if [ -z "$_owner" ]; then
+			# The holder created the lock but has not written its pid yet.
+			# An empty lock means in-flight, never abandoned: breaking it
+			# here would hand the same lock to two processes.
+			continue
+		fi
+		kill -0 "$_owner" 2>/dev/null && return 1   # a live holder
+		rm -f "$_d/.lock"                           # a dead one: break it
+	done
+	return 1
+}
+
+unlock() { rm -f "$1/.lock"; }
+
+# Replace one line of a file, via a temp file and a rename. Callers hold the
+# lock; the rename keeps a crash mid-write from leaving a truncated info.
+set_line() {
+	_f=$1 _n=$2 _v=$3 _t="$1.$$"
+	awk -v n="$_n" -v v="$_v" 'NR==n{print v; next}{print}' "$_f" > "$_t"
+	mv "$_t" "$_f"
+}
+
+# --- claim / release -------------------------------------------------------
+
+cmd_claim() {
+	[ $# -eq 1 ] || die 'usage: pidly claim <number>'
+	_r=$(root); _d=$(ticket_dir "$_r" "$1"); _id=$(checkout_id "$_r")
+
+	# needs blocks starting, so refuse before taking the lock: a blocked
+	# ticket is not claimable regardless of who else is asking.
+	_needs=$(sed -n '2s/^needs: *//p' "$_d/info")
+	if [ -n "$_needs" ]; then
+		_open=""
+		_m=$(map "$_r")
+		for _dep in $_needs; do
+			_dp=$(printf '%s\n' "$_m" | awk -v n="$_dep" '$1==n{print $2; exit}')
+			[ -n "$_dp" ] || die "$1 needs $_dep, which does not exist"
+			case $_dp in */c/*) ;; *) _open="$_open $_dep" ;; esac
+		done
+		[ -z "$_open" ] || die "$1 is blocked by open tickets:$_open"
+	fi
+
+	lock "$_d" || die "$1 is being modified by another process"
+	# From here on, release the lock on any exit path.
+	_held=$(sed -n '1s/^claim://p' "$_d/info")
+	if [ -n "$_held" ]; then
+		unlock "$_d"
+		case $_held in
+		*@"$_id")
+			_pid=${_held%@*}
+			kill -0 "$_pid" 2>/dev/null &&
+				die "$1 is claimed by pid $_pid, which is running"
+			die "$1 is claimed by pid $_pid, which is gone — 'pidly reap' clears it" ;;
+		*)      die "$1 is claimed by $_held on another checkout — cannot verify it" ;;
+		esac
+	fi
+	_me=$(agent_pid)
+	set_line "$_d/info" 1 "claim:$_me@$_id"
+	unlock "$_d"
+	printf '%s claimed by %s\n' "$1" "$_me@$_id"
+}
+
+cmd_release() {
+	[ $# -eq 1 ] || die 'usage: pidly release <number>'
+	_r=$(root); _d=$(ticket_dir "$_r" "$1"); _id=$(checkout_id "$_r")
+
+	lock "$_d" || die "$1 is being modified by another process"
+	_held=$(sed -n '1s/^claim://p' "$_d/info")
+	if [ -z "$_held" ]; then
+		unlock "$_d"; die "$1 is not claimed"
+	fi
+	_me="$(agent_pid)@$_id"
+	if [ "$_held" != "$_me" ]; then
+		unlock "$_d"
+		case $_held in
+		*@"$_id") die "$1 is held by $_held, not by you — 'pidly reap' clears a dead claim" ;;
+		*)        die "$1 is claimed by $_held on another checkout — refusing" ;;
+		esac
+	fi
+	set_line "$_d/info" 1 'claim:'
+	unlock "$_d"
+	printf '%s released\n' "$1"
+}
+
+# --- entry point -----------------------------------------------------------
+
+usage() {
+	cat >&2 <<'USAGE'
+usage: pidly <command> [args]
+
+  claim <n>      take ticket n, recording $PIDLY_PID (default: $PPID)
+  release <n>    give it back
+
+not yet implemented: new, close, reopen, edit, list, tree, check, reap
+USAGE
+	exit 2
+}
+
+[ $# -ge 1 ] || usage
+cmd=$1; shift
+case $cmd in
+claim)   cmd_claim "$@" ;;
+release) cmd_release "$@" ;;
+*)       usage ;;
+esac

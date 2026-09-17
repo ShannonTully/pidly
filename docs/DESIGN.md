@@ -277,32 +277,61 @@ both see `claim:` and both write their pid, with the loser never finding out.
 A separate claim file would have made this free (`set -C` fails when the file
 exists) at the cost of another file per ticket.
 
-So claim, release and edit take a transient lock. `mkdir` is the atomic
-primitive doing the work either way — it just guards the write now instead of
-being the write:
+So claim, release and edit take a transient lock, created with `O_EXCL` so
+that creating it and owning it are one operation:
 
 ```sh
-mkdir "$d/.lock" 2>/dev/null || {          # someone is mid-write
-  owner=$(cat "$d/.lock/pid" 2>/dev/null)
-  kill -0 "$owner" 2>/dev/null && return 1 # live holder: back off
-  rm -rf "$d/.lock"                        # dead holder: break it
-  mkdir "$d/.lock" 2>/dev/null || return 1
+lock() {
+	_d=$1 _n=0
+	while [ "$_n" -lt 100 ]; do
+		_n=$((_n+1))
+		if ( set -C; printf '%s\n' "$$" > "$_d/.lock" ) 2>/dev/null; then
+			return 0                            # we own it
+		fi
+		_owner=""
+		[ -r "$_d/.lock" ] && read -r _owner < "$_d/.lock" 2>/dev/null || true
+		[ -z "$_owner" ] && continue                # in flight; spin
+		kill -0 "$_owner" 2>/dev/null && return 1   # a live holder
+		rm -f "$_d/.lock"                           # a dead one: break it
+	done
+	return 1
 }
-echo $$ > "$d/.lock/pid"
-# ... read line 1, decide, rewrite line 1 ...
-rm -rf "$d/.lock"
 ```
 
 Three properties matter. The lock is **transient** — held for the microseconds
-of a `sed`, so a repository at rest still has exactly one file per ticket. It is
-**self-healing**: the holder's pid inside it means an agent that crashes
-mid-write doesn't wedge the ticket forever, since the next caller sees a dead
-owner and breaks the lock. And that recovery is **the same idiom as stale claim
-detection**, so the system has one liveness mechanism rather than two.
+of one rewrite, so a repository at rest still has exactly one file per ticket.
+It is **self-healing**: the pid inside means a crash doesn't wedge the ticket,
+since the next caller sees a dead owner and breaks it. And that recovery is
+**the same idiom as stale claim detection**, so the system has one liveness
+mechanism rather than two.
+
+The pid written here is the lock holder's own — the short-lived `pidly`
+process — not the agent's. A lock is alive exactly as long as the command
+holding it.
+
+**An empty lock is never broken.** A lock that exists but has no pid in it
+belongs to a process that created it microseconds ago and has not finished
+writing; treating that as abandoned hands the same lock to two callers. This
+was not a theoretical concern: an earlier version used a lock *directory* with
+the pid in a file inside it, which widened that window enough that 4 of 30
+racing claims won instead of 1. The fix is both halves — creation carries the
+pid in one operation, and a pidless lock means in-flight, never dead.
 
 The same lock, at `.pidly/.lock`, serializes number allocation.
 
 ### Whose pid is it
+
+Not the `pidly` process's. `pidly claim` exits immediately, so recording its
+own pid would make every claim look stale the moment it was taken. The pid that
+matters belongs to the agent doing the work, and only the caller knows which
+process that is, so the caller names it in `PIDLY_PID`. Falling back to the
+parent process is right for a person at a shell and wrong for
+`sh -c 'pidly claim 8'`, so it is a convenience rather than a contract.
+
+**Releasing requires ownership.** A claim may only be released by the agent
+holding it — same pid, same checkout. Anything else, including a claim left by
+a dead local agent, is refused and pointed at `pidly reap`, which keeps the
+one-way door of clearing someone else's claim behind an explicit command.
 
 Because the claim is in a tracked file, claims are committed whether or not
 that's wanted, and a pid from another machine will be checked against the local
