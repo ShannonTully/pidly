@@ -1,0 +1,24 @@
+claim:
+needs:
+title: Whether acceptance criteria deserve structure
+effort: M
+area: format
+created: 2026-09-17T06:47:32Z
+updated: 2026-09-17T06:47:32Z
+
+Deferred. The body is free markdown and stays that way until the trigger.
+
+Every ticket in this tracker ends with a "Done when ..." paragraph, which is
+already a convention — an unenforced one that nothing reads. The question is
+whether that deserves structure: a field, a fenced block, a heading check
+looks for.
+
+Against: the body is the one place with no rules, which is why writing
+findings into it needs no bookkeeping. A checked-for heading is a schema for
+prose, and prose that must satisfy a checker gets written for the checker.
+
+Trigger: agents guessing wrong about when a ticket is done. That is
+observable — a ticket closed with work left, or left open with none.
+
+If it ever happens, the cheapest version is a convention the reference
+states and check does not enforce, which is what "Done when" already is.

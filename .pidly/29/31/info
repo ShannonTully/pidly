@@ -1,0 +1,21 @@
+claim:
+needs:
+title: Decide whether a man page is worth generating
+effort: S
+area: docs
+created: 2026-09-17T06:46:56Z
+updated: 2026-09-17T06:46:56Z
+
+Debian's guidelines want a man page for anything in bin. A Homebrew tap and
+the AUR do not care, and those are the routes 29 does first.
+
+The usage text already carries the command list and the environment
+variables, so a man page would be generated from the same function rather
+than written and kept in step by hand — the copies-go-stale rule applies,
+and check already compares the two generated documents against what would
+be generated now.
+
+Decide: generate one from usage and let check compare it, or ship none and
+accept that a distro-native package is further away than it looks.
+
+Done when the decision is written down, and implemented if it is yes.

@@ -1,0 +1,29 @@
+claim:
+needs:
+title: Whether lease durations want tuning per project
+effort: M
+area: format
+created: 2026-09-17T06:47:32Z
+updated: 2026-09-17T06:47:32Z
+
+Leases stop a remote claim from wedging a ticket, but nothing can confirm a
+remote agent is alive right now — that would need a shared medium updating
+in real time, which is a server, and is out of scope permanently. What is
+open is only whether the durations want to be a project's choice rather than
+each caller's.
+
+Today PIDLY_LEASE is per-invocation and there is no default: an agent
+without a local process must name a duration every time. A project where
+every cloud agent should hold for two hours has no way to say so, and a
+project where nothing should hold longer than fifteen minutes has no way to
+enforce it.
+
+The obstacle is that pidly has no configuration file. schema.md is the only
+file a project owns, and it describes tickets, not the tool. Adding a config
+file is a larger decision than the setting that would go in it — and 28 is
+about to make the schema file a stanza format that could hold a stanza that
+is not a field, which is either the natural home or the beginning of a
+mess.
+
+Trigger: a project actually wanting a different default, or a lease long
+enough to wedge a ticket in practice.

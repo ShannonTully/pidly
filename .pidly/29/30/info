@@ -1,0 +1,31 @@
+claim:
+needs:
+title: Choose a licence
+effort: S
+area: docs
+created: 2026-09-17T06:46:51Z
+updated: 2026-09-17T06:46:51Z
+
+There is no LICENSE file, so nothing says how anyone may use pidly. Homebrew
+will not take a formula without one and Debian will not either, and a repo
+handed to someone else — which is the whole premise — carries no permission
+with it.
+
+An owner's decision, not an implementation one. The plausible set for a
+single shell script with no dependencies:
+
+- MIT. The default expectation for a tool like this; short, understood
+  everywhere, requires the notice be kept.
+- ISC. MIT with the redundant words removed. Functionally identical.
+- 0BSD. Public-domain-equivalent: no notice to keep, nothing to carry into a
+  vendored copy. Fits a script people are meant to copy into a repo.
+- Apache-2.0. Adds an explicit patent grant and a NOTICE convention. More
+  ceremony than a shell script usually wants, and the file is long.
+
+Worth noting against the format's own premise: people are expected to copy
+this script into their own repos and to hand trackers to others. A licence
+that survives copying without obligation — 0BSD — matches that; MIT is the
+more conventional answer and costs a retained notice.
+
+Done when LICENSE exists, the README says which licence, and the packaging
+work in 29 can name it.

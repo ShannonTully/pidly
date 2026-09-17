@@ -1,0 +1,22 @@
+claim:
+needs:
+title: Labels, or any set-valued field
+effort: M
+area: format
+created: 2026-09-17T06:47:32Z
+updated: 2026-09-17T06:47:32Z
+
+Deferred. Do not start this without the trigger below.
+
+Project fields are single-line key: value, so they cannot hold a set, and
+there is no equivalent of bd's label filtering. A comma-separated field
+covers the simple case badly: it invites parsing inside a value, which is
+the thing the format has otherwise avoided everywhere.
+
+Trigger: wanting to filter across a dimension that is not already a field.
+Until then, adding a field is cheaper and reads better.
+
+28 changes the calculation slightly — once values are validated by a
+pattern, a comma-separated set has a grammar that check could enforce
+rather than a convention it cannot see. That makes the bad option less bad,
+not good.

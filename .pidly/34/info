@@ -1,0 +1,26 @@
+claim:
+needs:
+title: Priority as a header line
+effort: M
+area: format
+created: 2026-09-17T06:47:32Z
+updated: 2026-09-17T06:47:32Z
+
+Deferred. Do not start this without the trigger below; it is recorded so the
+reasoning is not re-derived.
+
+Priority is a project field today. The header earns its fixed positions by
+answering "can I start this?" in two lines, and priority does not help with
+that — it answers "which of these should I pick?", a sort over candidates
+that have already survived the filter. That set is small, so reading past
+each one's fields is cheap, and projects that do not want priority pay
+nothing.
+
+Trigger: picking among unblocked tickets turning out to need a sort that
+reads every candidate's fields often enough to show up in a measurement. At
+that point it becomes a fourth header line, not a fourth opinion — and note
+that every structural line is a cost every ticket carries forever.
+
+27 makes the counter-argument cheaper to test: one awk pass reads a field
+across every ticket in 0.44s over 2000 of them, which is the measurement
+this trigger asks for.

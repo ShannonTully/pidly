@@ -907,13 +907,16 @@ what pidly is named after.
 ## Deferred
 
 Nothing above is unsettled. These are things consciously not solved yet, with
-the trigger that would force each one.
+the trigger that would force each one. Each has a ticket carrying the same
+trigger, so an agent reading the tracker rather than this document sees why
+not to start it — and the tickets are the copy that gets updated, since this
+section is where reasoning goes and the tracker is where work does.
 
-- **Priority.** Decided as a project field. Revisit only if picking among
+- **Priority** (ticket 34)**.** Decided as a project field. Revisit only if picking among
   unblocked tickets turns out to need a sort that reads every candidate's
   fields often enough to show up — at which point it becomes a fifth header
   line, not a fifth opinion.
-- **The schema table.** A markdown table is parseable by `awk` in a pinch, but
+- **The schema table** (decided; ticket 28)**.** A markdown table is parseable by `awk` in a pinch, but
   only while the schema stays flat key/value. Enums with per-value behaviour
   would outgrow it and force a real config format, which would cost the
   zero-parser property. That trigger has been pulled: enforcing the `values`
@@ -938,7 +941,7 @@ the trigger that would force each one.
   rather than trusting whatever is installed. A pattern the local `grep`
   cannot compile exits 2 rather than 1, which is what lets a broken schema be
   a finding instead of a crash.
-- **Padded multi-line field values.** Proposed as a way to keep every
+- **Padded multi-line field values** (ruled out; no ticket)**.** Proposed as a way to keep every
   ticket's lines at fixed positions: a field declares a maximum line count
   and is padded up to it. Two things rule it out. Fields end at the first
   blank line, so blank padding would terminate the field block and every
@@ -956,20 +959,20 @@ the trigger that would force each one.
   trigger is a field that cannot be one line and does not belong in the body;
   note that `handoff` is deliberately one line, because a multi-line field
   invites an agent to paste its reasoning, and a cap does not prevent that.
-- **Labels.** Project fields are single-line `key: value`, so they cannot
+- **Labels** (ticket 35)**.** Project fields are single-line `key: value`, so they cannot
   hold a set, and there is no equivalent of `bd`'s label filtering. A
   comma-separated field covers the simple case badly. The trigger is wanting
   to filter across a dimension that is not already a field — until then,
   adding a field is cheaper and reads better.
-- **Verifying a remote claim.** Leases stop a remote claim from wedging a
+- **Verifying a remote claim** (the open half is ticket 36)**.** Leases stop a remote claim from wedging a
   ticket, but nothing can confirm a remote agent is alive right now — that
   needs a shared medium updating in real time, which is a server. The
   remaining question is only whether lease durations want tuning per project.
-- **A canonical name for a subagent's claim.** Whether a Claude Code
+- **A canonical name for a subagent's claim** (ticket 33)**.** Whether a Claude Code
   subagent gets a `CLAUDE_CODE_SESSION_ID` distinct from its parent's was
   never verified — one `echo` from inside a subagent settles it. If it is
   distinct it is the natural `PIDLY_AGENT` value, and the convention gets a
   generated name instead of a hand-written one.
-- **Body conventions.** The body is free markdown. Whether acceptance criteria
+- **Body conventions** (ticket 37)**.** The body is free markdown. Whether acceptance criteria
   deserve structure is open; the trigger is agents guessing wrong about when a
   ticket is done.
