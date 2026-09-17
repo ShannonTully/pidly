@@ -137,9 +137,43 @@ The path is readable as lineage because every segment except `c` is a ticket:
 `.pidly/1/3/8/` is ticket 8 under 3 under 1. `find .pidly -name 8` locates it
 in one command, and the answer shows you its ancestry for free.
 
-**There is no counter file.** The next number is the highest number anywhere in
-the tree plus one, closed tickets included. Nothing to read, nothing to write,
-nothing that can drift from the directories it describes.
+**The next number is the highest already issued, plus one.** That is the
+greater of what the tree contains and what the registry records — there is no
+counter holding a value someone has to keep current.
+
+### The number registry
+
+Allocation also writes `.pidly/.n/<number>`, holding a nonce and the title.
+It is never modified afterwards, and it is committed.
+
+Its job is to make a collision that git would otherwise merge silently into
+one that git refuses. Branches cannot see each other while they allocate, so
+the lock cannot help: branch A creating `.pidly/5` and branch B creating
+`.pidly/7/5` merge cleanly and leave two tickets numbered 5, at which point
+`find .pidly -name 5` has two answers and every `needs: 5` is ambiguous. With
+a registry both branches write `.pidly/.n/5` with different content, and the
+merge stops:
+
+```
+CONFLICT (add/add): Merge conflict in .pidly/.n/5
+```
+
+Different numbers merge cleanly, so there are no false conflicts. Both
+behaviours are covered by `tests/merge.sh`, which drives real merges, because
+the whole feature is a claim about what git does.
+
+**This detects rather than prevents.** Only a non-coordinating id — a hash, a
+timestamp — could prevent it, and that costs the readable number the format is
+built around. Being told at merge time, before anything is built on the bad
+state, is the trade. Resolution still means renumbering one side.
+
+Two things fall out of it. A number is never reissued even if a ticket
+directory is deleted by hand, which previously would have recycled it. And a
+dangling `needs: 5` has something to say about what 5 was.
+
+The registry can legitimately lag, because the format allows creating a ticket
+with `mkdir`. That is why the next number considers the tree as well, and why
+`pidly init` backfills any number it finds without an entry.
 
 Allocation is the one operation that needs the repository lock (see Claims).
 `mkdir` arbitrates only between siblings, so two agents adding children to
@@ -149,9 +183,9 @@ Allocation is rare and the lock is held for microseconds.
 Two consequences:
 
 - **Numbers are never reused, so there is no delete.** Finishing a ticket means
-  closing it, and a closed ticket stays in the tree inside a `c/`, which is what
-  keeps the maximum monotonic. Hard-deleting one would let its number be handed
-  out again to a different ticket.
+  closing it, and a closed ticket stays in the tree inside a `c/`. The registry
+  makes this hold even against a hand-deleted directory, since the entry
+  outlives the ticket.
 - **`ls` sorts `1, 10, 2`.** Use `ls -v` or `sort -V`, and have `pidly list`
   sort numerically by default.
 

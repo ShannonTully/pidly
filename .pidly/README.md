@@ -136,10 +136,15 @@ lines:
 mkdir .pidly/7/14
 printf 'claim:\nneeds:\ntitle: %s\ndesc:5\n%s\n' "Do the thing" "Why." \
   > .pidly/7/14/info
+printf '%s %s\n' "$(head -c8 /dev/urandom | od -An -tx1 | tr -d ' ')" \
+  "Do the thing" > .pidly/.n/14
 ```
 
-`pidly new` does this, including taking the lock that stops two agents
-picking the same number.
+That last file is the **number registry**. It is what makes two branches
+issuing the same number a merge conflict instead of a silent duplicate, so a
+ticket created by hand needs one too. `pidly init` backfills any that are
+missing, and `pidly new` writes it for you along with the lock that stops two
+agents picking the same number.
 
 ## Closing and reopening
 

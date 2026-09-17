@@ -6,3 +6,6 @@
 # Fallback checkout identity, used only where there is no boot id to derive a
 # runtime from. It is per-machine by definition.
 .id
+
+# .n/ is deliberately NOT ignored. It is the number registry, and it only
+# stops two branches issuing the same number if it is committed.

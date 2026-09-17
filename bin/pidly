@@ -548,10 +548,15 @@ lines:
 mkdir .pidly/7/14
 printf 'claim:\nneeds:\ntitle: %s\ndesc:5\n%s\n' "Do the thing" "Why." \
   > .pidly/7/14/info
+printf '%s %s\n' "$(head -c8 /dev/urandom | od -An -tx1 | tr -d ' ')" \
+  "Do the thing" > .pidly/.n/14
 ```
 
-`pidly new` does this, including taking the lock that stops two agents
-picking the same number.
+That last file is the **number registry**. It is what makes two branches
+issuing the same number a merge conflict instead of a silent duplicate, so a
+ticket created by hand needs one too. `pidly init` backfills any that are
+missing, and `pidly new` writes it for you along with the lock that stops two
+agents picking the same number.
 
 ## Closing and reopening
 
@@ -673,6 +678,52 @@ cmd_agents() {
 	fi
 }
 
+# --- the number registry ---------------------------------------------------
+#
+# .pidly/.n/<number> is created when a number is issued and never modified.
+# It holds a nonce and the title.
+#
+# Its job is to make a collision that git would otherwise merge silently into
+# one that git refuses. Two branches cannot see each other while they
+# allocate, so the lock cannot help: branch A creating .pidly/5 and branch B
+# creating .pidly/7/5 merge cleanly and leave two tickets numbered 5. With a
+# registry, both write .pidly/.n/5 with different content, and the merge stops
+# with an add/add conflict naming the number.
+#
+# This detects rather than prevents. Only a non-coordinating id — a hash, a
+# timestamp — could prevent it, and that costs the readable number the whole
+# format is built around. Being told at merge time, before anything is built
+# on the bad state, is the trade.
+#
+# It also means a number is never reissued even if a ticket directory is
+# deleted by hand, and gives a dangling `needs: 5` something to say about
+# what 5 was.
+
+nonce() {
+	if [ -r /dev/urandom ]; then
+		LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom 2>/dev/null | dd bs=1 count=8 2>/dev/null
+	else
+		printf '%s%s' "$$" "$(date +%s)"
+	fi
+}
+
+registry_dir() { printf '%s/.n\n' "$1"; }
+
+# Record that a number has been issued. Never overwrites: the content is what
+# distinguishes two branches that took the same number.
+register() {
+	_rg_d=$(registry_dir "$1")
+	mkdir -p "$_rg_d"
+	[ -e "$_rg_d/$2" ] && return 0
+	printf '%s %s\n' "$(nonce)" "$3" > "$_rg_d/$2"
+}
+
+registry_highest() {
+	_rh_d=$(registry_dir "$1")
+	[ -d "$_rh_d" ] || { echo 0; return 0; }
+	ls "$_rh_d" 2>/dev/null | awk '{ if ($1+0 > m) m = $1+0 } END { print m+0 }'
+}
+
 # --- new -------------------------------------------------------------------
 
 # Project fields the schema marks required, one per line. A ticket missing one
@@ -690,10 +741,15 @@ schema_required() {
 		}' "$1/schema.md"
 }
 
-# The highest number anywhere in the tracker, closed tickets included.
-# Numbers are never reused, so this only ever goes up.
+# The highest number issued: the greater of what the registry records and
+# what the tree contains. Both are needed — the registry catches numbers whose
+# ticket was deleted, and the tree catches tickets created by hand, which the
+# format explicitly allows.
 highest() {
-	map "$1" | awk '{ if ($1+0 > m) m = $1+0 } END { print m+0 }'
+	_hi_tree=$(map "$1" | awk '{ if ($1+0 > m) m = $1+0 } END { print m+0 }')
+	_hi_reg=$(registry_highest "$1")
+	if [ "$_hi_reg" -gt "$_hi_tree" ]; then printf '%s\n' "$_hi_reg"
+	else printf '%s\n' "$_hi_tree"; fi
 }
 
 cmd_new() {
@@ -750,6 +806,7 @@ cmd_new() {
 		mkdir "$_pd/$_n" 2>/dev/null && break
 		[ "$_n" -gt 1000000 ] && { unlock "$_r"; die 'cannot allocate a number'; }
 	done
+	register "$_r" "$_n" "$_title"
 	unlock "$_r"
 
 	{
@@ -788,6 +845,9 @@ ignore_text() {
 # Fallback checkout identity, used only where there is no boot id to derive a
 # runtime from. It is per-machine by definition.
 .id
+
+# .n/ is deliberately NOT ignored. It is the number registry, and it only
+# stops two branches issuing the same number if it is committed.
 IGNORE
 }
 
@@ -853,12 +913,26 @@ cmd_init() {
 	fi
 	ignore_text > "$_ir/.gitignore"
 
+	# Backfill the registry for a tracker that predates it, or for tickets
+	# created by hand. Without an entry a number has no merge guard.
+	mkdir -p "$(registry_dir "$_ir")"
+	_added=0
+	map "$_ir" | while read -r _num _path; do
+		[ -e "$(registry_dir "$_ir")/$_num" ] && continue
+		register "$_ir" "$_num" "$(sed -n '3s/^title: //p' "$_path/info" 2>/dev/null)"
+		printf 'x\n' >> "$_ir/.backfilled.$$"
+	done
+	[ -f "$_ir/.backfilled.$$" ] &&
+		{ _added=$(wc -l < "$_ir/.backfilled.$$"); rm -f "$_ir/.backfilled.$$"; }
+
 	if [ "$_fresh" = yes ]; then
 		printf 'created %s\n' "$_ir"
 	else
 		printf 'refreshed %s\n' "$_ir"
 	fi
 	printf 'schema.md %s, .gitignore written\n' "$_schema"
+	[ "${_added:-0}" -gt 0 ] &&
+		printf 'registered %s number(s) that had no entry\n' "$_added"
 	cmd_agents "$@"
 	return 0
 }

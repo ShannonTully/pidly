@@ -31,10 +31,28 @@ check "documents the four header lines" "$(count 'desc:' .pidly/schema.md)" "1"
 check "ships the handoff field" "$(count '| handoff ' .pidly/schema.md)" "1"
 check "and nothing else opinionated" "$(grep -c '^| effort' .pidly/schema.md || true)" "0"
 
+echo "the number registry"
+check "init creates it" "$([ -d .pidly/.n ] && echo yes)" "yes"
+check "it is not in the ignore rules" "$(grep -c '^\.n' .pidly/.gitignore || true)" "0"
+
 echo "usable immediately"
 n=$($PIDLY new "first" </dev/null | cut -f1)
 check "a ticket can be created straight away" "$n" "1"
 check "handoff is optional, so not stubbed" "$(grep -c '^handoff' .pidly/1/info || true)" "0"
+check "the number is registered" "$([ -f .pidly/.n/1 ] && echo yes)" "yes"
+check "with a nonce and the title" \
+	"$(awk '{print (NF>=2 && $1 ~ /^[a-z0-9]+$/) ? "yes" : "no"}' .pidly/.n/1)" "yes"
+
+mkdir .pidly/9
+printf 'claim:\nneeds:\ntitle: made by hand\ndesc:4\n' > .pidly/9/info
+$PIDLY init >/dev/null
+check "init backfills a hand-made ticket" "$([ -f .pidly/.n/9 ] && echo yes)" "yes"
+n=$($PIDLY new "after backfill" </dev/null | cut -f1)
+check "and the next number clears it" "$n" "10"
+rm -rf .pidly/10 .pidly/.n/10
+rm -rf .pidly/9
+n=$($PIDLY new "after a delete" </dev/null | cut -f1)
+check "a deleted ticket's number is never reissued" "$n" "10"
 
 echo "refreshing"
 printf '| effort | yes | S,M,L |\n' >> .pidly/schema.md

@@ -1,0 +1,28 @@
+claim:
+needs:
+title: Merge-safe numbering across branches
+desc:26
+Sequential numbers collided when two branches allocated at once: a branch
+creating .pidly/5 and another creating .pidly/7/5 merged cleanly and left two
+tickets numbered 5. The lock could not help — branches do not see each other
+until merge.
+
+Allocation now also writes .pidly/.n/<number>, holding a nonce and the title,
+never modified afterwards, and committed. Two branches taking the same number
+write the same path with different content, so git stops with an add/add
+conflict naming the number. Different numbers merge cleanly.
+
+This detects rather than prevents. Only a non-coordinating id — hash or
+timestamp — prevents it, and that costs the readable number the format is
+built around. Being told at merge time, before anything is built on the bad
+state, was the trade taken.
+
+Two things came free: a number is never reissued even against a hand-deleted
+directory, and a dangling needs has something to say about what the number
+was. The registry can lag, since creating a ticket with mkdir is allowed, so
+the next number still considers the tree and init backfills what it finds.
+
+Done: implemented in bin/pidly, covered by tests/merge.sh (8 cases driving
+real git merges) and additions to tests/init.sh.
+effort: M
+area: format
