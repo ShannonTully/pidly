@@ -746,10 +746,24 @@ ticket would be dated the day it finished. A ticket it cannot date keeps no
 worse than the gap it fills.
 
 **`updated` is maintained, and that makes it the one field that can lie.**
-Every pidly command that writes to an info file bumps it; `close` and
-`reopen` do not, because they move a directory without opening the file, and
-a hand-edit cannot bump anything at all. So it means *when pidly last wrote
-here*, which is a good proxy for activity and not the same as mtime.
+It records an event on one ticket — `claim`, `release`, `edit`, `set`,
+`reap` — rather than every write to the file. The test is whether the write
+says something about *this* ticket: `pidly fields` writes to every info in
+the tracker and says nothing about any single piece of work, so it leaves the
+stamp alone, and stamping the lot would flatten `list --stale` the day it
+ran. `close` and `reopen` do not bump it either, because they move a
+directory without opening the file, and a hand-edit cannot bump anything at
+all. So it means *when something last happened to this ticket, as far as
+pidly saw* — not mtime, and not a log of writes.
+
+Claiming is on the bumping side of that line, which is worth saying because
+it looks like the migration case: nothing in the ticket's content changes.
+But a claim is one agent taking one ticket at one moment, and `--stale` asks
+what has been forgotten — a ticket somebody picked up ten minutes ago has
+not been. What a claim is *not* evidence of is progress, and the ticket
+picked up and then dropped is answered by liveness rather than by a
+timestamp: `claim_state` resolves it from the process table, `reap` clears
+it, and `check` reports it.
 
 This is the trade `desc:` was rejected for, taken deliberately. The
 difference is what a wrong value costs. A stale `desc:` broke a bounded read

@@ -45,14 +45,20 @@ The body, from here           9  ...to the end of the file
 `created` and `updated` are pidly's own fields rather than the project's, so
 they are valid whether or not the schema mentions them. Both are ISO-8601
 UTC, which sorts lexically. `created` records one event and nothing touches
-it again; `updated` is bumped by every pidly command that writes to the file
-— claim, release, edit, reap — and by nothing else.
+it again; `updated` records **an event on this ticket** — `claim`, `release`,
+`edit`, `set`, `reap`. Each of those is one agent doing one thing to one
+ticket, which is what the stamp is asked about.
 
-That last part is the catch: `close` and `reopen` move the directory without
-opening the file, and an edit made by hand or with `sed` cannot bump
-anything. So `updated` means *when pidly last wrote here*, which is a good
-proxy for activity and not the same as the file's real mtime. Use `pidly
-edit` if you want the stamp to follow your edit.
+A write that landed on every ticket at once does not bump it: `pidly fields`
+adds a slot to the whole tracker and says nothing about any one piece of
+work, and stamping all of them would flatten `list --stale` on the day it
+ran. Nor do `close` and `reopen`, which move a directory without opening the
+file, and nor can an edit made by hand or with `sed`, which cannot call
+anything at all.
+
+So `updated` is not the file's mtime and not a record of every write. It is
+*when something last happened to this ticket, as far as pidly saw*. Use
+`pidly edit` if you want the stamp to follow your own edit.
 
 Read only as far as you need:
 
