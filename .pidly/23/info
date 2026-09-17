@@ -1,0 +1,66 @@
+claim:
+needs: 2
+title: Claude Code integration: a skill and permissions, not an MCP server
+effort: M
+area: cli
+
+Agents reach pidly through Bash today, with only the AGENTS.md block telling
+them it exists. That works and is the whole point of the format, but nothing
+makes an agent claim before starting, release when it stops, or stop asking
+for permission on every pidly call. This is the packaging for that.
+
+Three surfaces exist and they are not the same thing:
+
+- A tool is a function the model calls with typed arguments. The built-ins
+  are Bash, Read, Edit and friends; the only way to add one is an MCP
+  server, a process the client talks to over stdio or http.
+- A skill is instructions, loaded when relevant, that the model acts on
+  using the tools it already has — so pidly commands run through Bash.
+- Hooks and settings.json permissions are the glue: run something at session
+  start or stop, pre-approve Bash(pidly list:*) so the prompts stop.
+
+Decision: a skill plus commands plus permissions. Not an MCP server.
+
+An MCP server is a running process, and the format's premise is that there
+is no server and nothing to install — a project that copies .pidly/ as a
+folder gets the whole tracker, and an agent in a checkout where pidly was
+never installed still works with find, sed and mv. Wrapping a CLI that Bash
+already reaches would add a process and a schema for no new capability.
+
+What tools would genuinely buy, for when this is worth revisiting: typed
+arguments, so a malformed invocation is rejected before it runs; structured
+results instead of text the model has to parse; and per-tool permission
+gating, so `reap` and `close` can be prompted while `list` is not. Reopen
+this decision if agents are getting pidly's arguments wrong in practice, or
+if something starts consuming pidly's output as data rather than reading it.
+
+Scope:
+
+- A skill that tells an agent the loop — claim before starting, release with
+  -m when stopping early, close when done, never delete — and points at
+  .pidly/README.md rather than restating it. The AGENTS.md block is the
+  format; the skill is the workflow.
+- Slash commands for the things worth one keystroke: what can I start, what
+  am I holding, hand this back.
+- A permissions block for settings.json: the read-only commands (list, tree,
+  status, check) allowed outright, the writing ones left to prompt.
+- Optionally a session hook: dead claims and held-but-idle tickets surfaced
+  at the start of a session, or a warning at the end about claims this
+  session still holds. Decide whether that is a hook or just advice in the
+  skill — a hook is enforcement, and enforcement in this project has so far
+  been the operator's job.
+
+Open questions:
+
+- Does pidly generate these files the way it generates AGENTS.md and
+  .pidly/README.md, and does check compare them against what would be
+  generated now? Same staleness argument applies if so.
+- Does that go in `pidly agents`, which already owns "tell the agents", or a
+  separate command? `agents -f` already takes a target file, and a skill is
+  a directory, not a file.
+- Other clients exist. Cursor, Gemini and Codex have their own formats;
+  `pidly agents` already writes to whichever of their files it finds. Decide
+  whether this ticket is Claude-only or the first of several.
+
+Done when a fresh checkout can be handed to Claude Code and the agent
+claims, works and closes without being told how in the prompt.
