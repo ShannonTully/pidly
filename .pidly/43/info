@@ -1,0 +1,47 @@
+claim:
+needs:
+title: list reads line 1, and only claim knows what it means
+created: 2026-09-17T16:36:06Z
+updated: 2026-09-17T16:36:06Z
+effort: M
+area: cli
+handoff:
+
+survey() decides a ticket is claimed because line 1 is not empty. claim
+decides with claim_state, which resolves free, expired, live, dead and
+unverifiable. The two disagree, and list is the one that is wrong:
+
+  $ pidly status 1
+  1  expired  holder cloud-1  lease until 2020-01-01T00:00:00Z
+  $ pidly list          # ready work
+  $ pidly list -a
+  1     claimed  abandoned lease
+  $ pidly claim 1
+  1 claimed by ... (previous lease had expired)
+
+So an expired lease is takeable and no listing offers it. The same holds for
+a dead claim, which is at least reported by check and cleared by reap; an
+expired one needs no clearing, which is exactly why nothing else surfaces it.
+
+The reason list does not ask is cost. survey is one awk pass over the whole
+tracker, and claim_state is a shell function: asking it per ticket is a
+process per ticket, which is the 17.4s-against-0.44s shape measured in 27.
+
+But the two cases split, and only one of them is expensive:
+
+- expired is a timestamp comparison. The expiry is in the claim line and
+  ISO-8601 sorts lexically, so the awk pass can decide it against a now
+  passed in with -v. No process, no cost.
+- dead needs the process table, so it stays a process per claimed ticket.
+  Claimed tickets are few, and it is the case reap and check already cover,
+  so list can leave it or resolve it only for the handful.
+
+Doing the cheap half would make list -a honest about the state that is
+takeable, which is the one that loses work today.
+
+Related to 42: both are list calling something ready or not ready on
+thinner evidence than the command that acts on it.
+
+Done when an expired lease reads as takeable in list and list -a, the awk
+pass still makes no per-ticket process to decide it, and the tests cover an
+expired lease, a live claim and a dead one.
