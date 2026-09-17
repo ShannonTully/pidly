@@ -146,6 +146,33 @@ ticket created by hand needs one too. `pidly init` backfills any that are
 missing, and `pidly new` writes it for you along with the lock that stops two
 agents picking the same number.
 
+## Attaching results
+
+A ticket is a directory, so anything else worth keeping about it can live
+there too:
+
+```
+.pidly/7/
+  info
+  review.md        an attachment
+  bench.txt        another
+  12/info          a child ticket
+```
+
+**Attachments are files, never directories.** A directory inside a ticket is
+read as a child ticket, so `notes/` would become a phantom ticket with no
+`info`. Files are invisible to every scan: they do not affect numbering and
+are not counted as tickets.
+
+Most of the time you do not need one. A subagent usually worked on a ticket
+that already exists, so its findings belong in that ticket's body — use
+`pidly edit`, which keeps `desc:` honest. Reach for an attachment when the
+result is too big for a body or is its own artifact: a review, a benchmark,
+a transcript.
+
+Attachments are never deleted and closed trees keep them forever, so the
+same test applies as for tickets — attach what is worth having tomorrow.
+
 ## Delegating to a subagent
 
 A subagent usually shares its parent's process — under Claude Code, a Bash
@@ -168,6 +195,11 @@ pidly new -p 7 "Review the parser changes"     # prints 19
 When the subagent finishes it leaves a handoff and releases; the lead reads
 that and decides whether to close. If the subagent dies, the lease expires
 and the ticket frees itself.
+
+If the subagent produced something worth keeping, it goes in the ticket's
+body or as an attachment — not into a ticket of its own. A ticket created
+and closed in the same breath is a log entry wearing a ticket costume, and
+it costs a number that can never be reused.
 
 **Not every subagent deserves a ticket.** A lookup or a search does not.
 Numbers are never reused and tickets are never deleted, so a ticket per
