@@ -256,7 +256,8 @@ for it.
 
 ## Claims
 
-Line 1 is the claim: `claim:` when free, `claim:<pid>` when held.
+Line 1 is the claim: `claim:` when free, `claim:<pid>@<id>` when held, where
+`<id>` identifies the checkout the pid belongs to.
 
 The pid is the point. An agent that dies mid-task cannot release what it holds,
 and a claim with no liveness information is indistinguishable from active work.
@@ -264,10 +265,10 @@ A pid is checkable — `kill -0 <pid>` — so a stale claim is detectable rather
 than merely suspicious, and `pidly check` reports claims whose holder is gone.
 
 **Claiming is the one operation the format does not make atomic.** Because the
-claim lives inside `info`, taking it is read-modify-write, and two agents
-can both see `claim:` and both write their pid, with the loser never finding
-out. A separate claim file would have made this free (`set -C` fails when the
-file exists) at the cost of another file per ticket.
+claim lives inside `info`, taking it is read-modify-write, and two agents can
+both see `claim:` and both write their pid, with the loser never finding out.
+A separate claim file would have made this free (`set -C` fails when the file
+exists) at the cost of another file per ticket.
 
 So claim, release and edit take a transient lock. `mkdir` is the atomic
 primitive doing the work either way — it just guards the write now instead of
@@ -335,20 +336,19 @@ table, because the file has two audiences and a table serves both: a human reads
 it as documentation, an agent reads it as a spec, and no one needs a TOML or
 JSON parser in bash to use it.
 
-```markdown
-# Ticket schema
+`claim`, `needs`, `title` and `desc` are structural and always present, in that
+order. They are not in the table — the table is only for the project's own
+fields, which live after the body:
 
+```markdown
 | field | required | values |
 |---|---|---|
-| title | yes | free text |
 | effort | no | S, M, L |
-| area | no | free text |
+| area | no | format, cli, docs |
 ```
 
-`claim`, `needs`, `title` and `desc` are structural and always present, in that
-order. Everything else is schema, lives after the body, and is validated by
-`pidly check` rather than by the format — a ticket missing a required field is
-still a readable ticket.
+Those are validated by `pidly check` rather than by the format, so a ticket
+missing a required field is still a readable ticket.
 
 **Priority is a project field, not a structural one.** The header earns its
 fixed positions by answering *can I start this?* in two lines, and priority
@@ -357,13 +357,10 @@ candidates that have already survived the filter. That set is small, so reading
 past the body of each one is cheap, and projects that don't want priority pay
 nothing for it. Every structural line is a cost every ticket carries forever.
 
-This remains the weakest part of the design: a markdown table is parseable by
-`awk` in a pinch, but only while the schema stays flat key/value.
-
 ## Why this shape suits agents
 
 The tree is the work breakdown, so it's also the delegation graph. A lead agent
-claims `1` by writing its pid to line 1 of `.pidly/1/info`. Each child
+claims `2` by writing its pid to line 1 of `.pidly/2/info`. Each child
 directory under it is a unit of work a subagent can claim independently, and the
 subagent's working context is one directory — its own `info` plus whatever
 children it spawns. Parent completion is a question about the filesystem: are
