@@ -11,7 +11,7 @@ check() { if [ "$2" = "$3" ]; then ok "$1"; else no "$1 (want '$3', got '$2')"; 
 
 command -v git >/dev/null 2>&1 || { echo "  skipped: git not available"; exit 0; }
 
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pidly.XXXXXX"); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 git init -q .
 git config user.email t@example.com

@@ -3,13 +3,14 @@
 # and must never damage what a human wrote around it.
 set -eu
 PIDLY=$(cd "$(dirname "$0")/.." && pwd)/bin/pidly
+. "$(dirname "$0")/lib.sh"
 pass=0; fail=0
 ok() { pass=$((pass+1)); printf '  ok    %s\n' "$1"; }
 no() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; }
 check() { if [ "$2" = "$3" ]; then ok "$1"; else no "$1 (want '$3', got '$2')"; fi; }
 count() { c=$(grep -cF "$1" "$2" 2>/dev/null || true); printf '%s' "${c:-0}"; }
 
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pidly.XXXXXX"); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"; mkdir -p .pidly
 
 echo "installing"
@@ -30,7 +31,7 @@ rm AGENTS.md
 printf '# Project\n\nKEEP BEFORE\n' > AGENTS.md
 $PIDLY agents >/dev/null
 printf '\n## After\n\nKEEP AFTER\n' >> AGENTS.md
-sed -i 's|^Work lives in.*|STALE|' AGENTS.md
+sedi 's|^Work lives in.*|STALE|' AGENTS.md
 $PIDLY agents >/dev/null
 check "stale block content is replaced" "$(count STALE AGENTS.md)" "0"
 check "the current block is present" "$(count 'Work lives in' AGENTS.md)" "1"

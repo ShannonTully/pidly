@@ -3,6 +3,7 @@
 # schema row out to tickets that predate it.
 set -eu
 PIDLY=$(cd "$(dirname "$0")/.." && pwd)/bin/pidly
+. "$(dirname "$0")/lib.sh"
 pass=0; fail=0
 ok() { pass=$((pass+1)); printf '  ok    %s\n' "$1"; }
 no() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; }
@@ -12,7 +13,7 @@ hasnt() { if printf '%s' "$2" | grep -qF "$3"; then no "$1 (unexpected '$3')"; e
 fieldnames() { awk 'NR>3 { if ($0 == "") exit; sub(/:.*/, ":"); print }' "$1" | tr '\n' ' '; }
 body() { awk 'b { print } !b && $0 == "" { b = 1 }' "$1"; }
 
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pidly.XXXXXX"); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 PIDLY_PID=$$; export PIDLY_PID
 $PIDLY init >/dev/null
@@ -35,7 +36,7 @@ check "and leaves a bare key, not a trailing space" \
 check "the ticket is still readable to check" "$($PIDLY check >/dev/null 2>&1 && echo ok)" "ok"
 
 before=$(sed -n 's/^updated: //p' .pidly/2/info)
-sed -i 's/^updated: .*/updated: 2020-01-01T00:00:00Z/' .pidly/2/info
+sedi 's/^updated: .*/updated: 2020-01-01T00:00:00Z/' .pidly/2/info
 $PIDLY set 2 effort M >/dev/null
 hasnt "writing a field is activity, so updated moves" \
 	"$(sed -n 's/^updated: //p' .pidly/2/info)" "2020-01-01T00:00:00Z"
@@ -97,7 +98,7 @@ check "and check is clean" "$($PIDLY check >/dev/null 2>&1 && echo ok)" "ok"
 
 # A field the schema stopped declaring is data, not drift.
 $PIDLY set 1 area docs >/dev/null
-sed -i '/^field: area$/,+1d' .pidly/schema
+delete_stanza area .pidly/schema
 $PIDLY fields >/dev/null
 check "a dropped schema row does not delete the value" \
 	"$(sed -n 's/^area: //p' .pidly/1/info)" "docs"

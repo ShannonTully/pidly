@@ -10,7 +10,7 @@ check() { if [ "$2" = "$3" ]; then ok "$1"; else no "$1 (want '$3', got '$2')"; 
 # release from separate invocations still agree on who the holder is.
 PIDLY_PID=$$; export PIDLY_PID
 
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pidly.XXXXXX"); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"; mkdir .pidly
 cat > .pidly/schema <<'EOF'
 field: effort

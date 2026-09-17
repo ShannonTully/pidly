@@ -3,6 +3,7 @@
 # nothing else. The states it refuses matter more than the one it clears.
 set -eu
 PIDLY=$(cd "$(dirname "$0")/.." && pwd)/bin/pidly
+. "$(dirname "$0")/lib.sh"
 pass=0; fail=0
 ok() { pass=$((pass+1)); printf '  ok    %s\n' "$1"; }
 no() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; }
@@ -13,7 +14,7 @@ line1() { sed -n 1p "$(find .pidly -type d -name "$1")/info"; }
 # goes away, which is exactly the state reap exists for.
 dead_claim() { sh -c "PIDLY_PID=\$\$ $PIDLY claim $1 >/dev/null"; }
 
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pidly.XXXXXX"); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 PIDLY_PID=$$; export PIDLY_PID
 $PIDLY init >/dev/null
@@ -45,7 +46,7 @@ check "an unclaimed ticket is refused" "$rc" "1"
 has "saying so" "$out" "2 is not claimed"
 
 dead_claim 2
-sed -i "1s|@[^ ]*|@someother.u0|" .pidly/2/info
+sedi "1s|@[^ ]*|@someother.u0|" .pidly/2/info
 held=$(line1 2)
 out=$($PIDLY reap 2 2>&1) && rc=0 || rc=$?
 check "an unverifiable claim is refused" "$rc" "1"
@@ -59,8 +60,8 @@ out=$($PIDLY reap 3 2>&1) && rc=0 || rc=$?
 check "an expired lease is refused" "$rc" "1"
 has "because claim already takes it" "$out" "already takeable"
 check "so the line is left alone" "$(line1 3)" "$held"
-sed -i '1s/.*/claim:/' .pidly/3/info
-sed -i '1s/.*/claim:/' .pidly/2/info
+sedi '1s/.*/claim:/' .pidly/3/info
+sedi '1s/.*/claim:/' .pidly/2/info
 
 echo "the sweep"
 out=$($PIDLY reap)

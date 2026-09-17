@@ -4,6 +4,7 @@
 # backfilled by init for tickets that predate it.
 set -eu
 PIDLY=$(cd "$(dirname "$0")/.." && pwd)/bin/pidly
+. "$(dirname "$0")/lib.sh"
 pass=0; fail=0
 ok() { pass=$((pass+1)); printf '  ok    %s\n' "$1"; }
 no() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; }
@@ -13,7 +14,7 @@ created() { sed -n 's/^created: //p' "$(find .pidly -type d -name "$1")/info"; }
 updated() { sed -n 's/^updated: //p' "$(find .pidly -type d -name "$1")/info"; }
 iso='^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z$'
 
-tmp=$(mktemp -d); repo=""
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pidly.XXXXXX"); repo=""
 trap 'rm -rf "$tmp" ${repo:+"$repo"}' EXIT
 cd "$tmp"
 PIDLY_PID=$$; export PIDLY_PID
@@ -35,7 +36,7 @@ check "and a ticket carrying it still passes check" \
 printf '\nfield: created\nnote: not yours to declare\n' >> .pidly/schema
 has "declaring it is a finding" "$($PIDLY check 2>&1 || true)" \
 	"schema: 'created' is the format's own and is not declared here"
-sed -i '/^field: created$/,+1d' .pidly/schema
+delete_stanza created .pidly/schema
 
 echo "nothing updates created"
 was=$(created 1)
@@ -67,12 +68,12 @@ was=$now
 $PIDLY close 1 >/dev/null
 $PIDLY reopen 1 >/dev/null
 check "a close and a reopen do not: they never open the file" "$(updated 1)" "$was"
-sed -i '/^body/a hand written' .pidly/1/info
+printf 'hand written\n' >> .pidly/1/info
 check "and neither does an edit pidly did not make" "$(updated 1)" "$was"
 
 echo "the stale query"
 $PIDLY new "fresh" </dev/null >/dev/null      # 2
-sed -i 's/^updated: .*/updated: 2020-01-01T00:00:00Z/' .pidly/1/info
+sedi 's/^updated: .*/updated: 2020-01-01T00:00:00Z/' .pidly/1/info
 out=$($PIDLY list --stale 7d)
 has "lists work nothing has written to" "$out" "1"
 check "and not what was just touched" "$(printf '%s' "$out" | grep -c '^2 ' || true)" "0"
@@ -87,20 +88,20 @@ out=$($PIDLY list --stale nonsense 2>&1) && rc=0 || rc=$?
 check "a duration that is not one is refused" "$rc" "1"
 has "saying what one looks like" "$out" "90s, 30m, 2h or 7d"
 rm -rf .pidly/3
-sed -i "s/^updated: .*/updated: $was/" .pidly/1/info
+sedi "s/^updated: .*/updated: $was/" .pidly/1/info
 
 echo "check"
-sed -i 's/^created: .*/created: yesterday/' .pidly/1/info
+sedi 's/^created: .*/created: yesterday/' .pidly/1/info
 out=$($PIDLY check 2>&1) && rc=0 || rc=$?
 check "a timestamp that is not one is a finding" "$rc" "1"
 has "saying what is wrong with it" "$out" \
 	"1: created is 'yesterday', which is not an ISO-8601 UTC timestamp"
-sed -i "s/^created: .*/created: $was/" .pidly/1/info
+sedi "s/^created: .*/created: $was/" .pidly/1/info
 keep=$(updated 1)
-sed -i 's/^updated: .*/updated: 2000-01-01T00:00:00Z/' .pidly/1/info
+sedi 's/^updated: .*/updated: 2000-01-01T00:00:00Z/' .pidly/1/info
 has "a ticket updated before it existed" "$($PIDLY check 2>&1 || true)" \
 	"1: updated is before created"
-sed -i "s/^updated: .*/updated: $keep/" .pidly/1/info
+sedi "s/^updated: .*/updated: $keep/" .pidly/1/info
 
 echo "init backfills"
 mkdir -p .pidly/9
@@ -130,7 +131,7 @@ check "the tracker is still valid" "$($PIDLY check >/dev/null && echo clean)" "c
 echo "dating follows a move"
 if command -v git >/dev/null 2>&1; then
 	# Its own root: a tracker inside a tracker is refused, rightly.
-	repo=$(mktemp -d); cd "$repo"
+	repo=$(mktemp -d "${TMPDIR:-/tmp}/pidly.XXXXXX"); cd "$repo"
 	git init -q .
 	git config user.email t@example; git config user.name t
 	$PIDLY init >/dev/null

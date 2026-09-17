@@ -2,6 +2,7 @@
 # Tests for .pidly/schema: stanzas, patterns, and what check says about both.
 set -eu
 PIDLY=$(cd "$(dirname "$0")/.." && pwd)/bin/pidly
+. "$(dirname "$0")/lib.sh"
 pass=0; fail=0
 ok() { pass=$((pass+1)); printf '  ok    %s\n' "$1"; }
 no() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; }
@@ -11,7 +12,7 @@ hasnt() { if printf '%s' "$2" | grep -qF "$3"; then no "$1 (unexpected '$3')"; e
 fieldnames() { awk 'NR>3 { if ($0 == "") exit; sub(/:.*/, ":"); print }' "$1" | tr '\n' ' '; }
 schema() { cat > .pidly/schema; }
 
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pidly.XXXXXX"); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 PIDLY_PID=$$; export PIDLY_PID
 $PIDLY init >/dev/null
@@ -50,11 +51,11 @@ check "so does new -f: the two agree about what a value is" "$rc" "1"
 
 # A pattern is matched anchored, which is the whole reason S|M|L is safe as a
 # set: unanchored it would accept anything containing an M.
-sed -i 's/^effort: M$/effort: M extra/' .pidly/1/info
+sedi 's/^effort: M$/effort: M extra/' .pidly/1/info
 out=$($PIDLY check 2>&1 || true)
 has "check reports a value outside its pattern" "$out" \
 	"1: effort is 'M extra', which does not match S|M|L"
-sed -i 's/^effort: M extra$/effort: M/' .pidly/1/info
+sedi 's/^effort: M extra$/effort: M/' .pidly/1/info
 
 # grep, not awk: mawk has no interval expressions, so a schema written with
 # {4} would silently match nothing if check used one of its awk passes.
@@ -67,11 +68,11 @@ check "and still rejects what it should" "$rc" "1"
 echo "empty values"
 check "an empty optional field is not matched against its pattern" \
 	"$($PIDLY check >/dev/null && echo clean)" "clean"
-sed -i 's/^area: cli$/area:/' .pidly/1/info
+sedi 's/^area: cli$/area:/' .pidly/1/info
 out=$($PIDLY check 2>&1 || true)
 has "an empty required one is a finding" "$out" "1: required field 'area' is empty"
 hasnt "about presence, not about the pattern" "$out" "does not match format|cli|docs"
-sed -i 's/^area:$/area: cli/' .pidly/1/info
+sedi 's/^area:$/area: cli/' .pidly/1/info
 
 echo "the schema's own faults"
 was=$(cat .pidly/schema)
@@ -115,30 +116,30 @@ echo "the format's own lines"
 # the grammar rejects, and a title that is there but empty.
 $PIDLY new -f area=cli "structural" </dev/null >/dev/null       # 2
 f=.pidly/2/info
-sed -i '1s/.*/claim:garbage/' $f
+sedi '1s/.*/claim:garbage/' $f
 out=$($PIDLY check 2>&1 || true)
 has "a claim nothing could parse is a finding" "$out" "2: claim is 'garbage', which is not"
 has "shown as the grammar in words, not as the pattern" "$out" "<pid>.<starttime>@<runtime>"
-sed -i '1s/.*/claim:/' $f
+sedi '1s/.*/claim:/' $f
 
-sed -i '2s/.*/needs: yesterday/' $f
+sedi '2s/.*/needs: yesterday/' $f
 has "a needs that is not numbers" "$($PIDLY check 2>&1 || true)" \
 	"2: needs is 'yesterday', which is not ticket numbers separated by spaces"
-sed -i '2s/.*/needs: 1/' $f
+sedi '2s/.*/needs: 1/' $f
 check "and numbers are fine" "$($PIDLY check >/dev/null && echo clean)" "clean"
-sed -i '2s/.*/needs:/' $f
+sedi '2s/.*/needs:/' $f
 
-sed -i '3s/.*/title:/' $f
+sedi '3s/.*/title:/' $f
 has "a title that is present but empty" "$($PIDLY check 2>&1 || true)" "2: title is empty"
-sed -i '3s/.*/nottitle: x/' $f
+sedi '3s/.*/nottitle: x/' $f
 has "and a line 3 that is not the title at all" "$($PIDLY check 2>&1 || true)" \
 	"2: line 3 is not title:"
-sed -i '3s/.*/title: structural/' $f
+sedi '3s/.*/title: structural/' $f
 
-sed -i 's/^created: .*/created: yesterday/' $f
+sedi 's/^created: .*/created: yesterday/' $f
 has "a stamp that is not a timestamp" "$($PIDLY check 2>&1 || true)" \
 	"2: created is 'yesterday', which is not an ISO-8601 UTC timestamp"
-sed -i "s/^created: .*/created: $(sed -n 's/^updated: //p' $f)/" $f
+sedi "s/^created: .*/created: $(sed -n 's/^updated: //p' $f)/" $f
 check "and the ticket is clean again" "$($PIDLY check >/dev/null && echo clean)" "clean"
 
 echo "a real claim is not a malformed one"
@@ -150,18 +151,18 @@ check "so does a pid claim carrying a lease" "$($PIDLY check >/dev/null && echo 
 $PIDLY release 2 >/dev/null
 PIDLY_AGENT=cloud-1 PIDLY_LEASE=2h $PIDLY claim 2 >/dev/null
 check "and an agent claim with an expiry" "$($PIDLY check >/dev/null && echo clean)" "clean"
-sed -i '1s/.*/claim:/' $f
+sedi '1s/.*/claim:/' $f
 
 echo "the project cannot weaken them"
 printf '\nfield: title\nmatch: .*\n' >> .pidly/schema
-sed -i '3s/.*/title:/' $f
+sedi '3s/.*/title:/' $f
 out=$($PIDLY check 2>&1 || true)
 has "redeclaring one of them is a finding" "$out" \
 	"schema: 'title' is the format's own and is not declared here"
 has "and the format's rule still applies" "$out" "2: title is empty"
 hasnt "while nothing offers to write a second one into the block" \
 	"$out" "have no 'title' line"
-sed -i '3s/.*/title: structural/' $f
+sedi '3s/.*/title: structural/' $f
 printf '%s\n' "$was" > .pidly/schema
 
 printf '\nline: 4\nfield: effort\n' >> .pidly/schema

@@ -10,7 +10,7 @@ check() { if [ "$2" = "$3" ]; then ok "$1"; else no "$1 (want '$3', got '$2')"; 
 has() { if printf '%s' "$2" | grep -qF "$3"; then ok "$1"; else no "$1 (missing '$3' in: $2)"; fi; }
 where() { find .pidly -type d -name "$1" | sed "s|^\.pidly/||"; }
 
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pidly.XXXXXX"); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 PIDLY_PID=$$; export PIDLY_PID
 $PIDLY init >/dev/null

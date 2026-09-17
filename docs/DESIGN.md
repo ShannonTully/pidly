@@ -835,6 +835,16 @@ commands that agents will run, and those are the ones nothing else exercises
 That catches the habit coming back, which is the failure mode; it does not
 replace running pidly on a Mac.
 
+The suites had the same problem one layer up, and a suite that will not run
+on the machine someone is porting to cannot check the port. `sed -i` is the
+worst of it — GNU takes it bare, BSD requires an argument, and there is no
+spelling that works on both — so `tests/lib.sh` holds a `sedi` that writes a
+temp file and renames it, which is what the script does internally anyway.
+`mktemp -d` wants a template on BSD, `addr,+N` and `3a text` are GNU-only sed,
+and both are now awk or `head`/`sed -n` instead. `portable.sh` greps the
+suites for all four, skipping itself and `lib.sh`, which have to be able to
+write the spellings down in order to forbid and explain them.
+
 The locking tests are only as good as the number of processes they race, and
 that number is a property of the machine rather than of pidly — a proot
 sandbox gives out long before a workstation does. `PIDLY_TEST_RACE` carries

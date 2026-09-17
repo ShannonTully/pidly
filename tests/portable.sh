@@ -5,6 +5,9 @@
 # with a find that rejects them.
 set -eu
 PIDLY=$(cd "$(dirname "$0")/.." && pwd)/bin/pidly
+# Resolved before anything cds: $0 is relative when the suite is run as
+# ./portable.sh, and this section reads the other suites after a cd.
+SUITES=$(cd "$(dirname "$0")" && pwd)
 pass=0; fail=0
 ok() { pass=$((pass+1)); printf '  ok    %s\n' "$1"; }
 no() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; }
@@ -26,13 +29,31 @@ done
 echo "the idioms it publishes"
 # The reference and the AGENTS.md block hand agents find commands to run, and
 # those are the ones no test would otherwise exercise.
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pidly.XXXXXX"); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 PIDLY_PID=$$; export PIDLY_PID
 $PIDLY init >/dev/null
 for opt in $gnuisms; do
 	n=$(cat .pidly/README.md AGENTS.md | grep -c -- "find .*$opt" || true)
 	check "no $opt in a published idiom" "$n" "0"
+done
+
+echo "the suites themselves"
+# The suite has to run on the machine someone is porting pidly to, or the
+# port cannot be checked. These are the spellings that differ: GNU sed takes
+# -i bare and BSD wants an argument, BSD mktemp wants a template, and the
+# addr,+N and "3a text" forms are GNU only.
+for t in "$SUITES"/*.sh; do
+	# lib.sh explains these spellings and this file forbids them, so both
+	# have to be able to write them down. Neither edits a file in place.
+	case $t in */lib.sh|*/portable.sh) continue ;; esac
+	b=$(basename "$t")
+	check "no sed -i in $b" "$(code "$t" | grep -c 'sed -i ' || true)" "0"
+	check "no untemplated mktemp in $b" \
+		"$(code "$t" | grep -c 'mktemp -d)' || true)" "0"
+	check "no GNU sed address in $b" "$(code "$t" | grep -c ',+[0-9]' || true)" "0"
+	check "no GNU sed append in $b" \
+		"$(code "$t" | grep -Ec "sed(i)? '[^']*[0-9/]a " || true)" "0"
 done
 
 echo "running under a find that has none of them"

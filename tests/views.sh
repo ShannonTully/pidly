@@ -2,6 +2,7 @@
 # Tests for list, field, tree and check.
 set -eu
 PIDLY=$(cd "$(dirname "$0")/.." && pwd)/bin/pidly
+. "$(dirname "$0")/lib.sh"
 pass=0; fail=0
 ok() { pass=$((pass+1)); printf '  ok    %s\n' "$1"; }
 no() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; }
@@ -9,7 +10,7 @@ check() { if [ "$2" = "$3" ]; then ok "$1"; else no "$1 (want '$3', got '$2')"; 
 has() { if printf '%s' "$2" | grep -qF "$3"; then ok "$1"; else no "$1 (missing '$3' in: $2)"; fi; }
 hasnt() { if printf '%s' "$2" | grep -qF "$3"; then no "$1 (unexpected '$3')"; else ok "$1"; fi; }
 
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pidly.XXXXXX"); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 PIDLY_PID=$$; export PIDLY_PID
 $PIDLY init >/dev/null
@@ -37,9 +38,9 @@ echo "field"
 # about which fields they have, which is what a schema change leaves behind.
 printf '\nfield: effort\nmatch: S|M|L\n\nfield: area\nmatch: cli|docs\n' \
 	>> .pidly/schema
-sed -i '3a effort: L' .pidly/1/info
-sed -i '3a area: cli\neffort: M' .pidly/2/info
-sed -i '3a area: docs' .pidly/1/3/info
+insert_after 3 .pidly/1/info 'effort: L'
+insert_after 3 .pidly/2/info 'area: cli' 'effort: M'
+insert_after 3 .pidly/1/3/info 'area: docs'
 out=$($PIDLY field effort)
 check "a row per open ticket" "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" "4"
 check "sorted numerically" \
@@ -76,30 +77,29 @@ check "exit 0" "$rc" "0"
 has "and says so" "$out" "ok:"
 
 echo "check catches"
-sed -i '3s/.*/not a title/' .pidly/2/info
+sedi '3s/.*/not a title/' .pidly/2/info
 out=$($PIDLY check 2>&1) && rc=0 || rc=$?
 check "exit 1 when something is wrong" "$rc" "1"
 has "a missing title" "$out" "2: line 3 is not title:"
 $PIDLY init >/dev/null 2>&1 || true
-sed -i '3s/.*/title: root two/' .pidly/2/info
+sedi '3s/.*/title: root two/' .pidly/2/info
 
-sed -i '2s/.*/needs: 99/' .pidly/4/info
+sedi '2s/.*/needs: 99/' .pidly/4/info
 has "a dangling dependency" "$($PIDLY check 2>&1 || true)" "4: needs 99, which does not exist"
-sed -i '2s/.*/needs: 2/' .pidly/4/info
+sedi '2s/.*/needs: 2/' .pidly/4/info
 
-sed -i '2s/.*/needs: 2/' .pidly/1/info
-sed -i '2s/.*/needs: 1/' .pidly/2/info
+sedi '2s/.*/needs: 2/' .pidly/1/info
+sedi '2s/.*/needs: 1/' .pidly/2/info
 out=$($PIDLY check 2>&1 || true)
 has "a cycle, naming one member" "$out" "1: in a needs cycle"
 has "and the other" "$out" "2: in a needs cycle"
 hasnt "without implicating an unrelated ticket" "$out" "3: in a needs cycle"
-sed -i '2s/.*/needs:/' .pidly/1/info
-sed -i '2s/.*/needs:/' .pidly/2/info
+sedi '2s/.*/needs:/' .pidly/1/info
+sedi '2s/.*/needs:/' .pidly/2/info
 
-printf 'strayfield: x\n' > .pidly/2/info.tmp
-sed -i '3a strayfield: x' .pidly/2/info; rm -f .pidly/2/info.tmp
+insert_after 3 .pidly/2/info 'strayfield: x'
 has "an undeclared field" "$($PIDLY check 2>&1 || true)" "field 'strayfield' is not in the schema"
-sed -i '/^strayfield:/d' .pidly/2/info
+sedi '/^strayfield:/d' .pidly/2/info
 
 mkdir .pidly/2/notes
 out=$($PIDLY check 2>&1 || true)
@@ -118,7 +118,7 @@ rm -f .pidly/1/.lock
 printf 'clobbered\n' > .pidly/README.md
 has "a stale reference" "$($PIDLY check 2>&1 || true)" "README.md is out of date"
 $PIDLY agents >/dev/null
-sed -i 's/^A ticket is a directory.*/TAMPERED/' AGENTS.md
+sedi 's/^A ticket is a directory.*/TAMPERED/' AGENTS.md
 has "a stale AGENTS.md section" "$($PIDLY check 2>&1 || true)" "pidly section is out of date"
 $PIDLY agents >/dev/null
 

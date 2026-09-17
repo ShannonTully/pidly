@@ -2,6 +2,7 @@
 # Tests for `pidly new`: numbering, the header it writes, and placement.
 set -eu
 PIDLY=$(cd "$(dirname "$0")/.." && pwd)/bin/pidly
+. "$(dirname "$0")/lib.sh"
 . "$(dirname "$0")/config.sh"
 pass=0; fail=0
 ok() { pass=$((pass+1)); printf '  ok    %s\n' "$1"; }
@@ -15,7 +16,7 @@ iso='^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9
 body() { awk 'b { print } !b && $0 == "" { b = 1 }' "$1"; }
 nums() { find .pidly -mindepth 1 -type d '!' -name c '!' -name '.*' -print | awk -F/ '{print $NF}' | sort -n | tr '\n' ' '; }
 
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pidly.XXXXXX"); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"; mkdir .pidly
 cat > .pidly/schema <<'EOF'
 field: effort
@@ -125,11 +126,11 @@ out=$($PIDLY check 2>&1 || true)
 case $out in *"required field"*) no "check still complains: $out" ;;
              *) ok "and check is satisfied by the value" ;; esac
 
-sed -i 's/^effort: M$/effort:/' $f
+sedi 's/^effort: M$/effort:/' $f
 case $($PIDLY check 2>&1 || true) in
 *"1: required field 'effort' is empty"*) ok "a required field emptied by hand is reported" ;;
 *) no "check did not report the empty field" ;; esac
-sed -i '/^effort:$/d' $f
+sedi '/^effort:$/d' $f
 case $($PIDLY check 2>&1 || true) in
 *"1: required field 'effort' is missing"*) ok "and so is one that is gone" ;;
 *) no "check did not report the missing field" ;; esac

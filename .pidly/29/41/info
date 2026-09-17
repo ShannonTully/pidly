@@ -4,8 +4,8 @@ title: find -printf is GNU-only, so pidly does not run on macOS
 effort: M
 area: cli
 created: 2026-09-17T07:12:58Z
-updated: 2026-09-17T19:10:59Z
-handoff: All but the macOS run; see the body for what stands in for it.
+updated: 2026-09-17T20:10:37Z
+handoff: Only the macOS run is left; script and suites are both portable now.
 
 map() is how every traversal in pidly works — list, tree, check, new, reap,
 init, and anything 25 or 27 adds — and it is written as:
@@ -63,3 +63,12 @@ bfs 4.1.1 and no BSD find is installed.
 What is left is running the suite on a Mac. Also worth knowing before that:
 the suites themselves use GNU sed -i, which BSD sed spells sed -i '', so the
 suite will need work before it runs there even though pidly will.
+
+
+The suites are BSD-safe now too, so what is left really is only the macOS
+run. sed -i became sedi in tests/lib.sh — a temp file and a mv, since GNU
+takes -i bare and BSD requires an argument; mktemp -d got the template BSD
+wants; and the GNU-only sed forms, addr,+N and "3a text", are awk and
+head/sed -n instead. portable.sh greps the suites for all four, and skips
+itself and lib.sh, which have to write the spellings down to forbid and
+explain them.

@@ -4,6 +4,7 @@
 # was saved.
 set -eu
 PIDLY=$(cd "$(dirname "$0")/.." && pwd)/bin/pidly
+. "$(dirname "$0")/lib.sh"
 pass=0; fail=0
 ok() { pass=$((pass+1)); printf '  ok    %s\n' "$1"; }
 no() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; }
@@ -14,7 +15,7 @@ body() { awk 'b { print } !b && $0 == "" { b = 1 }' .pidly/1/info; }
 # maintains it, so a write is meant to move it and nothing else.
 head3() { awk 'NR>3 && $0 == "" { exit } !/^updated: /' .pidly/1/info; }
 
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pidly.XXXXXX"); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 PIDLY_PID=$$; export PIDLY_PID
 $PIDLY init >/dev/null
@@ -70,7 +71,9 @@ has "an editor that changes nothing says so" "$out" "1 unchanged"
 
 cat > ed-mangle <<'ED'
 #!/bin/sh
-sed -i '3s/.*/no longer a title line/' "$1"
+# A standalone editor stub, so it spells out the portable in-place edit
+# rather than sourcing the suite's lib.sh.
+sed '3s/.*/no longer a title line/' "$1" > "$1.ed" && mv "$1.ed" "$1"
 ED
 chmod +x ed-mangle
 before=$(cat .pidly/1/info)
@@ -87,7 +90,8 @@ rm -f "$draft"
 cat > ed-racer <<'ED'
 #!/bin/sh
 # Someone claims the ticket while the editor is open.
-sed -i '1s/.*/claim:999.1@elsewhere/' "$PIDLY_RACE_TARGET"
+sed '1s/.*/claim:999.1@elsewhere/' "$PIDLY_RACE_TARGET" > "$PIDLY_RACE_TARGET.ed"
+mv "$PIDLY_RACE_TARGET.ed" "$PIDLY_RACE_TARGET"
 printf '\nFrom a doomed edit.\n' >> "$1"
 ED
 chmod +x ed-racer
@@ -98,7 +102,7 @@ has "saying what happened" "$out" "changed while the editor was open"
 check "the other write survives" "$(sed -n 1p .pidly/1/info)" "claim:999.1@elsewhere"
 check "and the edit is not in the file" \
 	"$(grep -c 'From a doomed edit' .pidly/1/info || true)" "0"
-sed -i '1s/.*/claim:/' .pidly/1/info
+sedi '1s/.*/claim:/' .pidly/1/info
 rm -f "$(printf '%s' "$out" | sed -n 's/.*your edit is in //p')"
 
 echo "no editor to run"
