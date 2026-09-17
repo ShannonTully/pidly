@@ -1,0 +1,17 @@
+claim:
+needs:
+title: Match closed-ness relative to .pidly, not on the absolute path
+
+Closed-ness is matched as "the path contains /c/" in two places, against a
+path that starts at the checkout root: the dependency scan in cmd_claim
+(case $_dp in */c/*) and the closed[] test in survey's awk ($2 ~ /\/c\//).
+A checkout under a directory named c — ~/c/pidly, /srv/c/proj — makes every
+ticket match, so claim reports nothing blocked and list reports everything
+ready. Both are wrong in the unsafe direction.
+
+cmd_reopen and check's closed-tree rule already strip the root first
+(${_path#"$_r"/}) and match c/* or */c/*. Do the same here, or give the two
+callers one helper so the rule is written once.
+
+Done when the two sites match relative to .pidly and a test runs the suite
+from a checkout whose path contains a c segment.
