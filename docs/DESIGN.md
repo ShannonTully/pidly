@@ -238,8 +238,15 @@ written today still resolves after 7 has been closed, moved into a `c/`, and
 re-parented twice. Storing a path there would produce a reference that rots on
 the first `mv`.
 
-Blocked-ness is computed without opening any file: locate each dependency with
-`find .pidly -name <n>` and check whether its path runs through a `c/`.
+Blocked-ness is computed without opening any file: a ticket is closed if its
+path runs through a `c/`.
+
+**Resolve numbers with one traversal, not one search per dependency.** The
+naive form — `find .pidly -name <n>` per entry — is quadratic, and it shows: on
+a 2003-ticket tree it takes 26.5s, against 2.0s for a single `find` that builds
+a number-to-path map and answers every lookup from it. The map is derived on
+each run and never stored, so there is nothing to keep in sync. Any tool
+enumerating tickets is already walking the tree once; this is the same walk.
 
 Two rules keep this distinct from parentage:
 
