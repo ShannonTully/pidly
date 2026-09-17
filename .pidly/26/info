@@ -1,0 +1,44 @@
+claim:
+needs:
+title: schema.md holds declarations, not prose
+effort: S
+area: docs
+created: 2026-09-17T06:21:54Z
+updated: 2026-09-17T06:21:54Z
+
+schema.md mixes two kinds of content with opposite ownership rules. The
+table is the project's: init seeds it and then never touches the file again,
+correctly. The prose above it — three header lines, where the body starts —
+is pidly's, and everywhere else pidly's prose lives in .pidly/README.md,
+which is regenerated on every init and which check compares against what
+would be generated now.
+
+So schema.md is the one place pidly's own documentation sits in a file pidly
+has promised not to correct. That is not theoretical: the seed said "Four
+header lines" from the day desc: was dropped until it was noticed while
+doing 17, and every tracker that ran init in between has the wrong statement
+in a file no upgrade can fix.
+
+Seed instead: a heading, one sentence saying what the table is for and
+pointing at .pidly/README.md for the format, and the table.
+
+Drop the created and updated rows from the seed too. They are pidly's
+fields, valid whether or not the table declares them, so listing them is
+documentation-by-copy in the file that cannot be updated — the same fault
+one row down.
+
+Keep it markdown and keep it a table. The declarations have three axes, awk
+parses it with no dependency, and it renders where the repository is read.
+A flat key: value list would have to invent syntax for the required column
+and would buy no parsing that is not already written.
+
+This also makes the file a program input rather than a document, which 25
+needs: pidly fields has to read the declared set and its order out of it.
+
+Existing trackers keep whatever prose they have — init still will not
+rewrite an owned schema.md — so this only changes what new projects get,
+which is why it is worth doing before there are many of them.
+
+Done when the seeded schema.md is heading, pointer and table; the reference
+covers what the prose used to; and init.sh still proves an owned schema.md
+is left alone.

@@ -1,0 +1,37 @@
+claim:
+needs:
+title: read one field across every ticket, in one pass
+effort: S
+area: cli
+created: 2026-09-17T06:21:54Z
+updated: 2026-09-17T06:21:54Z
+
+Nothing in the CLI reads a field across tickets. list reads the first three
+lines, tree reads the title, and a question like "what is the effort spread
+of the open work?" or "which tickets have no area?" is a shell loop today.
+
+  pidly field <name> [-a]     number and value, one line each
+
+One awk pass over every info file, matching the field by name, skipping
+closed work unless -a. A ticket without the field prints - so the gap is
+visible: that is usually the question being asked.
+
+Aggregation is then sort | uniq -c on the output, which is why this prints
+rows rather than summarising. A --count that tallies is a later decision, if
+the one-liner turns out to be the thing everyone writes.
+
+The pass is the point. Measured over 2000 tickets: one awk reading a fixed
+line number is 0.43s, the same pass matching the field by name is 0.44s, and
+a process per ticket is 17.4s. So the win is one pass rather than one spawn,
+and it does not need fixed positions — the field block is under ten lines
+and ends at a blank. Match by name; a scanning reader is correct even for a
+ticket that predates the current schema, and a positional one is silently
+wrong for exactly those.
+
+Avoid nextfile: it is not POSIX. Track per-file completion in the awk
+program instead, which measured the same.
+
+Done when the command exists, reads only the field block, prints - for a
+missing field, and the tests cover an open-only default, -a, a field no
+ticket has, and a tracker whose tickets disagree about which fields they
+carry.
