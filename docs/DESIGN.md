@@ -662,6 +662,29 @@ the `/` between segments, which put children ahead of their own parents.
 so a shell `read` collapses two tabs into one and every later field shifts
 left. `survey` writes `-` for "no blockers" rather than nothing.
 
+**`edit` does not hold the lock while the editor runs.** A lock held for the
+length of a human edit blocks every claim on that ticket for as long as the
+session lasts, and a session that is never closed leaves one behind for `reap`
+to find. So the editor works on a copy, and the install takes the lock, checks
+that `info` is byte-for-byte what it was, and refuses if it is not — most
+likely a `claim` that landed on line 1 meanwhile. Noticing the other writer
+costs one comparison; excluding them costs the ticket. A refused edit is kept
+and its path printed: it is the user's work and the only copy of it.
+
+**`edit` reads what was saved before installing it.** An editor makes it easy
+to save something that is no longer a ticket — a deleted header line, a field
+that lost its colon, a body that lost the blank line in front of it. The rules
+are the same ones `check` applies to an info file, so they live in one
+function, `info_faults`, and `check` is now its other caller. It answers only
+what is true of the file itself; dependencies, the registry and cycles are
+facts about the tracker and stay in `check`.
+
+The command's justification changed under it. `edit` existed to keep `desc:`
+honest — a hand-edit could leave that derived line lying, and only `check`
+would notice. Dropping `desc:` removed the derived data, so what is left is
+ergonomics: the lock and the structural read, neither of which a person
+running `$EDITOR` or `cat >>` on the file gets.
+
 **Closed-ness is matched relative to `.pidly`, through one helper.** The rule
 is *is there a `c/` between this ticket and the tracker root*, and the first
 implementation asked it of the absolute path — `case $dir in */c/*)`. A

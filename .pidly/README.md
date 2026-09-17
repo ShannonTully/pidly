@@ -157,6 +157,26 @@ ticket created by hand needs one too. `pidly init` backfills any that are
 missing, and `pidly new` writes it for you along with the lock that stops two
 agents picking the same number.
 
+## Editing
+
+```sh
+pidly edit 7                 # $EDITOR on info, read for structure before it lands
+pidly edit -b 7 < body.md    # replace the body from stdin
+pidly edit -a 7 <<'EOF'      # append to it: findings, results, where you got to
+Reviewed the parser: the lexer loses nested quotes at depth 2.
+EOF
+```
+
+By hand it is your editor, or `cat >> .pidly/7/info` — nothing records where
+a body starts or ends, so appending is appending. What the command adds is the
+lock, so an edit and a claim landing together cannot lose each other, and a
+refusal to install a saved file that is no longer a ticket: a missing header
+line, a field without a colon, a body that lost the blank line in front of
+it. A rejected edit is kept, and the path is printed.
+
+Fields are lines, so a one-off is `sed`; `pidly release -m` is the one that
+matters and it writes `handoff` for you.
+
 ## Delegating to a subagent
 
 A subagent usually shares its parent's process — under Claude Code, a Bash

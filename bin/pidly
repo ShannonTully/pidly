@@ -303,6 +303,63 @@ set_field() {
 
 get_body() { awk 'b { print } !b && $0 == "" { b = 1 }' "$1"; }
 
+# Everything wrong with one info file as a file: the three structural lines,
+# the field block, and required fields. One finding per line, each prefixed
+# with a label — the ticket number for check, the ticket being saved for
+# edit. Both ask the same question, so it is written once.
+#
+# Nothing here looks outside the file. Dependencies, the registry and cycles
+# are facts about the tracker, and check owns those.
+info_faults() {
+	_if_r=$1 _if_f=$2 _if_n=$3
+	sed -n 1p "$_if_f" | grep -q '^claim:' ||
+		printf '%s: line 1 is not claim:\n' "$_if_n"
+	sed -n 2p "$_if_f" | grep -q '^needs:' ||
+		printf '%s: line 2 is not needs:\n' "$_if_n"
+	sed -n 3p "$_if_f" | grep -q '^title: .' ||
+		printf '%s: line 3 is not a title\n' "$_if_n"
+
+	# Everything between there and the first blank must be a field the
+	# schema declares. A stray line here is usually a body that lost its
+	# blank separator.
+	_if_decl=$(schema_fields "$_if_r")
+	awk 'NR>3 { if ($0 == "") exit; print }' "$_if_f" | while read -r _if_l; do
+		case $_if_l in
+		*:*) _if_k=${_if_l%%:*} ;;
+		*)   printf "%s: '%s' is not a field\n" "$_if_n" "$_if_l"; continue ;;
+		esac
+		printf '%s\n' "$_if_decl" | grep -qx "$_if_k" ||
+			printf "%s: field '%s' is not in schema.md\n" "$_if_n" "$_if_k"
+	done
+
+	schema_required "$_if_r" | while read -r _if_req; do
+		[ -n "$_if_req" ] || continue
+		awk -v k="$_if_req" 'NR>3 { if ($0=="") exit; if (index($0, k ":")==1) found=1 }
+			END { exit !found }' "$_if_f" ||
+			printf "%s: required field '%s' is missing\n" "$_if_n" "$_if_req"
+	done
+}
+
+# Replace the body — everything after the blank line that ends the fields —
+# with the text in $2, or drop it entirely if that is empty. The header and
+# the field block are copied through untouched. Callers hold the lock.
+set_body() {
+	_sb_f=$1 _sb_v=$2 _sb_t="$1.$$"
+	awk 'NR>3 && $0 == "" { exit } { print }' "$_sb_f" > "$_sb_t"
+	[ -n "$_sb_v" ] && printf '\n%s\n' "$_sb_v" >> "$_sb_t"
+	mv "$_sb_t" "$_sb_f"
+}
+
+# Add to the body, leaving what is there. This is the operation the format is
+# built around — nothing records where a body ends, so appending is appending
+# — and it is a blank line and a cat even when done by hand. Callers hold the
+# lock.
+append_body() {
+	_ab_f=$1 _ab_v=$2
+	[ -n "$_ab_v" ] || return 0
+	printf '\n%s\n' "$_ab_v" >> "$_ab_f"
+}
+
 # --- claim / release -------------------------------------------------------
 
 cmd_claim() {
@@ -417,6 +474,99 @@ cmd_status() {
 	fi
 	_hand=$(get_field "$_d/info" handoff)
 	[ -n "$_hand" ] && printf 'handoff: %s\n' "$_hand"
+	return 0
+}
+
+# --- edit ------------------------------------------------------------------
+#
+# The body is the part of a ticket nothing can derive: it is what the work
+# was, and after 19 it is where results land too. Editing it by hand is an
+# editor, or a cat >> — this command is that plus two things a hand-edit does
+# not get: the lock, so an edit and a claim landing together cannot lose each
+# other, and a structural read of the file before it replaces the original.
+#
+# It is not a correctness requirement. It was one while desc: recorded where
+# the body ended, because a hand-edit could leave that line lying; 20 removed
+# the derived data, and with it the only thing edit had to keep honest.
+
+cmd_edit() {
+	_mode=editor
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-a|--append) _mode=append; shift ;;
+		-b|--body)   _mode=body; shift ;;
+		-*) die "unknown option $1" ;;
+		*)  break ;;
+		esac
+	done
+	[ $# -eq 1 ] || die 'usage: pidly edit [-a|-b] <number>'
+	_r=$(root); _d=$(ticket_dir "$_r" "$1"); _f="$_d/info"
+
+	if [ "$_mode" = editor ]; then
+		# vi with nothing to talk to is a way to hang a script, and an
+		# agent that wanted an editor did not want one.
+		[ -t 0 ] || [ -n "${VISUAL:-}${EDITOR:-}" ] ||
+			die 'no terminal and no $EDITOR: use -b or -a to edit from stdin'
+		edit_in_editor "$_r" "$_d" "$1"
+		return 0
+	fi
+
+	# Reading stdin whole, rather than streaming it into the file, keeps the
+	# window in which info is half-written down to the mv. A body is prose.
+	_text=$(cat)
+	lock "$_d" 100 || die "$1 is being modified by another process"
+	if [ "$_mode" = append ]; then
+		append_body "$_f" "$_text"
+	else
+		set_body "$_f" "$_text"
+	fi
+	unlock "$_d"
+	printf '%s updated\n' "$1"
+	return 0
+}
+
+edit_in_editor() {
+	_ee_r=$1 _ee_d=$2 _ee_n=$3 _ee_f="$2/info"
+	_ee_ed=${VISUAL:-${EDITOR:-vi}}
+	_ee_draft="${TMPDIR:-/tmp}/pidly.$_ee_n.$$"
+	cat "$_ee_f" > "$_ee_draft"
+	_ee_was=$(cksum < "$_ee_f")
+
+	# The editor runs outside the lock. A lock held for the length of a
+	# human edit blocks every claim on that ticket for as long as the
+	# session lasts, and a session that never ends leaves one behind. The
+	# comparison below is what that costs: instead of excluding a writer,
+	# we notice one.
+	$_ee_ed "$_ee_draft" ||
+		{ rm -f "$_ee_draft"; die "$_ee_n was not written: the editor failed"; }
+
+	if [ "$(cksum < "$_ee_draft")" = "$_ee_was" ]; then
+		rm -f "$_ee_draft"
+		printf '%s unchanged\n' "$_ee_n"
+		return 0
+	fi
+
+	# A saved file that is no longer a ticket is the one thing an editor
+	# makes easy — a deleted header line, a field that lost its colon, a
+	# body that lost the blank line in front of it. The draft is kept: it
+	# is the user's work, and it is the only copy of it.
+	_ee_bad=$(info_faults "$_ee_r" "$_ee_draft" "$_ee_n")
+	if [ -n "$_ee_bad" ]; then
+		printf '%s\n' "$_ee_bad" >&2
+		die "$_ee_n was not written; your edit is in $_ee_draft"
+	fi
+
+	lock "$_ee_d" 100 || die "$_ee_n is being modified by another process"
+	if [ "$(cksum < "$_ee_f")" != "$_ee_was" ]; then
+		unlock "$_ee_d"
+		die "$_ee_n changed while the editor was open; your edit is in $_ee_draft"
+	fi
+	_ee_t="$_ee_f.$$"
+	cat "$_ee_draft" > "$_ee_t"
+	mv "$_ee_t" "$_ee_f"
+	unlock "$_ee_d"
+	rm -f "$_ee_draft"
+	printf '%s updated\n' "$_ee_n"
 	return 0
 }
 
@@ -663,6 +813,26 @@ issuing the same number a merge conflict instead of a silent duplicate, so a
 ticket created by hand needs one too. `pidly init` backfills any that are
 missing, and `pidly new` writes it for you along with the lock that stops two
 agents picking the same number.
+
+## Editing
+
+```sh
+pidly edit 7                 # $EDITOR on info, read for structure before it lands
+pidly edit -b 7 < body.md    # replace the body from stdin
+pidly edit -a 7 <<'EOF'      # append to it: findings, results, where you got to
+Reviewed the parser: the lexer loses nested quotes at depth 2.
+EOF
+```
+
+By hand it is your editor, or `cat >> .pidly/7/info` — nothing records where
+a body starts or ends, so appending is appending. What the command adds is the
+lock, so an edit and a claim landing together cannot lose each other, and a
+refusal to install a saved file that is no longer a ticket: a missing header
+line, a field without a colon, a body that lost the blank line in front of
+it. A rejected edit is kept, and the path is printed.
+
+Fields are lines, so a one-off is `sed`; `pidly release -m` is the one that
+matters and it writes `handoff` for you.
 
 ## Delegating to a subagent
 
@@ -1210,7 +1380,6 @@ cmd_check() {
 	export PIDLY_REPORT
 	: > "$PIDLY_REPORT"
 	_m=$(map "$_r")
-	_decl=$(schema_fields "$_r")
 
 	# One number, one ticket.
 	printf '%s\n' "$_m" | awk '{print $1}' | sort | uniq -d | while read -r _d; do
@@ -1227,29 +1396,8 @@ cmd_check() {
 
 		[ -f "$_f" ] || { flag "$_num: no info file in $_path"; continue; }
 
-		# The three structural lines, in order.
-		sed -n 1p "$_f" | grep -q '^claim:' || flag "$_num: line 1 is not claim:"
-		sed -n 2p "$_f" | grep -q '^needs:' || flag "$_num: line 2 is not needs:"
-		sed -n 3p "$_f" | grep -q '^title: .' || flag "$_num: line 3 is not a title"
-
-		# Everything between there and the first blank must be a field the
-		# schema declares. A stray line here is usually a body that lost
-		# its blank separator.
-		awk 'NR>3 { if ($0 == "") exit; print }' "$_f" | while read -r _line; do
-			case $_line in
-			*:*) _k=${_line%%:*} ;;
-			*)   flag "$_num: '$_line' is not a field"; continue ;;
-			esac
-			printf '%s\n' "$_decl" | grep -qx "$_k" ||
-				flag "$_num: field '$_k' is not in schema.md"
-		done
-
-		# Required fields present.
-		schema_required "$_r" | while read -r _req; do
-			[ -n "$_req" ] || continue
-			awk -v k="$_req" 'NR>3 { if ($0=="") exit; if (index($0, k ":")==1) found=1 }
-				END { exit !found }' "$_f" ||
-				flag "$_num: required field '$_req' is missing"
+		info_faults "$_r" "$_f" "$_num" | while read -r _fault; do
+			flag "$_fault"
 		done
 
 		# Dependencies resolve.
@@ -1373,6 +1521,9 @@ usage: pidly <command> [args]
   release [-m note] <n>
                  give it back, optionally recording where you got to
   status <n>     who holds it, and whether that can be verified
+  edit [-a|-b] <n>
+                 open it in $EDITOR; -b replaces the body from stdin, -a
+                 appends to it
   close <n>      finish it: move it into its container's c/
   reopen <n>     move it back, reopening any closed ancestors
   list [-a]      takeable work; -a shows every open ticket with its state
@@ -1390,7 +1541,7 @@ environment:
                  Requires PIDLY_LEASE: nothing else can show it is alive.
   PIDLY_LEASE    how long the claim is good for: 90s, 30m, 2h, 3d.
 
-not yet implemented: edit, reap
+not yet implemented: reap
 USAGE
 	exit 2
 }
@@ -1403,6 +1554,7 @@ new)     cmd_new "$@" ;;
 claim)   cmd_claim "$@" ;;
 release) cmd_release "$@" ;;
 status)  cmd_status "$@" ;;
+edit)    cmd_edit "$@" ;;
 close)   cmd_close "$@" ;;
 reopen)  cmd_reopen "$@" ;;
 list)    cmd_list "$@" ;;

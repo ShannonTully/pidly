@@ -1,0 +1,35 @@
+claim:
+needs: 8
+title: pidly edit
+effort: S
+area: cli
+
+Open a ticket's body in $EDITOR and rewrite desc: to match the new last
+line on save. This is the command that keeps the derived line number
+honest; without it, every hand-edit is a chance for the header to start
+lying about where the body ends.
+
+Takes the lock from 8, since it rewrites the same file claim does. Should
+also be usable non-interactively so an agent can replace a body and get the
+header fixed for free.
+
+Retitled in effect by 20: desc: is gone, so there is no derived line for edit
+to keep honest and nothing a hand-edit can falsify. What is left is
+ergonomics, and that is what was built.
+
+pidly edit N opens info in $EDITOR. The editor works on a copy, outside the
+lock — a lock held for a human edit blocks every claim on the ticket for as
+long as the session lasts — and the install takes the lock, refuses if info
+changed underneath (a claim landing on line 1 is the likely one), and refuses
+a saved file that is no longer a ticket. A refused edit is kept and its path
+printed; the original is untouched either way.
+
+Non-interactively: -b replaces the body from stdin, -a appends to it. Both
+explicit, because a body is the one thing in a ticket nothing can reconstruct
+and 'pidly edit 7 < /dev/null' should not be able to empty it by accident.
+
+The structural rules are check's, so they moved into info_faults() and check
+now calls it too — the same mistake in_closed() was the fix for in 22.
+
+Done: bin/pidly, covered by tests/edit.sh (27 cases, including a mangled save
+and an edit racing a claim).
