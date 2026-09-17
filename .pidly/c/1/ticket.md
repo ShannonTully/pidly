@@ -1,0 +1,28 @@
+claim:
+needs:
+title: Settle the on-disk format
+desc:26
+The layout, the header format, and the state model are written up in
+docs/DESIGN.md. What remained was closing the open questions, because
+tooling written before they were settled would have to be rewritten.
+
+All four are answered in the design:
+
+Claims carry @<id> from a gitignored .pidly/.id, not a hostname — this
+machine's hostname is "localhost", which is the exact collision the field
+exists to prevent. A foreign claim is unverifiable, not stale.
+
+check reports and never modifies; clearing dead local claims is pidly reap.
+
+Priority is a project field, not a structural header line: it answers which
+to pick, not whether one can be started, so it does not belong in the two
+lines that decide the latter.
+
+Reopening cascades upward through closed ancestors, one mv per level, and
+does not cascade downward or through needs. That matches the work, not just
+the filesystem: if a subtask needs redoing, its parent is not finished.
+
+What is left is deferred rather than open, and listed as such in the design
+with the trigger that would force each decision.
+effort: M
+area: format

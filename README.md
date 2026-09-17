@@ -105,10 +105,13 @@ f=.pidly/1/ticket.md; n=$(sed -n '4s/^desc://p' "$f"); sed -n "5,${n}p" "$f"
 tail -n +$((n+1)) "$f"
 
 # claim it (pidly takes a lock around this; by hand, just don't race)
-sed -i "1s/.*/claim:$$/" .pidly/1/ticket.md
+sed -i "1s/.*/claim:$$@$(cat .pidly/.id)/" .pidly/1/ticket.md
 
-# is a claim still alive?
-kill -0 "$(sed -n '1s/^claim://p' .pidly/1/ticket.md)" 2>/dev/null && echo live
+# is a claim still alive? (only answerable for claims from this checkout)
+c=$(sed -n '1s/^claim://p' .pidly/1/ticket.md)
+[ "${c#*@}" = "$(cat .pidly/.id)" ] &&
+  { kill -0 "${c%@*}" 2>/dev/null && echo live || echo dead; } ||
+  echo "foreign claim — cannot check"
 
 # close a ticket: move it into its container's c/
 mkdir -p .pidly/c && mv .pidly/1 .pidly/c/

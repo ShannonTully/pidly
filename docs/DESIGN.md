@@ -81,7 +81,22 @@ with hundreds of closed trees never descends into them.
 
 A ticket cannot close while it has open children — children sitting directly in
 it rather than in its `c/`. That is what keeps a closed tree from containing
-live work. Reopening is the same move in reverse.
+live work.
+
+**Reopening cascades upward.** Moving a ticket out of its container's `c/` is
+only half the job: if that container is itself closed, a closed tree now holds
+live work. So reopening a ticket reopens every closed ancestor between it and
+the surface, one `mv` per level.
+
+That isn't a mechanical wart, it's the right answer. If subtask 4 needs redoing
+then its parent isn't finished either, and neither is the root above it. The
+constraint the filesystem imposes and the constraint the work imposes are the
+same one.
+
+Reopening does *not* cascade downward: a reopened parent keeps its finished
+children in its `c/`. And a reopened ticket does not reopen tickets that
+`needs` it — dependencies constrain when work may *start*, not whether
+completed work stays completed.
 
 What's lost by dropping the marker file is the timestamp and one-line
 resolution it used to carry. Git records when the move happened and in which
@@ -254,10 +269,39 @@ detection**, so the system has one liveness mechanism rather than two.
 
 The same lock, at `.pidly/.lock`, serializes number allocation.
 
+### Whose pid is it
+
 Because the claim is in a tracked file, claims are committed whether or not
-that's wanted. On a repository shared between machines a bare pid is worse than
-useless — it can collide with a live local process — so the pid may need a host
-alongside it.
+that's wanted, and a pid from another machine will be checked against the local
+process table. A bare pid is therefore worse than useless across machines: it
+can match an unrelated live local process and report a dead agent as working.
+
+So line 1 is `claim:<pid>@<id>`, and `<id>` identifies the checkout.
+
+`<id>` is **not** the hostname. On the machine this design was written,
+`hostname` returns `localhost` — a value shared by an unbounded number of other
+machines, which is exactly the collision the field exists to prevent. Instead,
+`.pidly/.id` holds a random string generated on first use and is gitignored, so
+every checkout has an identity that is unique by construction and never travels
+in a commit.
+
+The rule that follows is short: **a claim whose `@<id>` is not the local one is
+unverifiable, not stale.** Liveness cannot be checked across machines at all, so
+the honest answer is to report the claim as foreign and leave it alone. Without
+the id, that case is indistinguishable from a local claim and the tool
+confidently gives a wrong answer.
+
+### Clearing dead claims
+
+`check` reports; it never clears. Keeping it side-effect-free is what lets it
+run in CI and what lets anyone run it without thinking, and a command that
+silently edits tickets while you're reading its output is a bad trade for the
+keystrokes it saves.
+
+Clearing is `pidly reap`, explicit and separate. It removes only claims that are
+both **local** (`@<id>` matches this checkout) and **dead** (`kill -0` fails).
+A foreign claim is never reaped, because the information needed to judge it
+doesn't exist on this machine.
 
 ## Configurable schema
 
@@ -281,6 +325,13 @@ order. Everything else is schema, lives after the body, and is validated by
 `pidly check` rather than by the format — a ticket missing a required field is
 still a readable ticket.
 
+**Priority is a project field, not a structural one.** The header earns its
+fixed positions by answering *can I start this?* in two lines, and priority
+doesn't help with that — it answers *which of these should I pick?*, a sort over
+candidates that have already survived the filter. That set is small, so reading
+past the body of each one is cheap, and projects that don't want priority pay
+nothing for it. Every structural line is a cost every ticket carries forever.
+
 This remains the weakest part of the design: a markdown table is parseable by
 `awk` in a pinch, but only while the schema stays flat key/value.
 
@@ -302,11 +353,11 @@ are read until something has actually been chosen.
 
 Deliberately thin, and deliberately optional.
 
-`pidly` is a POSIX shell script — `new`, `claim`, `release`, `close`, `edit`,
-`list`, `tree`, `check`. It is not a runtime dependency of the format; it's an
-ergonomics layer. The acceptance test for every command is that a person could
-have done the same thing with `mkdir`, `mv`, and a text editor, and the
-repository would be byte-identical.
+`pidly` is a POSIX shell script — `new`, `claim`, `release`, `close`, `reopen`,
+`edit`, `list`, `tree`, `check`, `reap`. It is not a runtime dependency of the
+format; it's an ergonomics layer. The acceptance test for every command is that
+a person could have done the same thing with `mkdir`, `mv`, and a text editor,
+and the repository would be byte-identical.
 
 Two carve-outs. `edit` exists because `desc:` is derived data that a hand-edit
 can falsify. And claiming is the single operation that is *not* safe to do by
@@ -314,16 +365,24 @@ hand while other agents are running, because it needs the lock — one function'
 worth of shell, and the price of having the claim on line 1 rather than in a
 file of its own.
 
-## Open questions
+## Deferred
 
-- **Host alongside the pid.** A bare pid is meaningful only on the machine that
-  wrote it, and claims are committed. Adding a host makes line 1 self-describing
-  at the cost of parsing it. Leaning toward `claim:<pid>@<host>`.
-- **Does `check` clear dead claims, or only report them?** Reporting is safe and
-  useless at 3am; clearing is convenient and occasionally wrong.
-- **Priority.** `needs` now handles ordering that is a real constraint, but not
-  preference between two unblocked tickets. A `priority` project field plus
-  `sort` probably covers it; unresolved whether that deserves to be structural.
-- **Reopening.** Specified as the move in reverse, but unresolved at depth:
-  reopening a ticket inside a closed tree has to relocate every ancestor between
-  it and the surface.
+Nothing above is unsettled. These are things consciously not solved yet, with
+the trigger that would force each one.
+
+- **Priority.** Decided as a project field. Revisit only if picking among
+  unblocked tickets turns out to need a sort that reads every candidate's
+  fields often enough to show up — at which point it becomes a fifth header
+  line, not a fifth opinion.
+- **The schema table.** A markdown table is parseable by `awk` in a pinch, but
+  only while the schema stays flat key/value. Enums with per-value behaviour
+  would outgrow it and force a real config format, which would cost the
+  zero-parser property.
+- **Multi-machine claims.** `@<id>` makes a foreign claim *recognizable*, which
+  is enough to stop wrong answers. It does not make one *checkable* — that
+  would need agents to publish liveness somewhere shared, which is a server,
+  which is the thing this project doesn't have. If distributed teams ever need
+  it, the answer is probably a heartbeat timestamp rather than a pid.
+- **Body conventions.** The body is free markdown. Whether acceptance criteria
+  deserve structure is open; the trigger is agents guessing wrong about when a
+  ticket is done.
