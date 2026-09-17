@@ -4,6 +4,7 @@
 
 set -eu
 PIDLY=$(cd "$(dirname "$0")/.." && pwd)/bin/pidly
+. "$(dirname "$0")/config.sh"
 pass=0; fail=0
 
 ok()   { pass=$((pass+1)); printf '  ok    %s\n' "$1"; }
@@ -55,15 +56,15 @@ check "an empty lock is never broken (holder is mid-write)" "$rc" "1"
 rm -f .pidly/2/.lock
 rm -f .pidly/2/.lock
 
-echo "concurrency"
+echo "concurrency ($PIDLY_TEST_RACE processes)"
 sed -i '1s/.*/claim:/' .pidly/2/info
-i=0; while [ $i -lt 30 ]; do
+i=0; while [ $i -lt "$PIDLY_TEST_RACE" ]; do
 	i=$((i+1))
 	( sh -c "PIDLY_PID=\$\$ exec $PIDLY claim 2" >/dev/null 2>&1; echo $? > "rc.$i" ) &
 done
 wait
 won=$(cat rc.* | grep -c '^0$' || true)
-check "exactly one of 30 racing claims wins" "$won" "1"
+check "exactly one racing claim wins" "$won" "1"
 check "no lock is left behind" "$([ -e .pidly/2/.lock ] && echo present || echo gone)" "gone"
 rm -f rc.*
 

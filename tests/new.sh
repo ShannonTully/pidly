@@ -2,6 +2,7 @@
 # Tests for `pidly new`: numbering, the header it writes, and placement.
 set -eu
 PIDLY=$(cd "$(dirname "$0")/.." && pwd)/bin/pidly
+. "$(dirname "$0")/config.sh"
 pass=0; fail=0
 ok() { pass=$((pass+1)); printf '  ok    %s\n' "$1"; }
 no() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; }
@@ -68,15 +69,15 @@ out=$($PIDLY new "two
 lines" </dev/null 2>&1) && rc=0 || rc=$?
 check "a multi-line title is refused" "$rc" "1"
 
-echo "concurrency"
+echo "concurrency ($PIDLY_TEST_RACE processes)"
 before=$(find .pidly -name info | wc -l)
-i=0; while [ $i -lt 6 ]; do
+i=0; while [ $i -lt "$PIDLY_TEST_RACE" ]; do
 	i=$((i+1))
 	( $PIDLY new "parallel $i" </dev/null >/dev/null 2>&1 ) &
 done
 wait
 after=$(find .pidly -name info | wc -l)
-check "six parallel creations all succeed" "$((after - before))" "6"
+check "every parallel creation succeeds" "$((after - before))" "$PIDLY_TEST_RACE"
 dupes=$(find .pidly -mindepth 1 -type d '!' -name c '!' -name '.*' -printf '%f\n' | sort | uniq -d | tr -d '\n')
 check "and no number is issued twice" "$dupes" ""
 check "no lock is left behind" "$(find .pidly -name '.lock*' | wc -l)" "0"

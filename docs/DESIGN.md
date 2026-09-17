@@ -521,6 +521,13 @@ not a runtime dependency of the format; it's an ergonomics layer. The acceptance
 test for every command is that a person could have done the same thing with
 `mkdir`, `mv` and a text editor, and the repository would be byte-identical.
 
+The locking tests are only as good as the number of processes they race, and
+that number is a property of the machine rather than of pidly — a proot
+sandbox gives out long before a workstation does. `PIDLY_TEST_RACE` carries
+it, defaulting to 32 and overridable through a gitignored `.env`, so a
+constrained environment turns itself down without weakening the suite
+everywhere else.
+
 **Every function prefixes its variables.** POSIX shell has one global
 namespace, so a helper's locals and its caller's locals are the same
 variables. `lock()` used `_n` as a spin counter while `cmd_new()` used `_n` as

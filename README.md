@@ -117,6 +117,20 @@ work for an agent in a checkout where pidly isn't installed — and both ship
 inside the tracker, since a project using pidly doesn't have this repo's
 design document.
 
+## Tests
+
+```sh
+./tests/run.sh
+PIDLY_TEST_RACE=64 ./tests/run.sh    # hammer the locking harder
+```
+
+The concurrency suites fork a process per racer, and how many a machine
+tolerates is a property of the machine. `PIDLY_TEST_RACE` sets it: an
+exported value wins, then `.env` at the repo root, then the default of 32.
+Copy `.env.example` to `.env` and turn it down if your environment cannot
+fork widely — `.env` is gitignored, because the limitation belongs to one
+machine rather than to the project.
+
 ## Reading the tracker
 
 Until the `pidly` script exists, these are the primitives it will wrap:

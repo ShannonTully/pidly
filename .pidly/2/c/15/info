@@ -1,0 +1,22 @@
+claim:
+needs:
+title: Make test concurrency configurable
+desc:20
+The concurrency tests fork a process per racer. How many a machine tolerates
+is a property of the machine, not of pidly: a proot sandbox falls over well
+before a workstation does, and capping the suite at the sandbox's limit makes
+the locking tests weaker everywhere else.
+
+PIDLY_TEST_RACE sets it. An exported value wins, then .env at the repo root,
+then the default of 32 in tests/config.sh. .env is gitignored because it
+describes one machine; .env.example is committed because the knob is not
+obvious.
+
+config.sh finds the repo root by walking up for bin/pidly rather than from
+$0. It is sourced, so $0 belongs to the caller — run.sh cds into tests/
+before sourcing, and resolving from $0 silently gave it a different answer
+than the suites it was about to run.
+
+Done: tests/config.sh, .env.example, wired into claim.sh and new.sh.
+effort: S
+area: cli
