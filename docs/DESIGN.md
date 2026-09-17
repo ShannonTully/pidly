@@ -922,8 +922,22 @@ the trigger that would force each one.
   separates cells on `|`. The collision is the container's, not the regex's.
   The candidate that does not need escaping is the format's own shape applied
   to its own configuration: one field per stanza, `key: value` lines, blank
-  line between, read by the same idioms tickets are read with. What it costs
-  is the rendered table.
+  line between, read by the same idioms tickets are read with. That is now
+  the decision rather than a candidate, and the file loses its extension for
+  the reason `info` never had one: `key: value` lines are not markdown, and a
+  `.md` suffix invites an editor to reflow them. What it costs is the
+  rendered table.
+
+  Two portability facts constrain the implementation, both measured here.
+  **`awk` cannot evaluate the patterns**: `[0-9]{4}` matches `2026` under
+  `grep -E` and not under this machine's `awk`, which has no interval
+  expressions — so validation goes through `grep -Eq`, never through one of
+  `check`'s existing `awk` passes. And **a permissive `grep` hides dialect
+  errors**: `grep` here is ugrep, which accepted `\d` where GNU `grep -E`
+  would not, so `check` lints patterns for `\d \w \s \b` and `(?...)`
+  rather than trusting whatever is installed. A pattern the local `grep`
+  cannot compile exits 2 rather than 1, which is what lets a broken schema be
+  a finding instead of a crash.
 - **Padded multi-line field values.** Proposed as a way to keep every
   ticket's lines at fixed positions: a field declares a maximum line count
   and is padded up to it. Two things rule it out. Fields end at the first
