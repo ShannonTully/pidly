@@ -212,9 +212,44 @@ lease_expiry() {
 # Is $1 strictly before $2? Both ISO-8601 UTC, where lexical order is
 # chronological order, so this is a string comparison and needs no date
 # arithmetic — which is the half of date(1) that is not portable.
+# The shape the format's timestamps have, as a glob rather than an ERE: a
+# case pattern is the shell's own matcher and costs no process, where asking
+# grep would cost one per call.
+ISO_GLOB='[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z'
+
+# Is one ISO-8601 timestamp earlier than another, both known to be the shape
+# above? Compared a character at a time in this shell.
+#
+# The two strings are the same length with their separators in the same
+# places, so any position where they differ holds a digit in both, and a
+# single digit is always a valid decimal number — there is no leading zero to
+# be read as octal and nothing wide enough to overflow. Walking them is why
+# this does not first strip the separators out.
+iso_before() {
+	_ib_a=$1 _ib_b=$2
+	while [ -n "$_ib_a" ]; do
+		_ib_x=${_ib_a%"${_ib_a#?}"}
+		_ib_y=${_ib_b%"${_ib_b#?}"}
+		if [ "$_ib_x" != "$_ib_y" ]; then
+			[ "$_ib_x" -lt "$_ib_y" ]
+			return $?
+		fi
+		_ib_a=${_ib_a#?} _ib_b=${_ib_b#?}
+	done
+	return 1
+}
+
 before() {
 	[ -n "$1" ] && [ -n "$2" ] || return 1
 	[ "$1" = "$2" ] && return 1
+	# Both in the format's own shape: the fast path, which check takes once
+	# per ticket. The sort below is three processes and a command
+	# substitution, and it was being paid for every ticket in the tracker.
+	case $1 in $ISO_GLOB)
+		case $2 in $ISO_GLOB) iso_before "$1" "$2"; return $? ;; esac ;;
+	esac
+	# Anything else — a hand-written stamp, a value check is about to
+	# report — keeps the general comparison.
 	[ "$(printf '%s\n%s\n' "$1" "$2" | sort | head -1)" = "$1" ]
 }
 
@@ -413,6 +448,14 @@ info_faults() {
 	_if_r=$1 _if_f=$2 _if_n=$3
 	fields_load "$_if_r"
 
+	# Findings that depend on a pattern are deferred so that check can test
+	# the whole tracker with one grep per pattern. A caller checking a
+	# single ticket — edit, saving a draft — has no bulk to gain from, so
+	# if nobody has opened a queue this call opens and settles its own, and
+	# every finding still reaches stdout before it returns.
+	_if_own=""
+	if [ -z "${_MQDIR:-}" ]; then match_open; _if_own=yes; fi
+
 	# The header in one pass, in this shell: the three structural lines and
 	# the field block, which ends at the first blank line. No process at
 	# all — this was a sed per structural line, an awk for the block, and a
@@ -467,11 +510,12 @@ info_faults() {
 			continue
 		fi
 		[ "$_if_pat" != - ] || continue
-		_if_st=0
-		value_matches "$_if_pat" "$_if_v" || _if_st=$?
-		[ "$_if_st" -eq 1 ] &&
-			printf "%s: %s is '%s', which is not %s\n" \
-				"$_if_n" "$_if_k" "$_if_v" "$_if_note"
+		# Queued rather than tested here: one grep per pattern for the
+		# whole tracker, instead of one per value. The message is built
+		# by expansion — a command substitution would be the fork this
+		# is removing.
+		match_queue "$_if_pat" "$_if_v" \
+			"$_if_n: $_if_k is '$_if_v', which is not $_if_note"
 	done <<POSITIONAL
 $_FL_POS
 POSITIONAL
@@ -487,13 +531,11 @@ POSITIONAL
 		[ -n "$_if_v" ] || continue
 		field_pattern "$_if_k"; _if_p=$_FP
 		[ -n "$_if_p" ] || continue
-		_if_st=0
-		value_matches "$_if_p" "$_if_v" || _if_st=$?
-		if [ "$_if_st" -eq 1 ]; then
-			match_complaint "$_if_k" "$_if_p"
-			printf "%s: %s is '%s', which %s\n" \
-				"$_if_n" "$_if_k" "$_if_v" "$_MC"
-		fi
+		# match_complaint reads the loaded tables, so it is expansion
+		# too, and can be settled before the answer is known.
+		match_complaint "$_if_k" "$_if_p"
+		match_queue "$_if_p" "$_if_v" \
+			"$_if_n: $_if_k is '$_if_v', which $_MC"
 	done <<SEEN
 $_if_seen
 SEEN
@@ -525,6 +567,10 @@ SEEN
 	done <<REQUIRED
 $_FL_REQ
 REQUIRED
+
+	# A queue this call opened is settled here, so a single-ticket caller
+	# gets every finding on stdout and never sees the deferral.
+	[ -z "$_if_own" ] || { match_flush; match_close; }
 }
 
 # Replace the body — everything after the blank line that ends the fields —
@@ -2881,6 +2927,79 @@ $2
 VALUE
 }
 
+# --- deferred matching -----------------------------------------------------
+#
+# grep is the matcher, and a grep is a process. Asking it per value means a
+# process per patterned field per ticket, which is what made check cost about
+# a second a ticket: the work is spawning, not matching.
+#
+# So the question is asked in bulk. A value that needs testing is queued with
+# the finding it would produce, grouped by the pattern that guards it, and one
+# grep per distinct pattern tests every value in the tracker that pattern
+# covers. A schema has a handful of patterns and a tracker has thousands of
+# tickets, so this turns O(tickets x patterns) processes into O(patterns).
+#
+# Nothing about which findings are produced changes. The report is sorted
+# before it is printed, so the order they are emitted in was never visible.
+
+# One directory, holding three files per pattern: .p the pattern itself, .v
+# its values one a line, .m the finding each value would produce. Line n of
+# .v and line n of .m are the same record.
+match_open() {
+	_MQDIR=$(mktemp -d "${TMPDIR:-/tmp}/pidly.match.$$.XXXXXX")
+	_MQ_IDS=$NL _MQ_N=0
+}
+
+match_close() {
+	[ -n "${_MQDIR:-}" ] && rm -rf "$_MQDIR"
+	_MQDIR="" _MQ_IDS=$NL _MQ_N=0
+}
+
+# Queue one value against one pattern, with the finding to print if it fails.
+#
+# The pattern is its own key. Looking it up is parameter expansion against a
+# string, not a process, because this is on the per-ticket path and anything
+# that forks here is the cost this whole mechanism exists to remove. Patterns
+# are keyed with a "p:" prefix so that a pattern which is itself a number
+# cannot be confused with an id.
+match_queue() {
+	case $_MQ_IDS in
+	*"${NL}p:$1$NL"*)
+		_mq_id=${_MQ_IDS#*"${NL}p:$1$NL"}; _mq_id=${_mq_id%%"$NL"*} ;;
+	*)
+		_MQ_N=$((_MQ_N + 1)); _mq_id=$_MQ_N
+		_MQ_IDS="$_MQ_IDS""p:$1$NL$_mq_id$NL"
+		printf '%s\n' "$1" > "$_MQDIR/$_mq_id.p" ;;
+	esac
+	printf '%s\n' "$2" >> "$_MQDIR/$_mq_id.v"
+	printf '%s\n' "$3" >> "$_MQDIR/$_mq_id.m"
+}
+
+# Test every queued value and print the findings of the ones that failed.
+#
+# grep -v gives the failures and -n gives their record numbers, which index
+# into the message file. A pattern grep cannot compile prints nothing and
+# exits 2, so its group produces no findings — the same as the per-value form,
+# which reported nothing on a status of 2 and left the fault to schema_faults.
+match_flush() {
+	[ -n "${_MQDIR:-}" ] && [ -d "$_MQDIR" ] || return 0
+	for _mf_f in "$_MQDIR"/*.p; do
+		[ -f "$_mf_f" ] || continue
+		_mf_id=${_mf_f%.p}
+		IFS= read -r _mf_pat < "$_mf_f" || continue
+		grep -nEv "^($_mf_pat)\$" "$_mf_id.v" 2>/dev/null |
+			awk -F: -v m="$_mf_id.m" '
+				{ bad[$1] = 1 }
+				END {
+					n = 0
+					while ((getline line < m) > 0) {
+						n++
+						if (n in bad) print line
+					}
+				}'
+	done
+}
+
 # Everything wrong with the schema itself, one finding per line. Reported by
 # check once, not per ticket: a bad pattern is one mistake however many
 # tickets carry the field.
@@ -3270,6 +3389,10 @@ $(printf '%s\n' "$_m" | awk '{print $1}')
 		flag "$_d: issued to more than one ticket"
 	done
 
+	# One queue for the whole tracker: info_faults defers every finding that
+	# needs a pattern tested, and the greps are paid once per pattern below
+	# rather than once per value here.
+	match_open
 	printf '%s\n' "$_m" | while read -r _num _path; do
 		[ -n "$_num" ] || continue
 		# A non-numeric directory is flagged by its parent below. Checking
@@ -3338,18 +3461,27 @@ $_dep
 		fi
 	done
 
-	# The registry, both directions.
+	# Every deferred match, tested now. The loop above ran in a subshell —
+	# it is the right-hand side of a pipe — so the queue is on disk rather
+	# than in a variable, which is also why it survives to here.
+	match_flush >> "$PIDLY_REPORT"
+	match_close
+
+	# The registry, both directions. The directory is resolved once: asking
+	# for it inside the loop was a command substitution, which is a fork,
+	# for a string that cannot change while the loop runs.
+	_reg=$(registry_dir "$_r")
 	printf '%s\n' "$_m" | while read -r _num _path; do
 		[ -n "$_num" ] || continue
 		case $_num in *[!0-9]*) continue ;; esac
-		[ -e "$(registry_dir "$_r")/$_num" ] ||
+		[ -e "$_reg/$_num" ] ||
 			flag "$_num: no registry entry, so nothing stops a branch reusing it"
 	done
-	if [ -d "$(registry_dir "$_r")" ]; then
+	if [ -d "$_reg" ]; then
 		# The glob again, for the same reason: an awk per entry over the
 		# whole map is a process per ticket reading every ticket, which
 		# is the one shape in here that gets worse as the tracker grows.
-		ls "$(registry_dir "$_r")" 2>/dev/null | while read -r _e; do
+		ls "$_reg" 2>/dev/null | while read -r _e; do
 			[ -n "$_e" ] || continue
 			case $_nums in
 			*"
@@ -3370,16 +3502,41 @@ $_e
 	# already reported above, by ticket, and by value rather than by slot.
 	_decl=$(slate_fields "$_r")
 	_req=$(schema_required "$_r")
+	#
+	# One awk for the whole tracker, reading each info with getline — the
+	# same shape as the cycle pass below. This was missing_fields per
+	# ticket, which is an awk per ticket, plus a grep per field to ask
+	# whether it was required. Both answers are in here now.
 	if [ -n "$_decl" ]; then
-		printf '%s\n' "$_m" | while read -r _num _path; do
-			[ -n "$_num" ] || continue
-			case $_num in *[!0-9]*) continue ;; esac
-			[ -f "$_path/info" ] || continue
-			missing_fields "$_path/info" "$_decl"
-			printf '\n'
-		done | tr ' ' '\n' | grep -v '^$' | sort | uniq -c |
-		while read -r _fc _fk; do
-			printf '%s\n' "$_req" | grep -qx "$_fk" && continue
+		printf '%s\n' "$_m" | awk -v decl="$_decl" -v req="$_req" '
+			BEGIN {
+				dn = split(decl, d, "\n")
+				rn = split(req, r, "\n")
+				for (i = 1; i <= rn; i++)
+					if (r[i] != "") isreq[r[i]] = 1
+			}
+			$1 ~ /^[0-9]+$/ {
+				f = $2 "/info"
+				split("", seen)
+				n = 0
+				while ((getline line < f) > 0) {
+					n++
+					if (n <= 3) continue
+					if (line == "") break
+					seen[substr(line, 1, index(line, ":") - 1)] = 1
+				}
+				close(f)
+				# No info file at all: already flagged by number above,
+				# and counting it here would blame every field for it.
+				if (n == 0) next
+				for (i = 1; i <= dn; i++)
+					if (d[i] != "" && !(d[i] in seen)) miss[d[i]]++
+			}
+			END {
+				for (k in miss)
+					if (!(k in isreq)) print miss[k] " " k
+			}' | while read -r _fc _fk; do
+			[ -n "$_fk" ] || continue
 			note "$_fc ticket(s) have no '$_fk' line — run 'pidly fields'"
 		done
 	fi

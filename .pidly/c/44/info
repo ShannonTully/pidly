@@ -1,0 +1,107 @@
+claim:
+needs:
+title: check costs a second a ticket, and it did not used to
+created: 2026-09-17T23:20:24Z
+updated: 2026-09-18T21:22:02Z
+effort: M
+area: cli
+handoff:
+
+check takes 44s on this tracker's 43 tickets. Measured 2026-09-17 on aarch64
+Linux by checking out bin/pidly at each commit and running it against the
+same tracker:
+
+  after 24 (required means a value)      19s
+  after 28 (patterns, schema stanzas)    36s
+  after 40 (the format's own lines)      47s
+
+So it roughly doubled while values gained patterns, and the cost is a second
+a ticket. On the 2000-ticket tracker the other measurements use, that is
+half an hour for the command that is meant to run in CI.
+
+It is process count, not work. Almost all of check's per-ticket cost is
+spawning, and three things drive it:
+
+- info_faults is called inside a pipeline — `info_faults ... | while read` —
+  so every call runs in its own subshell, and schema_cached and format_cached
+  reparse per ticket rather than once per command. The cache is real; the
+  subshell defeats it.
+- The positional checks read lines 1, 2 and 3 with a sed each. A POSIX shell
+  can read three lines from a file with no process at all:
+  { read -r a; read -r b; read -r c; } < info
+- Every non-empty value with a pattern costs a grep, because grep is the
+  matcher (28: mawk has no interval expressions). That is the one real cost,
+  and it is per ticket per patterned field.
+
+The first two are straightforward. The third is the interesting one: the
+loop could be inverted — one pass collecting every ticket's value for one
+field, then a single grep -E over that list — which is O(patterns) greps for
+the whole tracker instead of O(tickets x patterns). That changes which
+findings are easy to attribute to a ticket, so it wants care.
+
+Done when check on 2000 tickets is measured, the per-ticket process count is
+down by an order of magnitude, the findings are unchanged ticket for ticket,
+and the suite still passes.
+
+
+Done 2026-09-18.
+
+Measured on aarch64 Linux, on trackers built by hand rather than by n calls
+to new, with every external command wrapped in a script that logs its name
+and execs the real one. Counted rather than timed where the claim is about
+processes: a stopwatch measures the machine.
+
+  processes, 100 tickets      846        53
+  processes, 500 tickets     4230        53
+  wall clock, 2000 tickets  7m07s     0m46s
+  wall clock, this repo     11.6s      3.7s
+
+Per ticket that is 8.46 processes against 0.53, and the second row is the
+part that matters: the count is now the same at 500 tickets as at 100, so
+there is no per-ticket term left to grow.
+
+Four things, and the first was the one the ticket had not found:
+
+- Matching is batched. A value needing a pattern tested is queued with the
+  finding it would produce, grouped by pattern, and one grep per distinct
+  pattern tests every value in the tracker. This is the inversion the ticket
+  proposed; what makes it safe is that the report is sorted before it is
+  printed, so the order findings are emitted in was never visible. 508 greps
+  became 11.
+- before() compared two timestamps with printf | sort | head inside a command
+  substitution — four processes, once per ticket, to order two strings. Both
+  are fixed-width ISO-8601 with their separators in the same places, so it
+  walks them a character at a time in the shell. Any position where they
+  differ holds a digit in both, so there is no leading zero to be read as
+  octal and nothing wide enough to overflow. A value that is not that shape
+  still takes the sort.
+- missing_fields was an awk per ticket, plus a grep per field to ask whether
+  it was required. It is one awk for the whole tracker now, reading each info
+  with getline — the same shape the cycle pass already used, six lines below
+  it.
+- registry_dir was called inside the per-ticket loop, which is a command
+  substitution, which is a fork, for a string that cannot change while the
+  loop runs.
+
+The ticket's other two bullets were already done: info_faults no longer runs
+in a pipeline, and the positional lines are read with three reads rather than
+a sed each.
+
+Findings are unchanged. A tracker carrying thirteen faults — pattern misses
+on both a project field and a format one, an empty value, updated before
+created, a line 3 that is not title:, a dangling need, a field not in the
+schema, an unparsable claim, a non-field line, a phantom directory, and the
+registry wrong in both directions — reports byte-identically before and
+after.
+
+tests/cost.sh is the guard, and it guards the risk this change introduces
+rather than the symptom. A batch maps results back to tickets by line number,
+so it covers interleaved passes and failures across two patterns, two tickets
+sharing one bad value, a format field keeping its note rather than its
+pattern, and edit — the caller with a single ticket and no bulk to batch over
+— still settling its own queue, because a finding deferred and never flushed
+would save a bad value silently. Both failure modes verified by
+reintroducing them: dropping the flush makes edit accept the bad value, and
+an off-by-one in the mapping accuses the wrong ticket. The process count is
+asserted to be equal at 20 and 60 tickets, which is the shape of the
+regression rather than a number that every future check would move.
