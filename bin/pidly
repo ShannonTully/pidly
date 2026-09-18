@@ -16,6 +16,12 @@ set -eu
 
 die() { printf 'pidly: %s\n' "$*" >&2; exit 1; }
 
+# A newline, for the lookups that are parameter expansion rather than a
+# process: a list is newline-wrapped, so a glob can ask whether a name is in
+# it and a prefix strip can pull one value out.
+NL='
+'
+
 # --- locating things -------------------------------------------------------
 
 # The .pidly directory, found by walking up from the current directory.
@@ -347,15 +353,47 @@ get_body() { awk 'b { print } !b && $0 == "" { b = 1 }' "$1"; }
 # are facts about the tracker, and check owns those.
 info_faults() {
 	_if_r=$1 _if_f=$2 _if_n=$3
+	fields_load "$_if_r"
+
+	# The header in one pass, in this shell: the three structural lines and
+	# the field block, which ends at the first blank line. No process at
+	# all — this was a sed per structural line, an awk for the block, and a
+	# get_field awk per value it wanted back.
+	_if_l1="" _if_l2="" _if_l3="" _if_seen=$NL
+	{
+		IFS= read -r _if_l1 || true
+		IFS= read -r _if_l2 || true
+		IFS= read -r _if_l3 || true
+		while IFS= read -r _if_line; do
+			[ -n "$_if_line" ] || break
+			case $_if_line in
+			*:*) _if_k=${_if_line%%:*} ;;
+			*)   printf "%s: '%s' is not a field\n" "$_if_n" "$_if_line"
+			     continue ;;
+			esac
+			case $_FL_DECL in
+			*"$NL$_if_k$NL"*) ;;
+			*) printf "%s: field '%s' is not in the schema\n" \
+				"$_if_n" "$_if_k"
+			   continue ;;
+			esac
+			_if_v=${_if_line#*:}; _if_v=${_if_v# }
+			_if_seen="$_if_seen$_if_k=$_if_v$NL"
+		done
+	} < "$_if_f"
 
 	# The format's own lines, checked the way the project's fields are: by
-	# a declared pattern, from format_text. They were three greps written
-	# by hand, each weaker than what any project could ask for — claim:
-	# accepted anything after the colon, so a claim nothing could parse
-	# was a valid ticket.
-	format_cached | while IFS='	' read -r _if_k _if_req _if_pat _if_ln _if_note; do
-		[ "$_if_ln" != - ] || continue        # not a line of its own
-		_if_l=$(sed -n "${_if_ln}p" "$_if_f")
+	# a declared pattern. They were three greps written by hand, each
+	# weaker than what any project could ask for — claim: accepted anything
+	# after the colon, so a claim nothing could parse was a valid ticket.
+	while IFS='	' read -r _if_ln _if_k _if_req _if_pat _if_note; do
+		[ -n "$_if_k" ] || continue
+		case $_if_ln in
+		1) _if_l=$_if_l1 ;;
+		2) _if_l=$_if_l2 ;;
+		3) _if_l=$_if_l3 ;;
+		*) _if_l=$(sed -n "${_if_ln}p" "$_if_f") ;;
+		esac
 		case $_if_l in
 		"$_if_k:"*) ;;
 		*) printf '%s: line %s is not %s:\n' "$_if_n" "$_if_ln" "$_if_k"
@@ -370,72 +408,65 @@ info_faults() {
 				printf "%s: %s is empty\n" "$_if_n" "$_if_k"
 			continue
 		fi
+		[ "$_if_pat" != - ] || continue
 		_if_st=0
 		value_matches "$_if_pat" "$_if_v" || _if_st=$?
 		[ "$_if_st" -eq 1 ] &&
 			printf "%s: %s is '%s', which is not %s\n" \
 				"$_if_n" "$_if_k" "$_if_v" "$_if_note"
-	done
+	done <<POSITIONAL
+$_FL_POS
+POSITIONAL
 
-	# Everything between there and the first blank must be a field the
-	# schema declares. A stray line here is usually a body that lost its
-	# blank separator.
-	_if_decl=$(known_fields "$_if_r")
-	awk 'NR>3 { if ($0 == "") exit; print }' "$_if_f" | while read -r _if_l; do
-		case $_if_l in
-		*:*) _if_k=${_if_l%%:*} ;;
-		*)   printf "%s: '%s' is not a field\n" "$_if_n" "$_if_l"; continue ;;
-		esac
-		printf '%s\n' "$_if_decl" | grep -qx "$_if_k" || {
-			printf "%s: field '%s' is not in the schema\n" "$_if_n" "$_if_k"
-			continue
-		}
-
-		# The value against the field's pattern. An empty value is not
-		# matched — absence is required:'s question, not match:'s — and a
-		# pattern grep cannot compile is a fault in the schema, reported
-		# once by schema_faults rather than against every ticket.
-		_if_p=$(field_match "$_if_r" "$_if_k")
-		[ -n "$_if_p" ] || continue
-		_if_v=$(get_field "$_if_f" "$_if_k")
+	# Each value against its field's pattern. An empty value is not matched
+	# — absence is required:'s question, not match:'s — and a pattern grep
+	# cannot compile is a fault in the schema, reported once by
+	# schema_faults rather than against every ticket.
+	while IFS= read -r _if_entry; do
+		[ -n "$_if_entry" ] || continue
+		_if_k=${_if_entry%%=*}
+		_if_v=${_if_entry#*=}
 		[ -n "$_if_v" ] || continue
+		field_pattern "$_if_k"; _if_p=$_FP
+		[ -n "$_if_p" ] || continue
 		_if_st=0
 		value_matches "$_if_p" "$_if_v" || _if_st=$?
-		[ "$_if_st" -eq 1 ] &&
-			printf "%s: %s is '%s', which %s\n" "$_if_n" "$_if_k" \
-				"$_if_v" "$(match_complaint "$_if_k" "$_if_p")"
-	done
+		if [ "$_if_st" -eq 1 ]; then
+			match_complaint "$_if_k" "$_if_p"
+			printf "%s: %s is '%s', which %s\n" \
+				"$_if_n" "$_if_k" "$_if_v" "$_MC"
+		fi
+	done <<SEEN
+$_if_seen
+SEEN
 
-	# created and updated carry patterns of their own, so the block loop
-	# above has already judged their shape. What is left is the one thing a
+	# created and updated carry patterns of their own, so the pass above
+	# has already judged their shape. What is left is the one thing a
 	# pattern cannot say: that they agree with each other.
-	_if_c=$(get_field "$_if_f" created)
-	_if_u=$(get_field "$_if_f" updated)
+	_if_c=""; _if_u=""
+	case $_if_seen in
+	*"${NL}created="*) _if_c=${_if_seen#*"${NL}created="}; _if_c=${_if_c%%"$NL"*} ;;
+	esac
+	case $_if_seen in
+	*"${NL}updated="*) _if_u=${_if_seen#*"${NL}updated="}; _if_u=${_if_u%%"$NL"*} ;;
+	esac
 	before "$_if_u" "$_if_c" &&
 		printf '%s: updated is before created\n' "$_if_n"
 
 	# Required means a value. A stubbed key satisfies nothing: an empty
 	# field and an absent one read the same to get_field and to awk, so a
 	# schema that only demands the line demands nothing a reader can use.
-	schema_required "$_if_r" | while read -r _if_req; do
+	while IFS= read -r _if_req; do
 		[ -n "$_if_req" ] || continue
-		_if_st=0
-		awk -v k="$_if_req" '
-			NR > 3 {
-				if ($0 == "") exit
-				if (index($0, k ":") == 1) {
-					v = substr($0, length(k) + 2)
-					sub(/^ +/, "", v)
-					found = 1; empty = (v == "")
-					exit
-				}
-			}
-			END { exit found ? (empty ? 2 : 0) : 1 }' "$_if_f" || _if_st=$?
-		case $_if_st in
-		1) printf "%s: required field '%s' is missing\n" "$_if_n" "$_if_req" ;;
-		2) printf "%s: required field '%s' is empty\n" "$_if_n" "$_if_req" ;;
+		case $_if_seen in
+		*"$NL$_if_req=$NL"*)
+			printf "%s: required field '%s' is empty\n" "$_if_n" "$_if_req" ;;
+		*"$NL$_if_req="*) ;;
+		*)  printf "%s: required field '%s' is missing\n" "$_if_n" "$_if_req" ;;
 		esac
-	done
+	done <<REQUIRED
+$_FL_REQ
+REQUIRED
 }
 
 # Replace the body — everything after the blank line that ends the fields —
@@ -2305,16 +2336,85 @@ format_cached() {
 # Every name the format claims, positional or not.
 format_fields() { format_cached | cut -f1; }
 
+# Every declaration this command will need, flattened into shell variables
+# once. Lookups are then parameter expansion: no process, and nothing
+# reparsed per ticket.
+#
+# check calls info_faults for every ticket, and the tables underneath were
+# being rebuilt each time — two awks and a subshell per field per ticket. The
+# cache existed; the pipelines it ran inside are what defeated it.
+#
+# The format wins over the project for any name they share, which is the same
+# rule field_match applies and the reason a schema cannot weaken title.
+fields_load() {
+	[ -z "${_fl_done:-}" ] || return 0
+	_FL_DECL=$NL _FL_PAT=$NL _FL_NOTE=$NL _FL_REQ=$NL _FL_POS=""
+	fields_absorb format <<FORMAT
+$(format_cached)
+FORMAT
+	fields_absorb project <<PROJECT
+$(schema_cached "$1")
+PROJECT
+	_fl_done=yes
+}
+
+# One table of stanzas into those variables. Called for the format first, so
+# that a name the project also declares is already taken — the same rule
+# field_match applies, and the reason a schema cannot weaken title.
+fields_absorb() {
+	while IFS='	' read -r _fl_k _fl_req _fl_pat _fl_ln _fl_note; do
+		[ -n "$_fl_k" ] || continue
+		case $_FL_DECL$_FL_POS in
+		*"$NL$_fl_k$NL"*|*"	$_fl_k	"*) continue ;;
+		esac
+		if [ "$_fl_ln" != - ]; then
+			# A line of its own, so not a field of the block.
+			_FL_POS="$_FL_POS$_fl_ln	$_fl_k	$_fl_req	$_fl_pat	$_fl_note$NL"
+			continue
+		fi
+		_FL_DECL="$_FL_DECL$_fl_k$NL"
+		if [ "$_fl_pat" != - ]; then
+			_FL_PAT="$_FL_PAT$_fl_k=$_fl_pat$NL"
+		fi
+		# Only the format's notes reach a finding. Its patterns are
+		# compiled into this script, so a reader cannot go and look at
+		# one; a project's pattern is in a file the project wrote, and
+		# naming it points at the line.
+		if [ "$1" = format ] && [ "$_fl_note" != - ]; then
+			_FL_NOTE="$_FL_NOTE$_fl_k=$_fl_note$NL"
+		fi
+		if [ "$_fl_req" = yes ]; then
+			_FL_REQ="$_FL_REQ$_fl_k$NL"
+		fi
+	done
+}
+
+# One field's pattern, or its note, from the tables above — into _FP and _FN
+# rather than onto stdout, because a command substitution is a fork and this
+# is asked once per field per ticket.
+field_pattern() {
+	_FP=""
+	case $_FL_PAT in
+	*"$NL$1="*) _FP=${_FL_PAT#*"$NL$1="}; _FP=${_FP%%"$NL"*} ;;
+	esac
+}
+field_note() {
+	_FN=""
+	case $_FL_NOTE in
+	*"$NL$1="*) _FN=${_FL_NOTE#*"$NL$1="}; _FN=${_FN%%"$NL"*} ;;
+	esac
+}
+
 # What a finding says when a value does not match. The format's patterns are
 # compiled into this script, so nobody can open the file they live in: the
 # finding shows the note, which is the same grammar in words. A project's
 # pattern is in a file the project wrote, so naming it points at the line to
 # go and read.
 match_complaint() {
-	_mc_note=$(format_cached | awk -F'\t' -v k="$1" '$1 == k { print $5; exit }')
-	if [ -n "$_mc_note" ] && [ "$_mc_note" != - ]
-	then printf 'is not %s\n' "$_mc_note"
-	else printf 'does not match %s\n' "$2"; fi
+	field_note "$1"
+	if [ -n "$_FN" ] && [ "$_FN" != - ]
+	then _MC="is not $_FN"
+	else _MC="does not match $2"; fi
 }
 
 # The pattern for one field, from the format if it owns the name and from the
@@ -2357,7 +2457,9 @@ schema_match() {
 # Anchored here rather than in the schema: ^(...)$ so that S|M|L cannot
 # half-match "M extra", and a pattern its author already anchored still works.
 value_matches() {
-	printf '%s\n' "$2" | grep -Eq "^($1)\$" 2>/dev/null
+	grep -Eq "^($1)\$" 2>/dev/null <<VALUE
+$2
+VALUE
 }
 
 # Everything wrong with the schema itself, one finding per line. Reported by
@@ -2680,6 +2782,11 @@ cmd_check() {
 	: > "$PIDLY_REPORT"
 	: > "$PIDLY_NOTES"
 	_m=$(map "$_r")
+	# Every number, newline-delimited and newline-wrapped, so a glob can
+	# ask "is this one of them" without a process.
+	_nums="
+$(printf '%s\n' "$_m" | awk '{print $1}')
+"
 
 	# The schema first: a fault there is one mistake that would otherwise be
 	# reported against every ticket carrying the field.
@@ -2706,21 +2813,36 @@ cmd_check() {
 
 		[ -f "$_f" ] || { flag "$_num: no info file in $_path"; continue; }
 
-		info_faults "$_r" "$_f" "$_num" | while read -r _fault; do
-			flag "$_fault"
-		done
+		# Straight into the report rather than through a pipeline.
+		# flag() only appends to this file, and the pipe cost a
+		# subshell per ticket — which is also what reset the parsed
+		# schema and format each time round the loop.
+		info_faults "$_r" "$_f" "$_num" >> "$PIDLY_REPORT"
 
-		# Dependencies resolve.
-		for _dep in $(sed -n '2s/^needs: *//p' "$_f"); do
-			printf '%s\n' "$_m" | awk -v d="$_dep" '$1==d{f=1} END{exit !f}' ||
-				flag "$_num: needs $_dep, which does not exist"
+		# The two structural lines this loop reads for itself, in one
+		# pass and no process: claim: is line 1 and needs: is line 2, and
+		# a sed apiece was two forks per ticket for a handful of bytes.
+		_held="" _needline=""
+		{ IFS= read -r _held; IFS= read -r _needline; } < "$_f" || true
+		case $_held in claim:*) _held=${_held#claim:} ;; *) _held="" ;; esac
+
+		# Dependencies resolve. The numbers are in _nums, built once
+		# above; matching a glob against it costs nothing, where an awk
+		# per dependency was a process per dependency per ticket.
+		for _dep in ${_needline#needs:}; do
+			case $_nums in
+			*"
+$_dep
+"*) ;;
+			*) flag "$_num: needs $_dep, which does not exist" ;;
+			esac
 		done
 
 		# A ticket holds its info, child tickets, c/ and attachments-free
 		# directories only. Anything else is read as a phantom ticket.
 		for _sub in "$_path"/*/; do
 			[ -d "$_sub" ] || continue
-			_sn=$(basename "$_sub")
+			_sn=${_sub%/}; _sn=${_sn##*/}
 			[ "$_sn" = c ] && continue
 			case $_sn in
 			''|*[!0-9]*) flag "$_num: '$_sn/' is neither a number nor c"
@@ -2734,10 +2856,11 @@ cmd_check() {
 		done
 
 		# Claims and locks whose holder is gone.
-		_held=$(sed -n '1s/^claim://p' "$_f")
-		case $(claim_state "$_r" "$_held") in
-		dead) flag "$_num: claimed by $_held, which is gone" ;;
-		esac
+		if [ -n "$_held" ]; then
+			case $(claim_state "$_r" "$_held") in
+			dead) flag "$_num: claimed by $_held, which is gone" ;;
+			esac
+		fi
 		if [ -e "$_path/.lock" ]; then
 			_lo=""
 			read -r _lo < "$_path/.lock" 2>/dev/null || true
@@ -2757,10 +2880,17 @@ cmd_check() {
 			flag "$_num: no registry entry, so nothing stops a branch reusing it"
 	done
 	if [ -d "$(registry_dir "$_r")" ]; then
+		# The glob again, for the same reason: an awk per entry over the
+		# whole map is a process per ticket reading every ticket, which
+		# is the one shape in here that gets worse as the tracker grows.
 		ls "$(registry_dir "$_r")" 2>/dev/null | while read -r _e; do
 			[ -n "$_e" ] || continue
-			printf '%s\n' "$_m" | awk -v n="$_e" '$1==n{f=1} END{exit !f}' ||
-				flag "registry has $_e with no ticket (deleted?)"
+			case $_nums in
+			*"
+$_e
+"*) ;;
+			*) flag "registry has $_e with no ticket (deleted?)" ;;
+			esac
 		done
 	fi
 
@@ -2789,12 +2919,17 @@ cmd_check() {
 	fi
 
 	# Cycles, by peeling nodes with no unresolved dependency.
-	printf '%s\n' "$_m" | while read -r _num _path; do
-		[ -n "$_num" ] || continue
-		case $_num in *[!0-9]*) continue ;; esac
-		[ -f "$_path/info" ] || continue
-		printf '%s %s\n' "$_num" "$(sed -n '2s/^needs: *//p' "$_path/info")"
-	done | awk '
+	# One awk for the whole graph: line 2 of every info, read with getline.
+	# The shell loop this replaces ran a sed per ticket.
+	printf '%s\n' "$_m" | awk '
+		$1 ~ /^[0-9]+$/ {
+			f = $2 "/info"
+			line = ""
+			getline line < f; getline line < f
+			close(f)
+			sub(/^needs:[ ]*/, "", line)
+			print $1 " " line
+		}' | awk '
 		{ node[$1] = 1; for (i = 2; i <= NF; i++) dep[$1] = dep[$1] " " $i }
 		END {
 			changed = 1
