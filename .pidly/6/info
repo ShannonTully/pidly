@@ -4,7 +4,7 @@ title: Replace beads in the clockwork workflow
 effort: L
 area: cli
 created: 2026-09-17T03:06:47Z
-updated: 2026-09-17T04:39:14Z
+updated: 2026-09-18T22:58:17Z
 handoff:
 
 clockwork.toml and the project's skills are wired to bd. Once the format
@@ -12,3 +12,99 @@ and script are stable, map the concepts across, migrate any existing bd
 data, and update the skill prose that names bd.
 
 Not worth planning in detail before the script exists.
+
+
+Investigated 2026-09-18. The ticket says "the project's skills", and they are
+not the project's — which changes what this ticket is.
+
+Where the wiring actually is:
+
+  ~/.claude/skills/*/SKILL.md   10 files naming bd
+  ~/.claude/commands/*.md        6 files naming bd
+  clockwork.toml                 bd_prefix, and never_touch **/.beads/**
+
+The 16 files under ~/.claude are the global clockwork install, shared by
+every project on this machine. They hard-code bd commands rather than
+parameterising them — bd ready, bd close, bd dep add, bd dolt push — so there
+is no per-project setting that would make them mean pidly here.
+
+And three other projects are actively on beads, all with a live .beads:
+
+  bowmaster        bd_prefix bo
+  clockwork-city   bd_prefix cc
+  idol             bd_prefix idol
+
+pidly is the only one of the four without .beads. So rewriting the global
+prose to say pidly does not migrate this project — it switches the other
+three onto a tracker they have not imported, which is a way to lose their
+work rather than to move it.
+
+That makes this a decision rather than an edit, and it is the owner's:
+
+- Rewrite the global skills to pidly. Simplest, and breaks three projects
+  until each is migrated. 46 now exists, so migrating them is possible, but
+  it is three imports and three lots of verification, not a side effect of
+  this ticket.
+- Project-scoped copies under pidly/.claude/skills, overriding the global
+  ones here only. Safe and immediate, and it is sixteen copies of prose that
+  will drift from the originals — the copies-go-stale rule this project
+  refuses everywhere else, applied to the one place it would hurt most.
+- Make the global skills tracker-agnostic: they talk about the tracker, and
+  clockwork.toml names which one and what its commands are. Nothing breaks,
+  every project keeps what it has, and pidly stops being a special case. The
+  largest edit, and it is a change to clockwork rather than to pidly — which
+  may mean it belongs in clockwork-city's tracker, not this one.
+
+The third is the right shape. It is also the one this ticket cannot decide
+alone, because it changes a tool this repository does not own.
+
+Not blocked on anything in pidly. 46 landed, so the migration half of this
+ticket is available whenever the direction is settled.
+
+
+Scoped 2026-09-18, after the owner chose to make the skills tracker-agnostic.
+That is the right shape and it is much larger than the prose. Recording what
+it actually costs, because the estimate this ticket was picked up on was
+wrong by an order of magnitude.
+
+The prose is the small half:
+
+  27 files under clockwork-city   118 mentions of bd
+  skills, commands and the Apostle and Factotum definitions
+  plus SPEC.md 11.2, which is where the clockwork.toml schema is written down
+
+The source is clockwork-city, not ~/.claude. install.sh copies skills and
+commands into ~/.clockwork and from there into ~/.claude, so the installed
+copies are output. They are also behind the source today — plan.md and
+planning-and-task-breakdown have a membership-versus-ordering distinction in
+the repository that the installed copies do not — so an edit made in
+~/.claude would be both lost and a clobber of newer work.
+
+The half that is not prose, and the reason this cannot be done here:
+
+  internal/bd      a concrete Client struct, no interface
+  cmd/cog/bd.go    613 lines
+  ~1500 lines total, ~937 references across the Go sources
+  used by convoy, supervisor, lookout, edict, mail, anchor, session, spec
+
+cog does not merely mention bd; it is a beads client. convoy enumerates a
+spec's children with bd.DepList and bd.Dependents and claims issues with
+bd.Update. So a pidly project cannot run a convoy however the prose is
+worded, and changing only the prose would produce documents that describe a
+tracker the tool cannot read — which is worse than the honest coupling that
+is there now.
+
+Doing it properly is: extract a Tracker interface, implement it for beads and
+for pidly, thread it through ten call sites, then the 27 files and the schema.
+That is a feature in clockwork-city, wants a ticket in clockwork-city's own
+tracker, and is not a pidly change at all.
+
+What belongs to this ticket, once clockwork can name a tracker:
+
+  clockwork.toml   [project.tracker] kind = "pidly", absent meaning beads so
+                   bowmaster, clockwork-city and idol keep what they have and
+                   need no edit
+  clockwork.toml   bd_prefix and never_touch **/.beads/**, which pidly has
+                   and does not use
+
+Nothing was changed in clockwork-city. Blocked there, not here.
