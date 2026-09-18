@@ -1,8 +1,8 @@
-claim:751.130120276@31917916.u1000
+claim:
 needs:
 title: Resolve a number, and read one ticket
 created: 2026-09-18T17:55:04Z
-updated: 2026-09-18T18:30:29Z
+updated: 2026-09-18T20:37:59Z
 effort: S
 area: cli
 handoff:

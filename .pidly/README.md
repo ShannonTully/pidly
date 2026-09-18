@@ -202,6 +202,21 @@ is worse than no copy. There are no hooks: enforcement is the operator's, and
 a hook that blocks a tool call is a strong thing to install on someone's
 behalf.
 
+`pidly man` is the same idea for the CLI rather than for this tracker. It
+writes the manual page to stdout, generated from the text `pidly help`
+prints, so the two cannot disagree:
+
+```sh
+pidly man > docs/pidly.1
+```
+
+Most projects never want one — the page documents pidly, not your tracker,
+and `check` says nothing unless `docs/pidly.1`, `man/pidly.1` or `pidly.1`
+already exists. Where one does, it is compared like everything else here.
+Nothing in the page is dated or versioned: a page carrying today's date would
+differ from yesterday's committed copy every morning, and the drift would be
+the clock rather than the content.
+
 Not an MCP server. That is a process, and the premise is that there is
 nothing to run — Bash already reaches the CLI.
 

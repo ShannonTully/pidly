@@ -1,0 +1,62 @@
+claim:
+needs:
+title: Decide whether a man page is worth generating
+effort: S
+area: docs
+created: 2026-09-17T06:46:56Z
+updated: 2026-09-18T20:38:27Z
+handoff:
+
+Debian's guidelines want a man page for anything in bin. A Homebrew tap and
+the AUR do not care, and those are the routes 29 does first.
+
+The usage text already carries the command list and the environment
+variables, so a man page would be generated from the same function rather
+than written and kept in step by hand — the copies-go-stale rule applies,
+and check already compares the two generated documents against what would
+be generated now.
+
+Decide: generate one from usage and let check compare it, or ship none and
+accept that a distro-native package is further away than it looks.
+
+Done when the decision is written down, and implemented if it is yes.
+
+
+Decided 2026-09-18, and implemented.
+
+Generate one. The argument against was never the page, it was the second
+copy: a hand-written pidly.1 is a command list that drifts from the one the
+CLI prints, and the format has refused that everywhere else. Generating it
+from the usage text removes the objection rather than answering it, so the
+Debian route stays open at the cost of no maintenance at all.
+
+usage() was split into usage_text, which writes to stdout, and usage(), which
+sends it to stderr and exits 2. The page is built from usage_text, so the
+COMMANDS and ENVIRONMENT sections cannot disagree with pidly help — there is
+only one list. The prose sections (DESCRIPTION, FILES, EXIT STATUS, SEE ALSO)
+are written, because they describe the format rather than the command list
+and nothing else holds them.
+
+Two things the generation has to get right:
+
+- Roff reads a backslash as markup and a leading . or ' as a control line, so
+  usage text is passed through roff_escape on its way in. It matches the
+  em-dash by its bytes rather than as a literal, so the escaping does not
+  depend on this script's encoding surviving a copy. Same class of fault
+  as 51: a character crossing a layer that quietly reinterprets it.
+- Nothing in the page is dated or versioned. A .TH carrying today's date
+  would differ from yesterday's committed copy every morning, so check would
+  report drift that is the clock rather than the content, and the fix would
+  be to regenerate daily forever. The date field is empty on purpose.
+
+check compares a shipped page like it compares the other generated documents,
+and only if one exists: docs/pidly.1, man/pidly.1 or pidly.1. The page
+documents pidly rather than the project's tracker, so a project that never
+generated one is not missing anything and is not nagged. pidly's own
+repository is the one that wants it checked, and docs/pidly.1 is committed.
+
+Guarded in man.sh: every command in the usage text reaches the page, no raw
+non-ASCII survives, no line inside a .nf block opens with a bare dot, groff
+renders it without a warning, two runs are byte-identical, and check reports
+a stale page with the command that fixes it and says nothing when there is
+none. portable.sh runs man under every shell it covers.

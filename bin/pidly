@@ -1551,6 +1551,21 @@ is worse than no copy. There are no hooks: enforcement is the operator's, and
 a hook that blocks a tool call is a strong thing to install on someone's
 behalf.
 
+`pidly man` is the same idea for the CLI rather than for this tracker. It
+writes the manual page to stdout, generated from the text `pidly help`
+prints, so the two cannot disagree:
+
+```sh
+pidly man > docs/pidly.1
+```
+
+Most projects never want one — the page documents pidly, not your tracker,
+and `check` says nothing unless `docs/pidly.1`, `man/pidly.1` or `pidly.1`
+already exists. Where one does, it is compared like everything else here.
+Nothing in the page is dated or versioned: a page carrying today's date would
+differ from yesterday's committed copy every morning, and the drift would be
+the clock rather than the content.
+
 Not an MCP server. That is a process, and the premise is that there is
 nothing to run — Bash already reaches the CLI.
 
@@ -3414,6 +3429,17 @@ $_e
 			flag ".claude/$_cf_p is out of date — run 'pidly claude'"
 	done
 
+	# The manual page, if this project ships one. Only if, for the same
+	# reason as the Claude files: the page documents the CLI rather than
+	# this tracker, so a project that never generated one is not missing
+	# anything. pidly's own repository is the one that wants it checked.
+	for _mp in docs/pidly.1 man/pidly.1 pidly.1; do
+		[ -f "$_mp" ] || continue
+		man_text > "$_tmp"
+		cmp -s "$_tmp" "$_mp" ||
+			flag "$_mp is out of date — run 'pidly man > $_mp'"
+	done
+
 	for _cand in AGENTS.md CLAUDE.md GEMINI.md .cursorrules; do
 		[ -f "$_cand" ] || continue
 		grep -qF "$AGENTS_BEGIN" "$_cand" || continue
@@ -3440,8 +3466,8 @@ $_e
 
 # --- entry point -----------------------------------------------------------
 
-usage() {
-	cat >&2 <<'USAGE'
+usage_text() {
+	cat <<'USAGE'
 usage: pidly <command> [args]
 
   init           create .pidly here, or refresh what it generates
@@ -3495,6 +3521,7 @@ usage: pidly <command> [args]
   claude         write the Claude Code integration into .claude: a skill, the
                  slash commands, and a permissions block for the read-only
                  commands
+  man            the manual page, in roff, on stdout: pidly man > docs/pidly.1
 
 environment:
   PIDLY_PID      the agent's process (default: $CLAUDE_PID, else $PPID).
@@ -3505,7 +3532,124 @@ environment:
   PIDLY_LEASE    how long the claim is good for: 90s, 30m, 2h, 3d.
 
 USAGE
-	exit 2
+}
+
+# The CLI's own help. usage_text is separate so that the manual page is
+# generated from it rather than from a second copy that would go stale — the
+# same rule the reference and the AGENTS.md block already follow.
+usage() { usage_text >&2; exit 2; }
+
+# Roff treats a backslash as markup and a leading . or ' as a control line, so
+# text on its way into a manual page has to say it means them literally. This
+# is the same class of fault as 51: a character passing through a layer that
+# quietly reinterprets it.
+roff_escape() {
+	awk '
+		# The em-dash by its bytes rather than as a literal, so this does
+		# not depend on the encoding of the script surviving a copy. It is
+		# the only non-ASCII character the usage text uses, and a manual
+		# page that holds it raw makes troff warn on every line it is on.
+		BEGIN { sq = sprintf("%c", 39); em = sprintf("%c%c%c", 226, 128, 148) }
+		{
+			# Backslashes first: the escapes below introduce their own.
+			gsub(/\\/, "\\\\e")
+			gsub(em, "\\\\(em")
+			c = substr($0, 1, 1)
+			if (c == "." || c == sq) $0 = "\\&" $0
+			print
+		}'
+}
+
+# One half of the usage text, with the blank lines around it removed.
+#
+# The "usage: pidly <command>" line is dropped: SYNOPSIS says it already, and
+# a manual page that opens its COMMANDS section by repeating the synopsis
+# reads like a paste. Trailing blanks go too, so the .nf block ends where the
+# text does rather than on an empty line.
+usage_section() {
+	usage_text | awk -v want="$1" '
+		/^environment:/ { env = 1; next }
+		NR <= 2 { next }
+		{
+			if ((want == "environment") != (env == 1)) next
+			line[n++] = $0
+		}
+		END {
+			while (n > 0 && line[n-1] == "") n--
+			for (i = 0; i < n; i++) print line[i]
+		}'
+}
+
+# The manual page, from the same usage text the CLI prints.
+#
+# Nothing here is dated or versioned. A .TH carrying today's date would
+# differ from yesterday's committed copy every day, so check would report
+# drift that is not drift, and the fix would be to regenerate daily forever.
+# The date field is left empty on purpose.
+man_text() {
+	cat <<'HEAD'
+.TH PIDLY 1 "" "pidly" "User Commands"
+.SH NAME
+pidly \- a ticket tracker that is just files
+.SH SYNOPSIS
+.B pidly
+.I command
+[\fIargs\fR]
+.SH DESCRIPTION
+Work lives in a
+.I .pidly
+directory as plain files. A ticket is a directory holding an
+.I info
+file, and its state is its location: a closed ticket sits in its container's
+.I c
+directory, so nothing records a status that could disagree with the files.
+.PP
+Every command is something a person could do with
+.BR mkdir (1),
+.BR mv (1)
+and an editor, leaving the repository byte-identical. The exception is
+claiming, which needs a lock to be safe while other agents are running. A
+checkout where pidly was never installed remains fully usable by hand, and
+.I .pidly/README.md
+gives the equivalent of every command below.
+.SH COMMANDS
+.nf
+HEAD
+	usage_section commands | roff_escape
+	cat <<'MID'
+.fi
+.SH ENVIRONMENT
+.nf
+MID
+	usage_section environment | roff_escape
+	cat <<'TAIL'
+.fi
+.SH FILES
+.TP
+.I .pidly/
+The tracker. One directory per ticket, numbered, nested by parentage.
+.TP
+.I .pidly/schema
+The project's fields, one stanza each.
+.TP
+.I .pidly/README.md
+The format, generated by
+.BR "pidly agents" .
+.SH EXIT STATUS
+.B check
+exits non-zero when it finds something wrong, so it can run in CI. Everything
+else exits non-zero on refusal.
+.SH SEE ALSO
+.BR mkdir (1),
+.BR mv (1),
+.BR find (1)
+TAIL
+}
+
+cmd_man() {
+	[ $# -eq 0 ] || die 'usage: pidly man'
+	man_text
+	return 0
 }
 
 [ $# -ge 1 ] || usage
@@ -3531,5 +3675,6 @@ tree)    cmd_tree "$@" ;;
 check)   cmd_check "$@" ;;
 agents)  cmd_agents "$@" ;;
 claude)  cmd_claude "$@" ;;
+man)     cmd_man "$@" ;;
 *)       usage ;;
 esac

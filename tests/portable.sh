@@ -95,6 +95,7 @@ $PIDLY close 2 >/dev/null && ok "close works" || no "close"
 $PIDLY reopen 2 >/dev/null && ok "reopen works" || no "reopen"
 $PIDLY init >/dev/null && ok "init works" || no "init"
 $PIDLY agents >/dev/null && ok "agents works" || no "agents"
+$PIDLY man >/dev/null && ok "man works" || no "man"
 $PIDLY check >/dev/null && ok "check works" || no "check"
 
 echo "and gives the same answers"
