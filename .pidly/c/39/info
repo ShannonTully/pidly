@@ -4,7 +4,7 @@ title: Audit what still has to be done by hand
 effort: M
 area: cli
 created: 2026-09-17T06:54:30Z
-updated: 2026-09-18T17:56:02Z
+updated: 2026-09-18T18:47:18Z
 handoff: Audit complete: every row has one of the three answers, and the gaps are 47-50. 39 stays open as their parent until they close.
 
 Two properties, and they are not the same one:
@@ -186,3 +186,38 @@ THE OTHER HALF: the reference and the command set agree
 outcome: the audit is the answers, and the answers are four tickets. To redo
 this later rather than trust it, work in the tracker for a day and write down
 every command that does not begin with pidly.
+
+
+Closed 2026-09-18. All four gaps are commands, and the audit's second
+property holds.
+
+  47  pidly show [-p|-F|-b|-f NAME] <n>
+  48  pidly set <n> title|needs, and pidly needs [-a|-d]
+  49  pidly reparent [-r] <n> <parent>
+  50  pidly edit -r OLD -w NEW, and -b refusing a truncated body
+
+What the audit was for — nothing should require reaching past the CLI — is
+true for every row that was answered "a command should exist". The three
+answered "stays manual on purpose" still are, deliberately: history is git's,
+searching bodies is grep's, and bulk is the caller's.
+
+The first property is intact too, which mattered more than the second and was
+the risk in closing these gaps at all. Every new command is documented in the
+reference beside the hand idiom it replaces, never instead of it: show's
+table keeps the sed and awk forms in a column of their own, set names the two
+seds it saves you, reparent documents the mv first and says what the command
+adds, and edit -r explains the reconstruction it removes. A checkout where
+pidly was never installed still works exactly as it did.
+
+Two things worth knowing that the audit did not predict:
+
+- Closing a gap found a gap. 48 had to make set_line escape-safe, which
+  exposed the same bug in set_field, and that is 51.
+- The suite caught two real mistakes during the work — a second set_line
+  shadowing the first, which broke claim under set -u, and a
+  replace_passage that folded the header into the body. Both were found by
+  running commands rather than by reading code, and portable.sh, which runs
+  every command, is what found the first.
+
+To redo this audit later rather than trust it: work in the tracker for a day
+and write down every command that does not begin with pidly.
