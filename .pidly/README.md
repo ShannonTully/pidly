@@ -217,6 +217,63 @@ findings, all still nonzero. `pidly edit` follows the same rule from the other
 side: it saves a ticket carrying a field it does not know, saying so, and
 still refuses a file that is no longer a ticket.
 
+## Coming from another tracker
+
+`pidly migrate beads <dir>` imports a beads export into a tracker that has no
+tickets yet. It is the only source implemented; the command names it rather
+than guessing, so a second one later does not change the shape of this.
+
+What maps, and what it becomes:
+
+| beads | pidly |
+| --- | --- |
+| `title` | `title:` |
+| `description` | the body |
+| `created_at`, `updated_at` | `created:`, `updated:` |
+| open / closed | the path, `c/` or not |
+| parent-child | the directory, nested |
+| `blocks`, `blocked-by` | `needs:`, renumbered |
+| `id` | `origin:`, so a commit message still resolves |
+| `priority`, `issue_type`, `assignee` | fields of the same name, `kind` for the type |
+| `acceptance_criteria`, `notes`, `design` | the body, under headings |
+| `labels` | the body, because a set-valued field is not a thing here |
+
+Three states have no equivalent and are reported rather than invented.
+`in_progress` imports **unclaimed**: a claim names a process, and that process
+is gone — a claim nobody can verify is the one thing this format refuses to
+make up. `deferred` imports **open**, because a defer here carries a trigger
+and an export has none. A **memory record** is ADR prose keyed by a slug: a
+document, not a ticket.
+
+A closed parent holding an open child is the one contradiction the format
+cannot store, since a finished tree may not hold live work. The parent is
+imported open: the child says there is work left in it, and that is the half
+worth believing. It is reported, not done quietly.
+
+### The export is not the tracker
+
+`.beads/*.jsonl` is a snapshot somebody has to remember to refresh. On the
+only real corpus this was built against it was six weeks behind, and reading
+it and reporting success would have dropped a quarter of the tickets without
+a word.
+
+So migrate refuses an export it can tell is stale, and says how it knows:
+
+```
+pidly: this export is behind the tracker it came from
+  written   2026-08-02T10:41:43Z
+  contains  332 issues
+  100 ticket(s) the interaction log names are not in it
+```
+
+The count comes from `export-state.json` and is compared with the file. The
+sharper signal needs no database: ids the interaction log names that the
+export does not contain were created after it was taken. `bd export` fixes
+both. `--anyway` imports what is there and still says it is behind.
+
+Reading the database directly would mean depending on a database engine,
+which is the thing pidly exists not to have.
+
 ## Telling Claude Code about it
 
 ```sh

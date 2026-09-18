@@ -1630,6 +1630,63 @@ findings, all still nonzero. `pidly edit` follows the same rule from the other
 side: it saves a ticket carrying a field it does not know, saying so, and
 still refuses a file that is no longer a ticket.
 
+## Coming from another tracker
+
+`pidly migrate beads <dir>` imports a beads export into a tracker that has no
+tickets yet. It is the only source implemented; the command names it rather
+than guessing, so a second one later does not change the shape of this.
+
+What maps, and what it becomes:
+
+| beads | pidly |
+| --- | --- |
+| `title` | `title:` |
+| `description` | the body |
+| `created_at`, `updated_at` | `created:`, `updated:` |
+| open / closed | the path, `c/` or not |
+| parent-child | the directory, nested |
+| `blocks`, `blocked-by` | `needs:`, renumbered |
+| `id` | `origin:`, so a commit message still resolves |
+| `priority`, `issue_type`, `assignee` | fields of the same name, `kind` for the type |
+| `acceptance_criteria`, `notes`, `design` | the body, under headings |
+| `labels` | the body, because a set-valued field is not a thing here |
+
+Three states have no equivalent and are reported rather than invented.
+`in_progress` imports **unclaimed**: a claim names a process, and that process
+is gone — a claim nobody can verify is the one thing this format refuses to
+make up. `deferred` imports **open**, because a defer here carries a trigger
+and an export has none. A **memory record** is ADR prose keyed by a slug: a
+document, not a ticket.
+
+A closed parent holding an open child is the one contradiction the format
+cannot store, since a finished tree may not hold live work. The parent is
+imported open: the child says there is work left in it, and that is the half
+worth believing. It is reported, not done quietly.
+
+### The export is not the tracker
+
+`.beads/*.jsonl` is a snapshot somebody has to remember to refresh. On the
+only real corpus this was built against it was six weeks behind, and reading
+it and reporting success would have dropped a quarter of the tickets without
+a word.
+
+So migrate refuses an export it can tell is stale, and says how it knows:
+
+```
+pidly: this export is behind the tracker it came from
+  written   2026-08-02T10:41:43Z
+  contains  332 issues
+  100 ticket(s) the interaction log names are not in it
+```
+
+The count comes from `export-state.json` and is compared with the file. The
+sharper signal needs no database: ids the interaction log names that the
+export does not contain were created after it was taken. `bd export` fixes
+both. `--anyway` imports what is there and still says it is behind.
+
+Reading the database directly would mean depending on a database engine,
+which is the thing pidly exists not to have.
+
 ## Telling Claude Code about it
 
 ```sh
@@ -3697,6 +3754,527 @@ $_e
 	return 0
 }
 
+# --- migrate ---------------------------------------------------------------
+#
+# Someone with history in another tracker cannot try pidly without abandoning
+# it, and a tracker nobody can move into is a tracker nobody tries.
+#
+# The source is named rather than guessed, so adding a second one later does
+# not change the shape of what is already here.
+
+# Every leaf of one JSON object per line, as "path<TAB>value", records
+# separated by a blank line.
+#
+# A scanner rather than a regex. A JSON string can hold braces, brackets,
+# commas and escaped quotes, and every regex that tries to split on those is
+# wrong on the first description that contains one — which in the corpus this
+# was written against is the second record.
+#
+# Values come out with backslash, newline and tab written as \\, \n and \t, so
+# a record is always one line. Everything else is decoded here: the reader
+# should not have to know it was ever JSON.
+json_flat() {
+	awk '
+	function fail(msg) {
+		printf "line %d: %s\n", NR, msg > "/dev/stderr"
+		bad = 1
+		return 0
+	}
+	function peek() { return substr(s, i, 1) }
+	function skipws() { while (i <= n && substr(s, i, 1) ~ /[ \t\r\n]/) i++ }
+
+	# A code point as UTF-8 bytes, assembled by hand: %c is not portable
+	# above 127, where mawk and gawk disagree.
+	#
+	# Decimal throughout, because 0x80 is not a number in POSIX awk. mawk
+	# reads it as 0 concatenated with an unset variable named x80, so every
+	# comparison against one silently compares against the string 0 — and
+	# every escaped <, > and & in the corpus came out as 000.
+	function utf8(c) {
+		if (c < 128) return sprintf("%c", c)
+		if (c < 2048)
+			return sprintf("%c%c", 192 + int(c / 64), 128 + (c % 64))
+		return sprintf("%c%c%c", 224 + int(c / 4096), \
+			128 + (int(c / 64) % 64), 128 + (c % 64))
+	}
+	function hex4(   j, v, d) {
+		v = 0
+		for (j = 0; j < 4; j++) {
+			d = index("0123456789abcdef", tolower(substr(s, i + j, 1)))
+			if (d == 0) return -1
+			v = v * 16 + (d - 1)
+		}
+		i += 4
+		return v
+	}
+	function str(   out, c, e, cp, lo) {
+		if (peek() != "\"") return fail("expected a string")
+		i++
+		out = ""
+		while (i <= n) {
+			c = substr(s, i, 1)
+			if (c == "\"") { i++; return out }
+			if (c != "\\") { out = out c; i++; continue }
+			i++
+			e = substr(s, i, 1); i++
+			if (e == "n") out = out "\n"
+			else if (e == "t") out = out "\t"
+			else if (e == "r") out = out "\r"
+			else if (e == "b") out = out sprintf("%c", 8)
+			else if (e == "f") out = out sprintf("%c", 12)
+			else if (e == "\"" || e == "\\" || e == "/") out = out e
+			else if (e == "u") {
+				cp = hex4()
+				if (cp < 0) return fail("bad u escape")
+				# A surrogate pair is two escapes, one character.
+				if (cp >= 55296 && cp <= 56319 && substr(s, i, 2) == "\\u") {
+					i += 2
+					lo = hex4()
+					if (lo >= 56320 && lo <= 57343)
+						cp = 65536 + (cp - 55296) * 1024 + (lo - 56320)
+					else
+						return fail("bad surrogate pair")
+				}
+				out = out utf8(cp)
+			}
+			else return fail("unknown escape " e)
+		}
+		return fail("unterminated string")
+	}
+	function scalar(   start) {
+		start = i
+		while (i <= n && substr(s, i, 1) !~ /[,}\]\t\r\n ]/) i++
+		return substr(s, start, i - start)
+	}
+	# Eight backslashes to double one. The string literal collapses to four,
+	# and gsub reads its replacement again, where two mean one literal — so
+	# the obvious four replaces a backslash with itself and the encoding
+	# stops being reversible.
+	function enc(v) {
+		gsub(/\\/, "\\\\\\\\", v)
+		gsub(/\n/, "\\n", v)
+		gsub(/\t/, "\\t", v)
+		gsub(/\r/, "", v)
+		return v
+	}
+	function emit(path, v) { if (path != "") printf "%s\t%s\n", path, enc(v) }
+	function value(path,   c, k, idx) {
+		skipws()
+		c = peek()
+		if (c == "\"") { emit(path, str()); return }
+		if (c == "{") {
+			i++
+			skipws()
+			if (peek() == "}") { i++; return }
+			while (i <= n) {
+				skipws()
+				k = str()
+				if (bad) return
+				skipws()
+				if (peek() != ":") { fail("expected a colon"); return }
+				i++
+				value(path == "" ? k : path "." k)
+				if (bad) return
+				skipws()
+				c = peek()
+				if (c == ",") { i++; continue }
+				if (c == "}") { i++; return }
+				fail("expected a comma or a brace")
+				return
+			}
+			fail("unterminated object")
+			return
+		}
+		if (c == "[") {
+			i++
+			skipws()
+			if (peek() == "]") { i++; return }
+			idx = 0
+			while (i <= n) {
+				value(path "." idx)
+				if (bad) return
+				idx++
+				skipws()
+				c = peek()
+				if (c == ",") { i++; continue }
+				if (c == "]") { i++; return }
+				fail("expected a comma or a bracket")
+				return
+			}
+			fail("unterminated array")
+			return
+		}
+		emit(path, scalar())
+	}
+	{
+		s = $0; n = length(s); i = 1; bad = 0
+		if (s ~ /^[ \t]*$/) next
+		value("")
+		if (!bad) { skipws(); if (i <= n) fail("trailing text") }
+		if (bad) exit 1
+		printf "\n"
+	}' "$1"
+}
+
+cmd_migrate() {
+	# Flags anywhere, because the usage line puts --anyway last and a reader
+	# who types it there is right.
+	_mg_any="" _mg_kind="" _mg_src="" _mg_n=0
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--anyway) _mg_any=yes ;;
+		-*) die "unknown option $1" ;;
+		*)  _mg_n=$((_mg_n + 1))
+		    case $_mg_n in
+		    1) _mg_kind=$1 ;;
+		    2) _mg_src=$1 ;;
+		    *) die 'usage: pidly migrate beads <dir> [--anyway]' ;;
+		    esac ;;
+		esac
+		shift
+	done
+	[ "$_mg_n" -eq 2 ] || die 'usage: pidly migrate beads <dir> [--anyway]'
+	[ "$_mg_kind" = beads ] ||
+		die "unknown source '$_mg_kind': beads is the only one implemented"
+	_r=$(root)
+
+	# A tracker that already holds work is not a destination. Numbers would
+	# have to be issued around the ones in use, every imported dependency
+	# rewritten against them, and a failure halfway would leave a tracker
+	# that is neither. Import into a fresh one and merge afterwards, which
+	# is mv and an editor.
+	map "$_r" | grep -q . &&
+		die 'this tracker already has tickets: import into a fresh one'
+
+	_mg_j="$_mg_src/issues.jsonl"
+	[ -f "$_mg_j" ] ||
+		die "no issues.jsonl in $_mg_src — run 'bd export' there first"
+
+	_mg_t="${TMPDIR:-/tmp}/pidly.migrate.$$"
+	mkdir -p "$_mg_t"
+	json_flat "$_mg_j" > "$_mg_t/flat" ||
+		{ rm -rf "$_mg_t"; die "$_mg_j is not the JSONL bd writes"; }
+
+	# --- is this export worth trusting -------------------------------------
+	#
+	# .beads/*.jsonl is an export, not the tracker. The tracker is an
+	# embedded database and the files are a snapshot somebody has to
+	# remember to refresh. On the only real corpus available it was six
+	# weeks behind, and reading it and reporting success would have silently
+	# dropped a quarter of the tickets.
+	#
+	# The sharpest signal needs no database: ids the interaction log names
+	# that the export does not contain were created after it was written.
+	_mg_state="$_mg_src/export-state.json"
+	_mg_log="$_mg_src/interactions.jsonl"
+	_mg_said="" _mg_when=""
+	if [ -f "$_mg_state" ]; then
+		_mg_said=$(json_flat "$_mg_state" | awk -F'\t' '$1 == "issues" { print $2 }')
+		_mg_when=$(json_flat "$_mg_state" | awk -F'\t' '$1 == "timestamp" { print $2 }')
+	fi
+	_mg_have=$(awk -F'\t' '$1 == "_type" && $2 == "issue"' "$_mg_t/flat" | grep -c . || true)
+
+	_mg_orphans=0
+	if [ -f "$_mg_log" ]; then
+		awk -F'\t' '$1 == "id" { print $2 }' "$_mg_t/flat" | sort -u > "$_mg_t/known"
+		json_flat "$_mg_log" |
+			awk -F'\t' '$1 == "issue_id" { print $2 }' | sort -u > "$_mg_t/seen"
+		_mg_orphans=$(comm -23 "$_mg_t/seen" "$_mg_t/known" | grep -c . || true)
+	fi
+
+	_mg_stale=""
+	[ -n "$_mg_said" ] && [ "$_mg_said" != "$_mg_have" ] && _mg_stale=yes
+	[ "$_mg_orphans" -gt 0 ] && _mg_stale=yes
+	if [ -n "$_mg_stale" ]; then
+		printf 'pidly: this export is behind the tracker it came from\n' >&2
+		[ -n "$_mg_when" ] &&
+			printf '  written   %s\n' "$_mg_when" >&2
+		printf '  contains  %s issues\n' "$_mg_have" >&2
+		[ -n "$_mg_said" ] && [ "$_mg_said" != "$_mg_have" ] &&
+			printf '  declares  %s, so the file and its own state disagree\n' \
+				"$_mg_said" >&2
+		[ "$_mg_orphans" -gt 0 ] &&
+			printf '  %s ticket(s) the interaction log names are not in it\n' \
+				"$_mg_orphans" >&2
+		if [ -z "$_mg_any" ]; then
+			rm -rf "$_mg_t"
+			printf "\nRun 'bd export' there and try again, or --anyway to import what is here.\n" >&2
+			exit 1
+		fi
+		printf '  importing anyway, as asked\n' >&2
+	fi
+
+	# --- the plan ----------------------------------------------------------
+	_mg_reg=$(registry_dir "$_r")
+	mkdir -p "$_mg_reg"
+	# One read of urandom for every nonce the registry needs, rather than one
+	# process per ticket.
+	if [ -r /dev/urandom ]; then
+		LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom 2>/dev/null |
+			dd bs=1 "count=$((_mg_have * 8 + 64))" 2>/dev/null > "$_mg_t/rand" || true
+	fi
+	[ -s "$_mg_t/rand" ] || printf '%s' "$$$$$$" > "$_mg_t/rand"
+
+	awk -F'\t' -v root="$_r" -v reg="$_mg_reg" -v bundle="$_mg_t/bundle" \
+	    -v dirs="$_mg_t/dirs" -v randf="$_mg_t/rand" '
+	# Undo what the scanner encoded, in one left-to-right pass.
+	#
+	# Not three gsubs. The scanner writes a literal backslash as two and a
+	# newline as backslash-n, so a description that really contains the two
+	# characters \ and n arrives as three — and any order of gsubs decodes
+	# it twice, turning text into a line break. Two of the 332 tickets in
+	# the corpus this was written against are exactly that case.
+	function clean(v,   out, j, c, d, len) {
+		out = ""; j = 1; len = length(v)
+		while (j <= len) {
+			c = substr(v, j, 1)
+			if (c == "\\") {
+				d = substr(v, j + 1, 1)
+				if (d == "n") { out = out "\n"; j += 2; continue }
+				if (d == "t") { out = out "\t"; j += 2; continue }
+				if (d == "\\") { out = out "\\"; j += 2; continue }
+			}
+			out = out c; j++
+		}
+		return out
+	}
+	function oneline(v) {
+		v = clean(v)
+		gsub(/\n/, " ", v); gsub(/\t/, " ", v)
+		return v
+	}
+	# Records are numbered from 1, because the loops below are. Left at 0,
+	# the first ticket in the file lands at an index nothing reads and the
+	# import quietly drops it — 331 of 332, which looks like a rounding
+	# error rather than a missing ticket.
+	BEGIN { r = 1 }
+	/^$/ { r++; next }
+	{
+		k = $1; v = $2
+		if (k == "_type") ty[r] = v
+		else if (k == "id") id[r] = v
+		else if (k == "title") ti[r] = v
+		else if (k == "description") de[r] = v
+		else if (k == "status") st[r] = v
+		else if (k == "created_at") cr[r] = v
+		else if (k == "updated_at") up[r] = v
+		else if (k == "priority") pr[r] = v
+		else if (k == "issue_type") ki[r] = v
+		else if (k == "assignee") as[r] = v
+		else if (k == "acceptance_criteria") ac[r] = v
+		else if (k == "notes") no[r] = v
+		else if (k == "design") dg[r] = v
+		else if (k ~ /^labels\.[0-9]+$/) la[r] = (la[r] == "" ? v : la[r] ", " v)
+		else if (k ~ /^dependencies\./) {
+			split(k, a, ".")
+			dk = r "." a[2]
+			if (a[3] == "type") dt[dk] = v
+			else if (a[3] == "issue_id") di[dk] = v
+			else if (a[3] == "depends_on_id") dd[dk] = v
+		}
+	}
+	END {
+		# Issues only. A memory record is ADR prose keyed by a slug: a
+		# document, not a ticket, and inventing a ticket for one would put
+		# something in the tracker that nobody wrote as work.
+		nrec = 0
+		for (x = 1; x <= r; x++) {
+			if (ty[x] != "issue") { if (ty[x] != "") skipped[ty[x]]++; continue }
+			nrec++
+			rec[nrec] = x
+			of[id[x]] = x
+		}
+
+		# Edges. issue_id is the subject and depends_on_id the object, which
+		# is what the parent-child rows show: the child is the issue_id.
+		for (dk in dt) {
+			if (dt[dk] == "parent-child") {
+				if (di[dk] in of && dd[dk] in of) parent[di[dk]] = dd[dk]
+			} else if (dt[dk] == "blocked-by") {
+				if (di[dk] in of && dd[dk] in of) need[di[dk]] = need[di[dk]] " " dd[dk]
+			} else if (dt[dk] == "blocks") {
+				if (di[dk] in of && dd[dk] in of) need[dd[dk]] = need[dd[dk]] " " di[dk]
+			} else if (dt[dk] != "") {
+				edgeskip[dt[dk]]++
+			}
+		}
+
+		# Numbers in the order the tickets were created, so a tracker
+		# imported twice numbers the same way and the low numbers are the
+		# old work, as they would be in a tracker grown by hand.
+		for (x = 1; x <= nrec; x++) key[x] = cr[rec[x]] " " id[rec[x]]
+		for (x = 2; x <= nrec; x++) {
+			hold = rec[x]; hk = key[x]; y = x - 1
+			while (y >= 1 && key[y] > hk) { rec[y+1] = rec[y]; key[y+1] = key[y]; y-- }
+			rec[y+1] = hold; key[y+1] = hk
+		}
+		for (x = 1; x <= nrec; x++) { num[id[rec[x]]] = x; at[x] = rec[x] }
+
+		# A closed ticket lives in its container c/. A finished tree may
+		# not hold live work, so a closed parent with an open descendant is
+		# imported open — the tickets say there is work left in it, and
+		# that is the half of the contradiction worth believing.
+		for (x = 1; x <= nrec; x++) {
+			i2 = id[rec[x]]
+			closed[i2] = (st[rec[x]] == "closed") ? 1 : 0
+		}
+		changed = 1
+		while (changed) {
+			changed = 0
+			for (x = 1; x <= nrec; x++) {
+				i2 = id[rec[x]]
+				if (closed[i2] || !(i2 in parent)) continue
+				p = parent[i2]
+				while (p != "") {
+					if (closed[p]) { closed[p] = 0; reopened++; changed = 1 }
+					p = (p in parent) ? parent[p] : ""
+				}
+			}
+		}
+
+		# Paths, parents before children.
+		done = 0
+		while (done < nrec) {
+			moved = 0
+			for (x = 1; x <= nrec; x++) {
+				i2 = id[rec[x]]
+				if (i2 in path) continue
+				if (i2 in parent) {
+					p = parent[i2]
+					if (!(p in path)) continue
+					base = path[p]
+				} else base = root
+				path[i2] = base (closed[i2] ? "/c/" : "/") num[i2]
+				done++; moved++
+			}
+			if (!moved) break        # a parent cycle, which cannot happen
+		}
+
+		srand()
+		nonce_at = 1
+		while ((getline rl < randf) > 0) pool = pool rl
+		close(randf)
+
+		for (x = 1; x <= nrec; x++) {
+			i2 = id[rec[x]]
+			n2 = num[i2]
+			p2 = path[i2]
+			print p2 > dirs
+
+			# needs, renumbered. The old ids are gone from the line and
+			# kept in origin, so nothing here points at a name that no
+			# longer resolves.
+			nd = ""
+			cnt = split(need[i2], nn, " ")
+			for (q = 1; q <= cnt; q++)
+				if (nn[q] != "" && (nn[q] in num)) nd = nd (nd == "" ? "" : " ") num[nn[q]]
+
+			f = p2 "/info"
+			printf "==FILE\t%s\n", f > bundle
+			printf "claim:\n" > bundle
+			printf "needs:%s\n", (nd == "" ? "" : " " nd) > bundle
+			printf "title: %s\n", oneline(ti[rec[x]]) > bundle
+			printf "created: %s\n", cr[rec[x]] > bundle
+			printf "updated: %s\n", (up[rec[x]] == "" ? cr[rec[x]] : up[rec[x]]) > bundle
+			printf "origin: %s\n", i2 > bundle
+			printf "priority: %s\n", pr[rec[x]] > bundle
+			printf "kind: %s\n", ki[rec[x]] > bundle
+			printf "assignee: %s\n", as[rec[x]] > bundle
+			printf "handoff:\n" > bundle
+
+			# The body. 37 decided a body has no structure, so these are
+			# headings a person would have typed, not fields to parse.
+			body = clean(de[rec[x]])
+			if (ac[rec[x]] != "") body = body "\n\n## Acceptance criteria\n\n" clean(ac[rec[x]])
+			if (no[rec[x]] != "") body = body "\n\n## Notes\n\n" clean(no[rec[x]])
+			if (dg[rec[x]] != "") body = body "\n\n## Design\n\n" clean(dg[rec[x]])
+			# Labels are a set, and a set-valued field is deliberately
+			# unsolved. They go in the body rather than into a field that
+			# would have to pretend to be one.
+			if (la[rec[x]] != "") body = body "\n\n## Labels\n\n" clean(la[rec[x]])
+			if (body != "") printf "\n%s\n", body > bundle
+
+			# The registry, so nothing reissues a number this import used.
+			nonce = substr(pool, nonce_at, 8); nonce_at += 8
+			if (length(nonce) < 8) nonce = "import" n2
+			printf "%s %s\n", nonce, oneline(ti[rec[x]]) > (reg "/" n2)
+			close(reg "/" n2)
+
+			if (st[rec[x]] == "in_progress") inprog++
+			if (st[rec[x]] == "deferred") deferred++
+			if (closed[i2]) nclosed++; else nopen++
+		}
+		close(bundle); close(dirs)
+
+		printf "issues %d\n", nrec
+		printf "open %d\n", nopen
+		printf "closed %d\n", nclosed
+		printf "inprogress %d\n", inprog + 0
+		printf "deferred %d\n", deferred + 0
+		printf "reopened %d\n", reopened + 0
+		for (x in skipped) printf "skipped %s %d\n", x, skipped[x]
+		for (x in edgeskip) printf "edgeskip %s %d\n", x, edgeskip[x]
+	}' "$_mg_t/flat" > "$_mg_t/report" || { rm -rf "$_mg_t"; die 'the import failed'; }
+
+	# One mkdir for the whole tree, and one pass to lay the files down.
+	tr '\n' '\0' < "$_mg_t/dirs" | xargs -0 mkdir -p
+	awk '
+		/^==FILE\t/ { if (f != "") close(f); f = substr($0, 8); next }
+		f != "" { print > f }
+	' "$_mg_t/bundle"
+
+	# The schema this import needs. Appended to what init seeded rather than
+	# replacing it: the fields below are the ones these tickets carry, and a
+	# project that keeps the tracker will edit them like any other.
+	_mg_sf=$(schema_file "$_r")
+	cat >> "$_mg_sf" <<'SCHEMA'
+
+field: origin
+note: the id this ticket had in the tracker it was imported from
+
+field: priority
+match: [0-9]+
+note: as the tracker it came from recorded it, lower being more urgent
+
+field: kind
+note: bug, feature, task and the rest, as imported
+
+field: assignee
+note: whoever it was assigned to before the import, for the record
+SCHEMA
+
+	# --- what happened -----------------------------------------------------
+	awk '
+		$1 == "issues"     { n = $2 }
+		$1 == "open"       { o = $2 }
+		$1 == "closed"     { c = $2 }
+		$1 == "inprogress" { ip = $2 }
+		$1 == "deferred"   { df = $2 }
+		$1 == "reopened"   { rp = $2 }
+		$1 == "skipped"    { sk[$2] = $3 }
+		$1 == "edgeskip"   { es[$2] = $3 }
+		END {
+			printf "imported %d tickets: %d open, %d closed\n", n, o, c
+			if (ip > 0)
+				printf "  %d was in progress, imported unclaimed: a claim names a process, and that one is gone\n", ip
+			if (df > 0)
+				printf "  %d deferred, imported open: a defer here carries a trigger and the export has none\n", df
+			if (rp > 0)
+				printf "  %d closed parent(s) left open, because work under them is not finished\n", rp
+			for (x in sk)
+				printf "  %d %s record(s) skipped: they are documents, not tickets\n", sk[x], x
+			for (x in es)
+				printf "  %d %s edge(s) not carried\n", es[x], x
+			# \047 is the apostrophe: this program is inside single
+			# quotes, so it cannot contain one.
+			q = sprintf("%c", 39)
+			print "run " q "pidly check" q " to see what the tracker makes of it"
+		}' "$_mg_t/report"
+
+	rm -rf "$_mg_t"
+	return 0
+}
+
 # --- entry point -----------------------------------------------------------
 
 usage_text() {
@@ -3755,6 +4333,10 @@ usage: pidly <command> [args]
                  slash commands, and a permissions block for the read-only
                  commands
   man            the manual page, in roff, on stdout: pidly man > docs/pidly.1
+  migrate beads <dir> [--anyway]
+                 import a tracker from another tool into a fresh .pidly here.
+                 Refuses an export that is behind the tracker it came from,
+                 which is what .beads/*.jsonl usually is
   --version      the version of pidly this is
 
 environment:
@@ -3913,5 +4495,6 @@ check)   cmd_check "$@" ;;
 agents)  cmd_agents "$@" ;;
 claude)  cmd_claude "$@" ;;
 man)     cmd_man "$@" ;;
+migrate) cmd_migrate "$@" ;;
 *)       usage ;;
 esac

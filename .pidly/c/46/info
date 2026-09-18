@@ -2,7 +2,7 @@ claim:
 needs:
 title: A migrate command: import a tracker from beads and its like
 created: 2026-09-18T17:33:43Z
-updated: 2026-09-18T17:49:46Z
+updated: 2026-09-18T22:33:29Z
 effort: L
 area: cli
 handoff:
@@ -128,3 +128,82 @@ literal "Closed" 171 times of 278 and real prose the other 107; all 455
 interactions are field_change on status or priority, so there is no comment
 history to carry; and comment_count is 0 on every issue. The 10 memory
 records are ADR prose keyed by slug and are documents, not tickets.
+
+
+Done 2026-09-18, for beads. The other sources in the list are not started,
+and the ticket was right that they are guesses until someone has an export
+to check them against.
+
+Verified on ../idol, the corpus 38 measured: 332 issues in, 332 out, and
+every title, description, timestamp, acceptance criteria, note, design,
+label, priority, kind, assignee, open/closed location, renumbered dependency
+and parent-child nesting compared against the source. pidly check calls the
+result ok: 332 tickets — no cycle, no dangling need, no closed tree holding
+live work.
+
+The decisions the ticket left open, as made:
+
+- ids. Renumbered 1..N in created_at order, so a tracker imported twice
+  numbers the same way and the low numbers are the old work. The beads id is
+  kept in an origin: field, because commit messages and external links still
+  say idol-jay. needs: carries numbers only, so nothing points at a name that
+  no longer resolves.
+- in_progress. Unclaimed, and reported. A claim names a process and that
+  process is gone; a claim nobody can verify is the one thing this format
+  refuses to invent.
+- deferred. Open, and reported. A defer here carries a trigger and the export
+  has none, which is what 42 rejected.
+- priority, issue_type, assignee. Fields of the same name, issue_type as
+  kind. migrate appends their stanzas to the schema init seeded, which it can
+  do honestly because it refuses any tracker that already holds tickets — so
+  it is never adding fields to a schema someone else wrote.
+- labels. The body, under a heading. A set-valued field is 35 and
+  deliberately unsolved, and a field pretending to be one would be worse than
+  prose.
+- acceptance_criteria, notes, design. The body, under headings. 37 decided a
+  body has no structure, so these are headings a person would have typed
+  rather than fields anything parses.
+- memory records. Reported and skipped: ADR prose keyed by a slug is a
+  document, not a ticket.
+
+One case the ticket did not name. A closed parent with an open child cannot
+be stored — a finished tree may not hold live work — so the parent is
+imported open, because the child says there is work left in it, and it is
+reported rather than done quietly. It does not occur in the corpus; it is
+covered by a test.
+
+The staleness constraint from 38 is the shape of the command rather than a
+check bolted on. It refuses an export whose own export-state.json disagrees
+with the file, and refuses one where the interaction log names ids the export
+does not contain — 100 of them on this corpus, which is how a quarter of the
+tickets would have gone missing silently. --anyway imports anyway and still
+says it is behind. Reading Dolt directly was rejected: a dependency on a
+database engine is the thing pidly exists not to have.
+
+The part that was more work than the mapping: JSON. There is no jq here and
+there will not be, so json_flat is a scanner in awk — a regex splitting on
+braces or commas is wrong on the second description in the corpus. It was
+verified line for line against python -m json against all 342 records, and
+gives identical output under mawk, nawk and gawk.
+
+Two bugs in it are worth naming, because both passed casual reading:
+
+- 0x80 is not a number in POSIX awk. mawk reads it as 0 concatenated with an
+  unset variable named x80, so every comparison against one compared against
+  the string 0 and every escaped <, > and & in the corpus came out as 000.
+  Decimal throughout now. tests/migrate.sh pins it, and was verified to fail
+  by putting 0x80 back.
+- Unescaping with a pile of gsubs decodes twice. A description holding the
+  two characters backslash and n is encoded as three, and any order of gsubs
+  turns it into a line break. It is one left-to-right pass now. Two of the
+  332 tickets are exactly that case, and the cross-check against python is
+  what found both — reading the output would not have.
+
+tests/migrate.sh is 59 assertions on a hand-written corpus, not on ../idol,
+which is not in this repository and will not be. It asserts the corpus still
+contains the escapes it exists to exercise, because an escape that got
+unescaped on its way into the file would make those tests pass without
+testing anything.
+
+Not done: GitHub issues, and anything else emitting JSONL or CSV. The command
+takes the source as an argument so adding one does not change its shape.

@@ -76,6 +76,10 @@ gives the equivalent of every command below.
                  slash commands, and a permissions block for the read-only
                  commands
   man            the manual page, in roff, on stdout: pidly man > docs/pidly.1
+  migrate beads <dir> [--anyway]
+                 import a tracker from another tool into a fresh .pidly here.
+                 Refuses an export that is behind the tracker it came from,
+                 which is what .beads/*.jsonl usually is
   --version      the version of pidly this is
 .fi
 .SH ENVIRONMENT
