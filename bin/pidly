@@ -328,21 +328,42 @@ set_line() {
 # begins: the body ends at EOF, and the field boundary sits ahead of the body
 # so body content can never reach it.
 
+# The key travels through the environment, not awk -v, because awk -v
+# processes escape sequences. And the value is cut with substr rather than
+# sub, because sub's first argument is a regex built from the key while the
+# index() above it is literal — so the two disagree whenever the key holds a
+# metacharacter. A hand-written field "a+b: the value" is found by index and
+# then not matched by /^a+b: */, and get_field returns the whole line
+# including the key. Measured on the previous build.
 get_field() {
-	awk -v k="$2" '
+	PIDLY_KEY=$2; export PIDLY_KEY
+	awk '
+		BEGIN { k = ENVIRON["PIDLY_KEY"] }
 		NR <= 3 { next }
 		$0 == "" { exit }
-		index($0, k ":") == 1 { sub("^" k ": *", ""); print; exit }
+		index($0, k ":") == 1 {
+			v = substr($0, length(k) + 2)
+			sub(/^ +/, "", v)
+			print v; exit
+		}
 	' "$1"
+	unset PIDLY_KEY
 }
 
 # Replace a field if present, otherwise append it to the field block. An
 # empty value writes a bare key — "handoff:", not "handoff: " — so a cleared
 # field is byte-identical to one new has never filled in.
 # Callers hold the lock.
+# Key and value both travel through the environment. awk -v processes escape
+# sequences, so a value holding \t arrived as a tab and one holding \\ arrived
+# as a single backslash — silently, in the file, with check content because
+# the line was still a legal field. A tracker whose tickets quote shell and
+# awk on nearly every line is the last place that should happen.
 set_field() {
-	_sf_f=$1 _sf_k=$2 _sf_v=$3 _sf_t="$1.$$"
-	awk -v k="$_sf_k" -v v="$_sf_v" '
+	_sf_f=$1 _sf_t="$1.$$"
+	PIDLY_KEY=$2 PIDLY_VAL=$3; export PIDLY_KEY PIDLY_VAL
+	awk '
+		BEGIN { k = ENVIRON["PIDLY_KEY"]; v = ENVIRON["PIDLY_VAL"] }
 		function slot() { return v == "" ? k ":" : k ": " v }
 		NR <= 3 { print; next }
 		!past && $0 == "" {
@@ -353,6 +374,7 @@ set_field() {
 		{ print }
 		END { if (!past && !hit) print slot() }
 	' "$_sf_f" > "$_sf_t"
+	unset PIDLY_KEY PIDLY_VAL
 	mv "$_sf_t" "$_sf_f"
 }
 
@@ -1985,7 +2007,14 @@ cmd_agents() {
 
 	if [ -f "$_f" ] && grep -qF "$AGENTS_BEGIN" "$_f"; then
 		_t="$_f.pidly.$$"
-		awk -v b="$AGENTS_BEGIN" -v e="$AGENTS_END" -v blk="$(agents_block)" '
+		# The block through the environment, not awk -v: it is generated
+		# text, and the day someone puts a backslash in it awk -v would
+		# rewrite it on the way out. check compares the file against what
+		# would be generated now, so both sides would agree and the
+		# document would simply be wrong.
+		PIDLY_BLK=$(agents_block); export PIDLY_BLK
+		awk -v b="$AGENTS_BEGIN" -v e="$AGENTS_END" '
+			BEGIN { blk = ENVIRON["PIDLY_BLK"] }
 			index($0, b) { print blk; skip = 1; next }
 			index($0, e) { skip = 0; next }
 			!skip        { print }

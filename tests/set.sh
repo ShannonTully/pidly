@@ -149,5 +149,27 @@ has "and says who writes it" "$out" "claim, release and reap"
 # value whose stanza the schema no longer declares, which check reports and
 # should. The needs and title writes are verified line by line instead.
 
+echo "values reach the file unchanged"
+# awk -v processes escape sequences, so these used to be rewritten silently:
+# \t arrived as a tab, \\ as one backslash, and the line was still a legal
+# field so check had nothing to say about it.
+$PIDLY new -f effort=M "escapes" </dev/null >/dev/null
+en=$($PIDLY list -a | awk 'END{print $1}')
+for v in 'a \t and \\ here' 'ends with a backslash \' 'a [0-9]{4} and .* and $0' 'tabs	and  spaces'; do
+	$PIDLY set "$en" area "$v" >/dev/null 2>&1 ||
+		{ printf '\nfield: area\n' >> .pidly/schema; $PIDLY fields >/dev/null
+		  $PIDLY set "$en" area "$v" >/dev/null; }
+	check "a value survives: $v" "$($PIDLY show -f area "$en")" "$v"
+done
+check "and check is content with all of it" \
+	"$($PIDLY check >/dev/null 2>&1 && echo clean)" "clean"
+
+# index() finds the line literally; sub() used to cut it with a regex built
+# from the key, and the two disagree when the key holds a metacharacter.
+f=$($PIDLY show -p "$en")/info
+awk 'NR==4 { print "a+b: the value" } { print }' "$f" > "$f.t" && mv "$f.t" "$f"
+check "a field name holding a metacharacter is cut literally" \
+	"$($PIDLY show -f 'a+b' "$en")" "the value"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
