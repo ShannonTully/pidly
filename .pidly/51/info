@@ -1,0 +1,42 @@
+claim:
+needs:
+title: set_field corrupts a value containing a backslash
+created: 2026-09-18T18:36:27Z
+updated: 2026-09-18T18:36:27Z
+effort: S
+area: cli
+handoff:
+
+set_field passes the value through awk -v, which processes escape sequences.
+So a project field holding a backslash is silently changed on the way in:
+
+  pidly set 2 note 'a \t and \\ here'
+  pidly show -f note 2
+  a <TAB> and \ here
+
+Measured 2026-09-18. The value is corrupted in the file, not just in the
+display, and nothing reports it: the line is still a legal field, check has
+nothing to say, and the loss is only visible to whoever knows what they typed.
+
+48 hit the same bug in set_line, which writes the format's own lines, and
+fixed it there by passing the line through the environment instead:
+
+  PIDLY_LINE=$3; export PIDLY_LINE
+  awk -v n="$_sl_n" 'NR==n{print ENVIRON["PIDLY_LINE"]; next}{print}'
+
+set_field needs the same treatment, and it is slightly more work because the
+awk builds the slot itself — it decides between "k:" and "k: v" and has to
+find the line to replace — so the value has to reach that logic through
+ENVIRON rather than being interpolated into it.
+
+Worth checking the same pattern everywhere else while in there: any awk -v
+carrying a value that came from a user rather than from pidly. append_body
+and set_body take text through stdin and a here-document, so they are likely
+fine, but likely is not checked.
+
+Plausible in practice rather than theoretical: this tracker's own tickets
+quote shell and awk constantly, and a field is one line of free text.
+
+Done when a value containing \t, \\ and a trailing backslash survives a
+write and a read unchanged, every other awk -v carrying user text is
+audited, and the suite covers it.

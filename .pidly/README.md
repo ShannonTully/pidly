@@ -411,6 +411,27 @@ pidly release -m "..." 7      # the one that matters: it writes handoff
 pidly fields                  # give every ticket a slot for every declared field
 ```
 
+`title` and `needs` are not schema fields — the schema declares what a
+project wants, and lines 1 to 3 are what a ticket *is* — but retitling and
+re-wiring a dependency are ordinary work, so `set` writes them too:
+
+```sh
+pidly set 7 title "What it turned out to be about"
+pidly set 7 needs "3 8"       # replace the line
+pidly needs 7                 # what it needs, one a line
+pidly needs -a 24 7           # add one, without retyping the others
+pidly needs -d 3 7            # drop one
+```
+
+By hand these are `sed -i '3s/.*/title: .../'` and `sed -i '2s/.*/needs: 24/'`,
+and they still are. What the command adds is the one thing `sed` cannot do:
+**it refuses a dependency on a ticket that does not exist**, and on the ticket
+itself. A `needs` naming a number nothing resolves is otherwise a `check`
+finding that surfaces in CI, long after whoever wrote it has gone.
+
+`claim` is line 1 and `set` refuses it: it is written by `claim`, `release`
+and `reap`, which know what it means.
+
 `fields` is the migration for a stanza added to the schema after tickets
 already exist. It **adds keys and nothing else**: it never drops a field the
 schema stopped declaring, because that is data; it never moves a line that is

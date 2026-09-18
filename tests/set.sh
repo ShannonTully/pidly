@@ -103,5 +103,51 @@ $PIDLY fields >/dev/null
 check "a dropped schema row does not delete the value" \
 	"$(sed -n 's/^area: //p' .pidly/1/info)" "docs"
 
+echo "the format's own lines"
+$PIDLY new -f effort=M "three" </dev/null >/dev/null   # 3
+$PIDLY set 1 title "a better title" >/dev/null
+check "set writes the title on line 3" \
+	"$(sed -n 3p .pidly/1/info)" "title: a better title"
+out=$($PIDLY set 1 title 2>&1) && rc=0 || rc=$?
+check "title cannot be cleared" "$rc" "1"
+
+# awk -v processes escapes; the value has to reach the file unchanged.
+$PIDLY set 1 title 'a \t and a backslash \\ kept' >/dev/null
+check "a title keeps its backslashes" \
+	"$(sed -n 3p .pidly/1/info)" 'title: a \t and a backslash \\ kept'
+$PIDLY set 1 title "one" >/dev/null
+
+$PIDLY set 1 needs "2 3" >/dev/null
+check "set writes needs on line 2" "$(sed -n 2p .pidly/1/info)" "needs: 2 3"
+check "needs lists one a line" "$($PIDLY needs 1 | tr '\n' ' ')" "2 3 "
+out=$($PIDLY set 1 needs "99" 2>&1) && rc=0 || rc=$?
+check "a dependency on a ticket that does not exist is refused" "$rc" "1"
+has "and says which" "$out" "no ticket 99"
+check "and the line is untouched" "$(sed -n 2p .pidly/1/info)" "needs: 2 3"
+out=$($PIDLY set 1 needs "1" 2>&1) && rc=0 || rc=$?
+check "a ticket cannot need itself" "$rc" "1"
+
+# Ticket 2 is closed by an earlier test, so it is located, not assumed —
+# and a closed ticket's dependencies are still editable.
+$PIDLY needs -a 3 2 >/dev/null
+check "-a adds one, even on a closed ticket" \
+	"$(sed -n 2p "$($PIDLY show -p 2)/info")" "needs: 3"
+$PIDLY set 2 needs "" >/dev/null
+check "needs clears to a bare key" \
+	"$(sed -n 2p "$($PIDLY show -p 2)/info")" "needs:"
+out=$($PIDLY needs -a 2 1 2>&1) && rc=0 || rc=$?
+check "adding one already there is refused" "$rc" "1"
+out=$($PIDLY needs -d 99 1 2>&1) && rc=0 || rc=$?
+check "dropping one not there is refused" "$rc" "1"
+$PIDLY needs -d 2 1 >/dev/null
+check "-d drops one and keeps the rest" "$(sed -n 2p .pidly/1/info)" "needs: 3"
+
+out=$($PIDLY set 1 claim "x" 2>&1) && rc=0 || rc=$?
+check "claim is not set by hand" "$rc" "1"
+has "and says who writes it" "$out" "claim, release and reap"
+# No check-is-clean assertion here: the test above deliberately leaves a
+# value whose stanza the schema no longer declares, which check reports and
+# should. The needs and title writes are verified line by line instead.
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

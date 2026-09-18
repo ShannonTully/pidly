@@ -1,0 +1,90 @@
+claim:751.130120276@31917916.u1000
+needs:
+title: Writing the format's own lines: title and needs
+created: 2026-09-18T17:55:05Z
+updated: 2026-09-18T18:36:27Z
+effort: M
+area: cli
+handoff:
+
+pidly set writes project fields and refuses the format's:
+
+  pidly set 1 title "a new title"   -> pidly: no field 'title' in the schema
+  pidly set 3 needs ""              -> pidly: no field 'needs' in the schema
+
+Which is correct as a rule — the schema declares project fields and lines 1,
+2 and 3 belong to the format — but it leaves two ordinary operations with no
+command at all:
+
+  retitle                   sed -i '3s/.*/title: .../'
+  add or drop a dependency  sed -i '2s/.*/needs: 24/'
+
+Both are real ongoing work rather than corrections at creation time. new -n
+wires dependencies only when the ticket is made, and a ticket that turns out
+to be blocked later is the normal case, not the exception.
+
+The danger is specific: a hand sed on line 2 or 3 has nothing checking what
+it writes. A needs: naming a number that does not exist is a check finding
+the author will not see until CI, and a botched line 3 stops being a title
+line at all. A command validates before writing; sed does not.
+
+Decide the surface: whether set learns the format's lines as a special case,
+whether a separate command owns them, or whether needs gets its own verb
+because adding and dropping one dependency is not the same operation as
+replacing the line. Adding one dependency to a ticket that has three should
+not require the caller to retype the other two.
+
+Done when retitling and changing dependencies need no sed, a dependency on a
+number that does not exist is refused at write time rather than found by
+check, and the reference still documents the hand idiom beside the command.
+
+
+Done 2026-09-18. set learns the format's lines, and needs gets a verb.
+
+  pidly set 7 title "..."     line 3
+  pidly set 7 needs "3 8"     line 2, replacing it
+  pidly needs 7               what it needs, one a line
+  pidly needs -a 24 7         add one, keeping the rest
+  pidly needs -d 3 7          drop one
+
+The rule the ticket worried about is intact: the schema declares what a
+project wants, and lines 1 to 3 are what a ticket is. set does not pretend
+they are schema fields — they are a case ahead of the schema lookup, with
+their own validation — and the error for an undeclared name is unchanged.
+
+What the command buys over sed, which is the whole argument for it: a needs
+naming a ticket that does not exist is refused at write time, and so is a
+ticket needing itself. Both were previously check findings that surface in CI,
+after whoever wrote them has gone. The line is left untouched when the write
+is refused.
+
+claim is line 1 and set refuses it: it is written by claim, release and reap,
+which know what it means. A caller who wants to clear one has reap.
+
+needs -a exists because adding one dependency to a ticket that has three
+should not mean retyping the other two — that retype is 50's hazard in
+miniature. Dropping one that is not there is an error rather than a silent
+no-op: the caller believed in a dependency that does not exist, and saying
+nothing leaves them believing it.
+
+set_line writes through the environment rather than awk -v, because awk -v
+processes escape sequences and a title holding \t or \\ would arrive changed.
+Tested.
+
+That is not true of the existing set_field, which does use awk -v: a project
+field value containing a backslash is silently corrupted today. Different
+code path, so it is 51 rather than a quiet fix here.
+
+
+One correction to the paragraph above, from finishing the work: there was
+already a set_line, taking a whole line rather than a key and a value, and
+the first version of this change defined a second one with the same name. The
+later definition won, so claim, release and reap started passing three
+arguments to a function expecting four and died under set -u. portable.sh
+caught it — it is the suite that runs every command — and the fix is one
+set_line, not two: it takes the whole line as it always did, and the callers
+here build "title: ..." and "needs: ..." themselves.
+
+Making that one escape-safe fixed the claim path too, which had the same
+latent bug. It never showed because a claim is digits, dots, an @ and a
+hostname, none of which awk -v rewrites.

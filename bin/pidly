@@ -309,9 +309,17 @@ unlock() { rm -f "$1/.lock"; }
 
 # Replace one line of a file, via a temp file and a rename. Callers hold the
 # lock; the rename keeps a crash mid-write from leaving a truncated info.
+#
+# The line goes through the environment, not awk -v, because awk -v processes
+# escape sequences: a title holding \t or \\ would arrive changed. Claim lines
+# never contained either, which is why this went unnoticed until title became
+# something set could write.
 set_line() {
-	_sl_f=$1 _sl_n=$2 _sl_v=$3 _sl_t="$1.$$"
-	awk -v n="$_sl_n" -v v="$_sl_v" 'NR==n{print v; next}{print}' "$_sl_f" > "$_sl_t"
+	_sl_f=$1 _sl_n=$2 _sl_t="$1.$$"
+	PIDLY_LINE=$3; export PIDLY_LINE
+	awk -v n="$_sl_n" 'NR==n{print ENVIRON["PIDLY_LINE"]; next}{print}' \
+		"$_sl_f" > "$_sl_t"
+	unset PIDLY_LINE
 	mv "$_sl_t" "$_sl_f"
 }
 
@@ -349,6 +357,28 @@ set_field() {
 }
 
 get_body() { awk 'b { print } !b && $0 == "" { b = 1 }' "$1"; }
+
+# needs: as a validated, de-duplicated list. Every entry must be a number and
+# must resolve to a ticket, which is what stops a dependency on a number that
+# does not exist from becoming a check finding nobody sees until CI. A ticket
+# may not need itself: that is a cycle check would report and nothing could
+# ever start.
+needs_list() {
+	_nl_r=$1 _nl_self=$2 _nl_out=""
+	for _nl_d in $3; do
+		case $_nl_d in
+		''|*[!0-9]*) die "needs takes ticket numbers, not '$_nl_d'" ;;
+		esac
+		[ "$_nl_d" != "$_nl_self" ] || die "$_nl_self cannot need itself"
+		ticket_dir "$_nl_r" "$_nl_d" >/dev/null
+		case " $_nl_out " in *" $_nl_d "*) continue ;; esac
+		_nl_out="$_nl_out $_nl_d"
+	done
+	printf '%s\n' "${_nl_out# }"
+}
+
+# Line 2's value, with the key stripped. A bare "needs:" yields nothing.
+needs_of() { sed -n '2s/^needs: *//p' "$1"; }
 
 # Everything wrong with one info file as a file: the three structural lines,
 # the field block, and required fields. One finding per line, each prefixed
@@ -870,6 +900,37 @@ cmd_set() {
 "*) die 'a field value is one line' ;;
 	esac
 	_r=$(root)
+
+	# The format's own lines are not schema fields and never will be — the
+	# schema declares what a project wants, and these three are what a ticket
+	# is. But retitling and re-wiring a dependency are ordinary work, and
+	# leaving them to a sed on line 2 or 3 left the one thing a command can do
+	# that sed cannot: refuse a dependency on a ticket that does not exist.
+	case $_sk in
+	title)
+		[ -n "$_sv" ] || die 'title is what the ticket is: it cannot be cleared'
+		_sd=$(ticket_dir "$_r" "$_sn")
+		lock "$_sd" 100 || die "$_sn is being modified by another process"
+		set_line "$_sd/info" 3 "title: $_sv"
+		mark_updated "$_sd/info"
+		unlock "$_sd"
+		printf '%s title set\n' "$_sn"
+		return 0 ;;
+	needs)
+		_sd=$(ticket_dir "$_r" "$_sn")
+		_sv=$(needs_list "$_r" "$_sn" "$_sv")
+		lock "$_sd" 100 || die "$_sn is being modified by another process"
+		if [ -n "$_sv" ]; then _sline="needs: $_sv"; else _sline="needs:"; fi
+		set_line "$_sd/info" 2 "$_sline"
+		mark_updated "$_sd/info"
+		unlock "$_sd"
+		if [ -n "$_sv" ]; then printf '%s needs %s\n' "$_sn" "$_sv"
+		else printf '%s needs nothing\n' "$_sn"; fi
+		return 0 ;;
+	claim)
+		die 'claim is written by claim, release and reap, never set by hand' ;;
+	esac
+
 	settable_fields "$_r" | grep -qx "$_sk" || {
 		case $_sk in
 		created|updated) die "$_sk is pidly's own stamp, not a field to set" ;;
@@ -890,6 +951,72 @@ cmd_set() {
 	unlock "$_sd"
 	if [ -n "$_sv" ]; then printf '%s %s set\n' "$_sn" "$_sk"
 	else printf '%s %s cleared\n' "$_sn" "$_sk"; fi
+	return 0
+}
+
+# Adding one dependency to a ticket that has three should not mean retyping
+# the other two. That retype is the reconstruct-the-whole-thing hazard 50 is
+# about, in miniature, and it is why this is a verb rather than only a value
+# set can replace.
+#
+# With no flag it prints what the ticket needs, one number a line, because
+# that is the form a shell loop wants. show -f cannot answer this: needs is
+# line 2, and the field block starts after line 3.
+cmd_needs() {
+	_nd_add="" _nd_drop=""
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-a|--add)
+			[ $# -ge 2 ] || die 'pidly needs -a wants a number'
+			_nd_add="$_nd_add $2"; shift 2 ;;
+		-d|--drop)
+			[ $# -ge 2 ] || die 'pidly needs -d wants a number'
+			_nd_drop="$_nd_drop $2"; shift 2 ;;
+		-*) die "unknown option $1" ;;
+		*)  break ;;
+		esac
+	done
+	[ $# -eq 1 ] || die 'usage: pidly needs [-a <n>] [-d <n>] <number>'
+	_r=$(root); _nd_n=$1
+	_nd_d=$(ticket_dir "$_r" "$_nd_n"); _nd_f="$_nd_d/info"
+	_nd_cur=$(needs_of "$_nd_f")
+
+	if [ -z "$_nd_add$_nd_drop" ]; then
+		for _nd_x in $_nd_cur; do printf '%s\n' "$_nd_x"; done
+		return 0
+	fi
+
+	_nd_new=$_nd_cur
+	for _nd_x in $_nd_add; do
+		case " $_nd_new " in
+		*" $_nd_x "*) die "$_nd_n already needs $_nd_x" ;;
+		esac
+		_nd_new="$_nd_new $_nd_x"
+	done
+	# Dropping something that is not there is a mistake worth naming: the
+	# caller believed in a dependency that does not exist, and a silent
+	# no-op leaves them believing it.
+	for _nd_x in $_nd_drop; do
+		case " $_nd_new " in
+		*" $_nd_x "*) ;;
+		*) die "$_nd_n does not need $_nd_x" ;;
+		esac
+		_nd_keep=""
+		for _nd_y in $_nd_new; do
+			[ "$_nd_y" = "$_nd_x" ] || _nd_keep="$_nd_keep $_nd_y"
+		done
+		_nd_new=${_nd_keep# }
+	done
+
+	_nd_new=$(needs_list "$_r" "$_nd_n" "$_nd_new")
+	lock "$_nd_d" 100 || die "$_nd_n is being modified by another process"
+	if [ -n "$_nd_new" ]; then _nd_line="needs: $_nd_new"
+	else _nd_line="needs:"; fi
+	set_line "$_nd_f" 2 "$_nd_line"
+	mark_updated "$_nd_f"
+	unlock "$_nd_d"
+	if [ -n "$_nd_new" ]; then printf '%s needs %s\n' "$_nd_n" "$_nd_new"
+	else printf '%s needs nothing\n' "$_nd_n"; fi
 	return 0
 }
 
@@ -1458,6 +1585,27 @@ pidly set 7 effort            # clear it, unless the schema requires a value
 pidly release -m "..." 7      # the one that matters: it writes handoff
 pidly fields                  # give every ticket a slot for every declared field
 ```
+
+`title` and `needs` are not schema fields — the schema declares what a
+project wants, and lines 1 to 3 are what a ticket *is* — but retitling and
+re-wiring a dependency are ordinary work, so `set` writes them too:
+
+```sh
+pidly set 7 title "What it turned out to be about"
+pidly set 7 needs "3 8"       # replace the line
+pidly needs 7                 # what it needs, one a line
+pidly needs -a 24 7           # add one, without retyping the others
+pidly needs -d 3 7            # drop one
+```
+
+By hand these are `sed -i '3s/.*/title: .../'` and `sed -i '2s/.*/needs: 24/'`,
+and they still are. What the command adds is the one thing `sed` cannot do:
+**it refuses a dependency on a ticket that does not exist**, and on the ticket
+itself. A `needs` naming a number nothing resolves is otherwise a `check`
+finding that surfaces in CI, long after whoever wrote it has gone.
+
+`claim` is line 1 and `set` refuses it: it is written by `claim`, `release`
+and `reap`, which know what it means.
 
 `fields` is the migration for a stanza added to the schema after tickets
 already exist. It **adds keys and nothing else**: it never drops a field the
@@ -3078,7 +3226,12 @@ usage: pidly <command> [args]
                  open it in $EDITOR; -b replaces the body from stdin, -a
                  appends to it
   set <n> <field> [value]
-                 write a project field; with no value, clear it
+                 write a project field; with no value, clear it. Also title
+                 and needs, which are the format's lines rather than the
+                 schema's: a needs on a ticket that does not exist is refused
+  needs [-a <n>] [-d <n>] <number>
+                 what it needs, one a line; -a adds one and -d drops one,
+                 without retyping the others
   fields         give every ticket a slot for every field the schema declares,
                  adding keys only — never removing, reordering or restamping
   close <n>      finish it: move it into its container's c/
@@ -3131,6 +3284,7 @@ list)    cmd_list "$@" ;;
 field)   cmd_field "$@" ;;
 show)    cmd_show "$@" ;;
 set)     cmd_set "$@" ;;
+needs)   cmd_needs "$@" ;;
 fields)  cmd_fields "$@" ;;
 tree)    cmd_tree "$@" ;;
 check)   cmd_check "$@" ;;
