@@ -4,7 +4,7 @@ title: Labels, or any set-valued field
 effort: M
 area: format
 created: 2026-09-17T06:47:32Z
-updated: 2026-09-17T20:36:19Z
+updated: 2026-09-18T17:49:46Z
 handoff:
 defer: wanting to filter across a dimension that is not already a field
 
@@ -22,3 +22,10 @@ Until then, adding a field is cheaper and reads better.
 pattern, a comma-separated set has a grammar that check could enforce
 rather than a convention it cannot see. That makes the bad option less bad,
 not good.
+
+
+Evidence from 38, 2026-09-18. ../idol used beads for sixteen months and its
+labels amount to one distinct value — feedback-2026-07-22, a dated batch
+marker on 33 issues from a single afternoon's triage. No taxonomy ever
+formed, and nothing was ever filtered across one. The trigger stands and has
+not fired. Keep deferred.

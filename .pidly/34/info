@@ -4,7 +4,7 @@ title: Priority as a header line
 effort: M
 area: format
 created: 2026-09-17T06:47:32Z
-updated: 2026-09-17T20:37:18Z
+updated: 2026-09-18T17:49:46Z
 handoff:
 defer: picking among unblocked tickets needing a sort that reads every candidate's fields
 
@@ -26,3 +26,11 @@ that every structural line is a cost every ticket carries forever.
 27 makes the counter-argument cheaper to test: one awk pass reads a field
 across every ticket in 0.44s over 2000 of them, which is the measurement
 this trigger asks for.
+
+
+Evidence from 38, 2026-09-18. The trigger has not fired on the mature
+project. Across ../idol's 332 beads issues, priority is set on 331 and 218
+sit at the default of 2; in 455 logged field changes it was edited exactly
+once, from 2 to 1. A field nobody re-ranks is not a sort key, and a fourth
+header line would be carried forever by every ticket to serve one edit in
+sixteen months. Keep deferred.

@@ -2,7 +2,7 @@ claim:
 needs:
 title: A migrate command: import a tracker from beads and its like
 created: 2026-09-18T17:33:43Z
-updated: 2026-09-18T17:33:43Z
+updated: 2026-09-18T17:49:46Z
 effort: L
 area: cli
 handoff:
@@ -96,3 +96,35 @@ Done when ../idol's 332 beads issues import into a fresh tracker with
 dependencies and parentage intact, check passes on the result, closed
 tickets are under c/, the old ids are recoverable, and the command reports
 every field it could not place rather than discarding it quietly.
+
+
+Constraint from 38, 2026-09-18, and it changes the shape of this command.
+
+.beads/*.jsonl is an export, not the tracker. In ../idol it was last written
+2026-08-02 and the tracker kept moving: interactions.jsonl logs 144 changes
+after that date and names 100 issue ids that issues.jsonl does not contain,
+every one of them created after the export. The real tracker is the embedded
+Dolt database; the files are a snapshot someone has to remember to refresh,
+and this one is six weeks behind on the only corpus available.
+
+So reading issues.jsonl and reporting success would silently drop a quarter
+of idol's tickets. A migrate command has to either refuse a stale export or
+make the staleness impossible to miss:
+
+- export-state.json carries the export timestamp and issue count. Compare
+  both against the file and against interactions.jsonl's latest entry, and
+  say plainly how far behind the snapshot is.
+- Ids referenced by the log but absent from the export are countable without
+  Dolt, and are the sharpest signal available: 100 here.
+- Requiring the user to run bd export first is the honest default. Reading
+  Dolt directly means a dependency on a database engine, which is the thing
+  pidly exists not to have.
+
+Also from 38, for the mapping in the body above: only three edge types are
+ever used (parent-child, blocks, blocked-by) and blocks/blocked-by are one
+relation from either end; no child ever has two parents, so the directory
+nesting is safe; nesting never exceeds two levels; close_reason is the
+literal "Closed" 171 times of 278 and real prose the other 107; all 455
+interactions are field_change on status or priority, so there is no comment
+history to carry; and comment_count is 0 on every issue. The 10 memory
+records are ADR prose keyed by slug and are documents, not tickets.
