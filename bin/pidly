@@ -1151,6 +1151,81 @@ cmd_close() {
 	return 0
 }
 
+# Re-parenting is a move, and mv already does it correctly for the clean case:
+# needs: holds numbers and the registry keys on numbers, so dependencies and
+# identity survive; only the hierarchy is positional. The verb exists for the
+# one case mv gets quietly wrong.
+#
+# Every other hand idiom in the tracker fails loudly — a bad field fails
+# check, a botched line 3 stops parsing. Moving a ticket across a c/ boundary
+# fails silently, and in the direction that loses work: drop a closed parent
+# back into the open tree and everything under it is open again, with check
+# content and nothing recording that it happened. So the guard is the value,
+# and the rule is that a reparent never changes whether a ticket is closed.
+cmd_reparent() {
+	_rp_root=no
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-r|--root) _rp_root=yes; shift ;;
+		-*) die "unknown option $1" ;;
+		*)  break ;;
+		esac
+	done
+	if [ "$_rp_root" = yes ]; then
+		[ $# -eq 1 ] || die 'usage: pidly reparent -r <number>'
+	else
+		[ $# -eq 2 ] || die 'usage: pidly reparent <number> <new parent>, or -r for the top'
+	fi
+	_r=$(root); _rp_n=$1
+	_rp_d=$(ticket_dir "$_r" "$_rp_n")
+
+	# An open ticket inside a closed ancestor is the broken state check
+	# reports, and reopen is its repair. Moving it would paper over it.
+	if ! is_closed "$_rp_d" && in_closed "$_r" "$_rp_d"; then
+		die "$_rp_n is open inside a closed ancestor: 'pidly reopen $_rp_n' first"
+	fi
+
+	if [ "$_rp_root" = yes ]; then
+		_rp_base=$_r _rp_what=the\ top
+	else
+		_rp_p=$2
+		[ "$_rp_p" != "$_rp_n" ] || die "$_rp_n cannot be its own parent"
+		_rp_pd=$(ticket_dir "$_r" "$_rp_p")
+		# A parent inside the ticket's own subtree would move the ticket
+		# into itself: mv refuses it, but only after the caller has
+		# already believed it would work.
+		case "$_rp_pd/" in
+		"$_rp_d"/*) die "$_rp_p is inside $_rp_n: that would move it into itself" ;;
+		esac
+		# The rule: a reparent never changes open or closed. A closed
+		# destination would close the ticket by arrival, which is the
+		# silent failure this command exists to refuse.
+		if in_closed "$_r" "$_rp_pd"; then
+			die "$_rp_p is closed; moving $_rp_n there would close it too — reopen $_rp_p first, or close $_rp_n deliberately"
+		fi
+		_rp_base=$_rp_pd _rp_what="$_rp_p"
+	fi
+
+	# The ticket keeps the state it had: a closed one lands in the new
+	# parent's c/, an open one directly under it.
+	if is_closed "$_rp_d"; then _rp_dest="$_rp_base/c"; else _rp_dest=$_rp_base; fi
+	[ "$_rp_dest" != "$(dirname "$_rp_d")" ] ||
+		die "$_rp_n is already under $_rp_what"
+
+	mkdir -p "$_rp_dest"
+	mv "$_rp_d" "$_rp_dest/" ||
+		die "$_rp_n could not be moved to $_rp_dest"
+	# An emptied c/ is tidied for the same reason reopen tidies one: rmdir
+	# refuses a directory that still holds work, so it cannot lose anything.
+	rmdir "$(dirname "$_rp_d")" 2>/dev/null || true
+	if is_closed "$_rp_dest/$_rp_n"; then
+		printf '%s moved under %s, still closed\n' "$_rp_n" "$_rp_what"
+	else
+		printf '%s moved under %s\n' "$_rp_n" "$_rp_what"
+	fi
+	return 0
+}
+
 cmd_reopen() {
 	[ $# -eq 1 ] || die 'usage: pidly reopen <number>'
 	_r=$(root)
@@ -1686,6 +1761,33 @@ and does not reopen tickets that `needs` it.
 Reopen also takes a ticket that is *already open* but sits inside a closed
 ancestor — a state a hand-run `mv` can leave behind, and one `check` reports.
 The cascade is its repair.
+
+## Re-parenting
+
+Moving a ticket under a different parent is a move, and by hand it is one:
+
+```sh
+mv .pidly/1/17 .pidly/6/17        # and it works
+pidly reparent 17 6               # what it is for
+pidly reparent -r 17              # out to the top
+```
+
+`needs` holds numbers and the registry keys on numbers, so dependencies and
+identity survive a move untouched; only the hierarchy is positional. The
+command exists for the one case `mv` gets **quietly** wrong.
+
+Every other thing you can do by hand fails loudly — a bad field fails `check`,
+a botched line 3 stops parsing. Moving a ticket across a `c/` boundary fails
+silently, and in the direction that loses work: drop a closed parent back into
+the open tree and everything under it is open again, with `check` content and
+nothing recording that it happened.
+
+So the rule is that **a reparent never changes whether a ticket is closed**. A
+closed ticket lands in the new parent's `c/` and stays closed; an open one
+lands directly under it. A closed destination is refused, and so is a parent
+inside the ticket's own subtree, and so is an open ticket stranded inside a
+closed ancestor — that last one is `check`'s finding and `reopen`'s repair,
+and moving it would only hide it.
 
 ## Rules that will bite you
 
@@ -3236,6 +3338,10 @@ usage: pidly <command> [args]
                  adding keys only — never removing, reordering or restamping
   close <n>      finish it: move it into its container's c/
   reopen <n>     move it back, reopening any closed ancestors
+  reparent [-r] <n> <parent>
+                 move a ticket under another one, or -r to the top. Never
+                 changes whether it is closed, and refuses a destination that
+                 would
   list [-a] [--stale 7d]
                  takeable work — unclaimed, unblocked and not deferred; -a
                  shows every open ticket with its state; --stale shows open
@@ -3280,6 +3386,7 @@ reap)    cmd_reap "$@" ;;
 edit)    cmd_edit "$@" ;;
 close)   cmd_close "$@" ;;
 reopen)  cmd_reopen "$@" ;;
+reparent) cmd_reparent "$@" ;;
 list)    cmd_list "$@" ;;
 field)   cmd_field "$@" ;;
 show)    cmd_show "$@" ;;

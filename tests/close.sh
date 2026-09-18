@@ -85,5 +85,59 @@ has "naming the parent and the child" "$out" "1: closed, but child 2 is open"
 $PIDLY reopen 2 >/dev/null
 check "and reopen is the fix" "$($PIDLY check >/dev/null && echo clean)" "clean"
 
+echo "reparent"
+at() { dirname "$($PIDLY show -p "$1")"; }
+$PIDLY new "root three" </dev/null >/dev/null            # 5
+$PIDLY reparent 5 4 >/dev/null
+check "a clean move lands under the new parent" "$(at 5)" "$(  $PIDLY show -p 4)"
+check "and check is content" "$($PIDLY check >/dev/null && echo clean)" "clean"
+$PIDLY reparent -r 5 >/dev/null
+check "-r moves it back to the top" "$(at 5)" "$(cd .pidly && pwd)"
+out=$($PIDLY reparent -r 5 2>&1) && rc=0 || rc=$?
+check "moving it where it already is is refused" "$rc" "1"
+out=$($PIDLY reparent 5 5 2>&1) && rc=0 || rc=$?
+check "a ticket cannot be its own parent" "$rc" "1"
+
+# needs survives a move: it holds numbers, and only the hierarchy is
+# positional. This is why a reparent needs no bookkeeping.
+$PIDLY set 5 needs "4" >/dev/null
+$PIDLY reparent 5 1 >/dev/null
+check "needs is untouched by a move" "$($PIDLY needs 5)" "4"
+$PIDLY set 5 needs "" >/dev/null
+
+# The guard this command exists for: a move must never change open/closed.
+$PIDLY close 5 >/dev/null
+$PIDLY reparent 5 4 >/dev/null
+check "a closed ticket stays closed, in the new parent's c/" \
+	"$(at 5)" "$($PIDLY show -p 4)/c"
+check "and check is still content" "$($PIDLY check >/dev/null && echo clean)" "clean"
+# Back to the top, so 4 has no open child and can be closed below.
+$PIDLY reopen 5 >/dev/null
+$PIDLY reparent -r 5 >/dev/null
+
+$PIDLY close 4 >/dev/null
+out=$($PIDLY reparent 5 4 2>&1) && rc=0 || rc=$?
+check "a closed destination is refused" "$rc" "1"
+has "and says what it would have done" "$out" "would close it too"
+$PIDLY reopen 4 >/dev/null
+
+$PIDLY reparent 1 5 >/dev/null
+out=$($PIDLY reparent 5 1 2>&1) && rc=0 || rc=$?
+check "a parent inside the ticket's own subtree is refused" "$rc" "1"
+has "and says why" "$out" "into itself"
+$PIDLY reparent -r 1 >/dev/null
+
+# An open ticket stranded inside a closed ancestor is check's finding and
+# reopen's repair; moving it would hide it.
+$PIDLY close 4 >/dev/null
+mkdir -p "$($PIDLY show -p 4)"
+mv "$($PIDLY show -p 5)" "$($PIDLY show -p 4)/5"
+out=$($PIDLY reparent 5 1 2>&1) && rc=0 || rc=$?
+check "a ticket stranded in a closed ancestor is refused" "$rc" "1"
+has "and points at reopen" "$out" "reopen 5"
+$PIDLY reopen 5 >/dev/null
+check "after reopen the tracker is clean again" \
+	"$($PIDLY check >/dev/null && echo clean)" "clean"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

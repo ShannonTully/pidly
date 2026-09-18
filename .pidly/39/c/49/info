@@ -1,8 +1,8 @@
-claim:
+claim:751.130120276@31917916.u1000
 needs:
 title: Re-parenting: the one move that can silently change state
 created: 2026-09-18T17:55:06Z
-updated: 2026-09-18T17:55:06Z
+updated: 2026-09-18T18:39:38Z
 effort: M
 area: cli
 handoff:
@@ -41,3 +41,40 @@ resulting state has to pick one and say which.
 Done when the decision is written down, and if it is yes, the destination is
 validated, a move that would change open/closed state says so, and the suite
 covers the three cases above.
+
+
+Done 2026-09-18. The answer to the ticket's question is yes, and the guard is
+the whole value.
+
+  pidly reparent 17 6      move it under 6
+  pidly reparent -r 17     move it out to the top
+
+The rule, and it is the only thing the command adds over mv: a reparent never
+changes whether a ticket is closed. A closed ticket lands in the new parent's
+c/ and stays closed; an open one lands directly under it.
+
+Four refusals, each one a case mv would have done quietly:
+
+- A closed destination. "4 is closed; moving 17 there would close it too —
+  reopen 4 first, or close 17 deliberately."
+- A parent inside the ticket's own subtree. mv refuses this too, but only
+  after the caller has already believed it would work.
+- A ticket that is already where it is being sent.
+- An open ticket stranded inside a closed ancestor. That is check's finding
+  and reopen's repair, and moving it would only hide it, so it says so and
+  names the command.
+
+On the ticket's note about tree and check disagreeing: nothing had to pick.
+The stranded state is refused rather than reported on, so the command never
+has to render a ticket whose two readings differ.
+
+needs is untouched by a move and the registry keys on numbers, so nothing is
+rewritten and there is no bookkeeping — that is what makes this a move rather
+than a transaction. Tested explicitly.
+
+The reference documents mv first and the command second, with the reason mv
+is not enough, so the hand idiom stays the thing that works in a checkout
+where pidly was never installed.
+
+Covered in close.sh: the clean move, -r, a no-op move, self-parenting, needs
+surviving, a closed ticket keeping its state, and all four refusals.

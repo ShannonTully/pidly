@@ -512,6 +512,33 @@ Reopen also takes a ticket that is *already open* but sits inside a closed
 ancestor — a state a hand-run `mv` can leave behind, and one `check` reports.
 The cascade is its repair.
 
+## Re-parenting
+
+Moving a ticket under a different parent is a move, and by hand it is one:
+
+```sh
+mv .pidly/1/17 .pidly/6/17        # and it works
+pidly reparent 17 6               # what it is for
+pidly reparent -r 17              # out to the top
+```
+
+`needs` holds numbers and the registry keys on numbers, so dependencies and
+identity survive a move untouched; only the hierarchy is positional. The
+command exists for the one case `mv` gets **quietly** wrong.
+
+Every other thing you can do by hand fails loudly — a bad field fails `check`,
+a botched line 3 stops parsing. Moving a ticket across a `c/` boundary fails
+silently, and in the direction that loses work: drop a closed parent back into
+the open tree and everything under it is open again, with `check` content and
+nothing recording that it happened.
+
+So the rule is that **a reparent never changes whether a ticket is closed**. A
+closed ticket lands in the new parent's `c/` and stays closed; an open one
+lands directly under it. A closed destination is refused, and so is a parent
+inside the ticket's own subtree, and so is an open ticket stranded inside a
+closed ancestor — that last one is `check`'s finding and `reopen`'s repair,
+and moving it would only hide it.
+
 ## Rules that will bite you
 
 - **Never delete a ticket.** Numbers are never reused, and deleting one lets
