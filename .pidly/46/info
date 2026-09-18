@@ -1,0 +1,98 @@
+claim:
+needs:
+title: A migrate command: import a tracker from beads and its like
+created: 2026-09-18T17:33:43Z
+updated: 2026-09-18T17:33:43Z
+effort: L
+area: cli
+handoff:
+
+Someone with history in another tracker cannot try pidly without abandoning
+it. An import is the difference between "interesting" and "usable on a real
+project", and 6 needs one anyway — it says to migrate any existing bd data
+and does not say how.
+
+Both open and closed tickets, because closed ones are the reason anybody
+keeps a tracker. In pidly a closed ticket is a directory under c/, so this is
+not an extra mode: it is where the file gets written.
+
+The shape of the problem, measured on ../idol, which 38 exists to study and
+is the only real corpus available:
+
+  342 records in .beads/issues.jsonl
+    332 issues: 278 closed, 51 open, 1 in_progress, 2 deferred
+     10 memory: a key/value store with no pidly equivalent at all
+  keys present: id title description status priority issue_type assignee
+    owner created_at updated_at started_at closed_at close_reason
+    acceptance_criteria (70) notes (128) dependencies (115) labels (33)
+    design (6)
+
+What maps cleanly:
+
+  title          -> title:
+  description    -> the body
+  created_at     -> created:
+  updated_at     -> updated:
+  open/closed    -> the path, c/ or not
+  dependencies   -> needs:, for the depends-on kind
+  parent-child   -> the directory, since a child ticket lives inside its parent
+
+What does not, and these are the decisions:
+
+- ids. beads ids are slugs — idol-jay, idol-xdyn.12.1 — and pidly numbers are
+  integers that are never reused. So every ticket is renumbered, every
+  dependency has to be rewritten to the new numbers, and the old id has to
+  land somewhere or the history stops matching what commit messages and
+  external links say. A field, or a line in the body. The registry exists to
+  stop a number being issued twice and an import must fill it.
+- in_progress. pidly has no such state: a ticket is claimed or it is not, and
+  a claim names a process that no longer exists. Import as unclaimed, and say
+  so, because a claim nobody can verify is the one thing the format refuses
+  to invent.
+- deferred. pidly has defer:, so this one maps, but beads carries no trigger
+  and a deferred ticket without a trigger is what 42 rejected.
+- priority, issue_type, assignee, labels. Every one is a project field the
+  importing project may or may not declare, and labels is a set, which is 35
+  and deliberately unsolved. An import cannot add fields to a schema it did
+  not write, so it either declines them, writes them into the body, or asks
+  the schema to be extended first.
+- acceptance_criteria, notes, design. Free text with no home, and 37 decided
+  the body has no structure. They concatenate under headings, or they are
+  dropped and the import says how many it dropped.
+- memory records. No equivalent, and inventing one is out of scope. Report
+  and skip.
+
+Which tools, in the order they are worth doing. Only the first is grounded in
+anything here; the rest are guesses about what people use and want checking
+against real exports before a line of code:
+
+- beads. The one the project already has to leave, with a corpus to test on.
+- GitHub issues, via gh issue list --json. The largest population, and an
+  export anyone can produce without a new dependency.
+- Anything that emits JSONL or CSV of roughly this shape, which is most of
+  them, if the command takes a field mapping rather than hardcoding one
+  vendor.
+
+The principle this must not break is 1: the format is files, and a converter
+is not privileged. An import writes directories and info files that are
+byte-for-byte what pidly new would have written, and pidly check passes on
+the result with no special case. If that is true, the command is a
+convenience over an operation anyone could script — which is 39's test for
+whether a command should exist, and this one passes it.
+
+A dry run that prints what it would write, because renumbering 332 tickets
+with no way to look first is not something anyone should run twice.
+
+Sequencing: needs 38 to say which beads concepts are load-bearing rather
+than merely present, and 6 needs this. Not blocked on 38 — the mapping above
+can be decided from the export alone — but worth reading 38's answer before
+choosing what to drop.
+
+Worth splitting into children when picked up: the id and renumbering
+decision, the beads reader, the generic mapping, and whatever second tool
+goes first.
+
+Done when ../idol's 332 beads issues import into a fresh tracker with
+dependencies and parentage intact, check passes on the result, closed
+tickets are under c/, the old ids are recoverable, and the command reports
+every field it could not place rather than discarding it quietly.

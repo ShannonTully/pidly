@@ -1,0 +1,52 @@
+claim:
+needs:
+title: $SESSION_ID is not a variable, so a cloud claim silently records a pid
+created: 2026-09-18T17:33:09Z
+updated: 2026-09-18T17:33:09Z
+effort: S
+area: cli
+handoff:
+
+Both generated documents tell an agent with no checkable process to claim
+like this:
+
+  AGENTS.md:46          PIDLY_AGENT=$SESSION_ID PIDLY_LEASE=2h pidly claim 7
+  .pidly/README.md:273  the same line
+
+SESSION_ID is not set by anything. Under Claude Code the variable is
+CLAUDE_CODE_SESSION_ID; plain SESSION_ID is unset, so the line expands to
+PIDLY_AGENT= and the agent has no way to notice.
+
+holder() tests [ -n "${PIDLY_AGENT:-}" ], so an empty value is not an error.
+It falls through to the pid branch and the claim records this machine's pid
+for a session that may be on no machine here:
+
+  PIDLY_AGENT=$SESSION_ID PIDLY_LEASE=2h pidly claim 1
+  1 claimed by 751.130120276@31917916.u1000 2026-09-17T...
+
+Wrong rather than fatal — the lease still frees it, and claim_state calls
+another runtime's pid unverifiable rather than dead, so nothing is stolen.
+What is lost is the thing the agent branch exists for: a name a human can
+read, and a claim that cannot be confused with a local process.
+
+Two decisions, and they are separable:
+
+- What the documents should say. Naming CLAUDE_CODE_SESSION_ID in the
+  format's own reference makes it a Claude document, which the format has
+  refused everywhere else — AGENTS.md is written for four assistants and
+  pidly claude exists precisely so the Claude-specific parts live in a file
+  of their own. A placeholder the reader must replace, like
+  PIDLY_AGENT=ci-run-4821, says what the field is for and cannot be
+  copy-pasted into a silent fallback.
+- Whether an empty PIDLY_AGENT should die. Set-but-empty is almost always a
+  variable that did not exist, not a caller asking for pid identity: the
+  caller who wants a pid does not set the variable at all. Dying on it turns
+  this whole class of mistake loud at the point it happens. Against: it is a
+  behaviour change, and a wrapper that exports PIDLY_AGENT="" unconditionally
+  would start failing.
+
+Found while answering 33, which is where the evidence is written down.
+
+Done when the published line cannot mislead an agent that runs it verbatim,
+the empty-value decision is made and written down, and the suite covers
+whichever behaviour is chosen.

@@ -1,0 +1,77 @@
+claim:751.130120276@31917916.u1000
+needs:
+title: Verify whether a Claude Code subagent has its own session id
+effort: S
+area: docs
+created: 2026-09-17T06:47:11Z
+updated: 2026-09-18T17:30:53Z
+handoff:
+
+The delegation convention in 18 says a subagent claims with PIDLY_AGENT and a
+lease, because a subagent shares its parent's process — a Bash call from a
+subagent reports the same CLAUDE_PID as the lead agent, so a pid cannot tell
+them apart.
+
+What was never checked is whether the harness gives a subagent a session
+identifier of its own. One echo from inside a subagent settles it. If it is
+distinct it is the natural PIDLY_AGENT value, and the convention gets a
+generated name instead of one the lead agent has to invent and pass down.
+
+The reference currently tells agents to make a name up:
+
+  PIDLY_AGENT=sub-review-parser PIDLY_LEASE=1h pidly claim 19
+
+Which works, and is one more thing for a prompt to get wrong.
+
+Done when the answer is known, the reference says whichever is right, and
+23 can rely on it rather than repeating the hand-written form.
+
+
+Answered 2026-09-18. A subagent does not get a session id of its own.
+
+Claude Code 2.1.275, a general-purpose subagent asked to run one env dump.
+Every identity variable is byte-identical to the lead agent's:
+
+  CLAUDE_CODE_SESSION_ID   2615deb0-...-bf660cfcf507   same as lead
+  CLAUDE_PID               751                         same as lead
+  PPID                     751                         same as lead
+  CLAUDE_CODE_CHILD_SESSION 1                          set in the lead too
+  AI_AGENT                 claude-code_2-1-275_agent   same as lead
+
+CLAUDE_CODE_CHILD_SESSION looked like the candidate and is not: the lead
+agent carries it as well, so it says "Claude Code", not "subagent".
+
+The only value that differed was $$, the shell's own pid — 9151 in the
+subagent against 9674 in the lead. It is not an identity: a second Bash call
+from the same lead agent reported 9774. It changes per invocation, so a
+claim made with it could never be released by the next call.
+
+So the reference is right as written and stays: a subagent invents a name
+and passes it with a lease. 23 can rely on that.
+
+  PIDLY_AGENT=sub-review-parser PIDLY_LEASE=1h pidly claim 19
+
+Worth re-checking if the harness ever gives subagents their own session id,
+but nothing in 2.1.275 does.
+
+Found while here, and not this ticket's to fix — both generated documents
+tell a cloud agent to claim with a variable that does not exist:
+
+  AGENTS.md:46          PIDLY_AGENT=$SESSION_ID PIDLY_LEASE=2h pidly claim 7
+  .pidly/README.md:273  same line
+
+Under Claude Code the variable is CLAUDE_CODE_SESSION_ID; plain SESSION_ID is
+unset. holder() tests [ -n "${PIDLY_AGENT:-}" ], so an empty value is not an
+error — it falls through to the pid branch. An agent copying that line gets a
+pid claim instead of an agent claim and is told nothing:
+
+  PIDLY_AGENT=$SESSION_ID PIDLY_LEASE=2h pidly claim 1
+  1 claimed by 751.130120276@31917916.u1000 2026-09-17T...
+
+That is this machine's pid recorded for a session that may be on no machine
+here at all. The lease still frees it, so it is wrong rather than fatal.
+
+Two decisions, both the owner's: what the documents should say instead —
+naming a Claude-specific variable in the format's own reference is a cost the
+format has otherwise refused — and whether an empty PIDLY_AGENT should die
+rather than silently fall back.
