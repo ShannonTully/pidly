@@ -75,5 +75,18 @@ lines=$(awk '/pidly:begin/,/pidly:end/' CLAUDE.md | wc -l)
 if [ "$lines" -le 60 ]; then ok "the block stays small ($lines lines)"
 else no "the block has grown to $lines lines; move detail to .pidly/README.md"; fi
 
+# Both documents once published PIDLY_AGENT=$SESSION_ID, and SESSION_ID is set
+# by nothing: it expanded to empty and the claim silently became a pid claim.
+# A published agent name must be a name the reader replaces, not a variable
+# they are invited to believe in.
+bad=0
+for f in CLAUDE.md .pidly/README.md; do
+	if grep -q 'PIDLY_AGENT=\$' "$f"; then
+		no "$f tells the reader to claim with a shell variable"
+		bad=1
+	fi
+done
+[ "$bad" -eq 0 ] && ok "neither document claims with a \$variable"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -63,6 +63,22 @@ check "an agent name with @ is rejected" "$rc" "1"
 out=$(PIDLY_AGENT=cloud-2 PIDLY_LEASE=banana $PIDLY claim 1 2>&1) && rc=0 || rc=$?
 check "a malformed lease is rejected" "$rc" "1"
 
+# Set but empty is a variable that did not exist. It used to fall through to
+# the pid branch and record a local pid for an agent with no local process,
+# silently — which is what the published PIDLY_AGENT=$SESSION_ID line did.
+sedi '1s/.*/claim:/' .pidly/1/info
+out=$(PIDLY_AGENT= PIDLY_LEASE=1h $PIDLY claim 1 2>&1) && rc=0 || rc=$?
+check "an empty agent name is rejected, not a fallback to the pid" "$rc" "1"
+case $out in *PIDLY_AGENT*) ok "the refusal names PIDLY_AGENT" ;; *) no "message: $out" ;; esac
+check "and nothing was claimed" "$(state 1)" "unclaimed"
+
+# Unset is the caller who does want pid identity, and still gets it.
+sh -c "unset PIDLY_AGENT; PIDLY_PID=\$\$ $PIDLY claim 1 >/dev/null"
+case $(sed -n 1p .pidly/1/info) in
+claim:[0-9]*) ok "an unset agent name still claims as the process" ;;
+*) no "line 1 is $(sed -n 1p .pidly/1/info)" ;;
+esac
+
 sedi '1s/.*/claim:/' .pidly/1/info
 for d in 90s 30m 2h 3d 45; do
 	PIDLY_AGENT=a PIDLY_LEASE=$d $PIDLY claim 1 >/dev/null

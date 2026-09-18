@@ -270,8 +270,13 @@ If you have no process anyone here can check — a cloud session, a CI job —
 claim with a lease and renew by claiming again before it expires:
 
 ```sh
-PIDLY_AGENT=$SESSION_ID PIDLY_LEASE=2h pidly claim 7
+PIDLY_AGENT=ci-run-4821 PIDLY_LEASE=2h pidly claim 7
 ```
+
+`ci-run-4821` is an example, not a variable: pick any name you will
+recognise when you read the claim back, and it is recorded verbatim. An
+empty `PIDLY_AGENT` is an error rather than a fallback to your pid, because
+it almost always means a variable that does not exist.
 
 A claim resolves to one of:
 

@@ -1,8 +1,8 @@
-claim:
+claim:751.130120276@31917916.u1000
 needs:
 title: $SESSION_ID is not a variable, so a cloud claim silently records a pid
 created: 2026-09-18T17:33:09Z
-updated: 2026-09-18T17:33:09Z
+updated: 2026-09-18T17:45:48Z
 effort: S
 area: cli
 handoff:
@@ -50,3 +50,37 @@ Found while answering 33, which is where the evidence is written down.
 Done when the published line cannot mislead an agent that runs it verbatim,
 the empty-value decision is made and written down, and the suite covers
 whichever behaviour is chosen.
+
+
+Decided 2026-09-18 by the owner, and implemented.
+
+The documents publish a name, not a variable:
+
+  PIDLY_AGENT=ci-run-4821 PIDLY_LEASE=2h pidly claim 7
+
+No dollar sign, so nothing invites the reader to believe their environment
+provides it, and the reference says in words that it is an example recorded
+verbatim. Naming CLAUDE_CODE_SESSION_ID was rejected: AGENTS.md and
+.pidly/README.md are written for any assistant and for CI, and pidly claude
+exists so the Claude-specific parts live in a file of their own. The AGENTS.md
+block carries the same line with "# a name you pick" — on the same line,
+because the block is 59 of the 60 lines its test allows.
+
+An empty PIDLY_AGENT is now an error:
+
+  pidly: PIDLY_AGENT is set but empty: unset it to claim as this process,
+         or give it a name
+
+holder() tests [ -n "${PIDLY_AGENT+set}" ] and then refuses an empty value,
+rather than testing ${PIDLY_AGENT:-} and treating empty and unset alike. The
+caller who wants pid identity does not set the variable at all, so set-but-
+empty is a variable that did not exist. This is the part that generalises:
+the fix to the documents removes one bad line, and this removes the silent
+failure behind every future one.
+
+Unset is untouched and still claims as the process.
+
+Guarded both ways. identity.sh: an empty name is rejected, the refusal names
+PIDLY_AGENT, nothing is claimed, and an unset name still records a pid claim.
+agents.sh: neither generated document may contain PIDLY_AGENT=$ — verified to
+fail by reintroducing the old line, which it caught.

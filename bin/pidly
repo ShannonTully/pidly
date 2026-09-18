@@ -147,7 +147,13 @@ holder_alive() {
 # without — a cloud agent, a CI job — names itself in PIDLY_AGENT and must
 # carry a lease, because nothing else can establish that it is alive.
 holder() {
-	if [ -n "${PIDLY_AGENT:-}" ]; then
+	if [ -n "${PIDLY_AGENT+set}" ]; then
+		# Set but empty is a variable that did not exist, not a caller
+		# asking for pid identity — that caller does not set it at all.
+		# Silently falling through recorded a local pid for an agent whose
+		# process nobody here can check, and said nothing.
+		[ -n "$PIDLY_AGENT" ] ||
+			die 'PIDLY_AGENT is set but empty: unset it to claim as this process, or give it a name'
 		case $PIDLY_AGENT in
 		*@*|*" "*) die 'PIDLY_AGENT may not contain @ or spaces' ;;
 		esac
@@ -1312,8 +1318,13 @@ If you have no process anyone here can check — a cloud session, a CI job —
 claim with a lease and renew by claiming again before it expires:
 
 ```sh
-PIDLY_AGENT=$SESSION_ID PIDLY_LEASE=2h pidly claim 7
+PIDLY_AGENT=ci-run-4821 PIDLY_LEASE=2h pidly claim 7
 ```
+
+`ci-run-4821` is an example, not a variable: pick any name you will
+recognise when you read the claim back, and it is recorded verbatim. An
+empty `PIDLY_AGENT` is an error rather than a fallback to your pid, because
+it almost always means a variable that does not exist.
 
 A claim resolves to one of:
 
@@ -1577,7 +1588,7 @@ pidly release 7
 pidly release -m "Where I got to" 7   # if you stop before finishing
 
 # no local process (cloud, CI)? claim with a lease and renew before it ends
-PIDLY_AGENT=$SESSION_ID PIDLY_LEASE=2h pidly claim 7
+PIDLY_AGENT=ci-run-4821 PIDLY_LEASE=2h pidly claim 7   # a name you pick
 
 # finish: move into the container's c/
 pidly close 7                 # by hand: mkdir -p .pidly/c && mv .pidly/7 .pidly/c/
