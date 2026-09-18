@@ -4,8 +4,8 @@ title: Audit what still has to be done by hand
 effort: M
 area: cli
 created: 2026-09-17T06:54:30Z
-updated: 2026-09-17T07:09:49Z
-handoff:
+updated: 2026-09-18T17:56:02Z
+handoff: Audit complete: every row has one of the three answers, and the gaps are 47-50. 39 stays open as their parent until they close.
 
 Two properties, and they are not the same one:
 
@@ -92,3 +92,97 @@ for a day and write down every command that does not begin with pidly.
 Done when every operation in the reference and every row above has one of
 the three answers, the gaps worth closing are child tickets of this one, and
 the reference and the command set agree with each other.
+
+
+Audited 2026-09-18. Every row re-tested against the CLI as it is now, not as
+it was when the table was written: 24, 25, 27 and 43 have landed since, and
+three rows are already answered by them.
+
+Three outcomes, as the ticket asked. Rows are the table above, in its order.
+
+COMMAND EXISTS (3 rows)
+
+  read one field, many tickets   pidly field NAME            (27)
+  set a field on a new ticket    pidly new -f, pidly set     (24, 25)
+  number, claim and title        pidly list -a               (43)
+
+  The most repeated manual step in the tracker's history — setting a field on
+  a ticket just created — is gone. That is what closing a gap looks like.
+
+A COMMAND SHOULD EXIST (7 rows, 4 child tickets)
+
+  47  resolve a number to a path      find .pidly -type d -name 17
+      read one ticket                 cat "$(find ...)/info"
+      read one field, one ticket      sed -n 's/^created: //p'
+      read the field block            awk 'NR>3 { if ($0=="") exit; print }'
+
+      All four are the same traversal asking for more or less of it. pidly
+      field prints one field across every ticket; the missing direction is
+      one ticket across its fields.
+
+  48  retitle                         sed -i '3s/.*/title: .../'
+      add or drop a dependency        sed -i '2s/.*/needs: 24/'
+
+      Verified: pidly set refuses both — "no field 'title' in the schema",
+      "no field 'needs' in the schema". Correct as a rule, since the schema
+      declares project fields and lines 1-3 belong to the format, but it
+      leaves two ordinary operations with only sed, and sed validates
+      nothing. A needs: naming a number that does not exist is a check
+      finding nobody sees until CI.
+
+  49  re-parent a ticket              mv
+
+      Measured, and the audit's "nothing checking where it lands" is exact.
+      A clean move is fine and check passes. A move under a closed parent is
+      caught and reopen repairs it. A move of a closed parent back out of c/
+      silently reopens everything under it and check is happy. That third
+      case is the argument: every other manual idiom here fails loudly.
+
+  50  change part of a body           awk out, transform, pipe the whole
+                                      thing back through edit -b
+
+      Still the worst row. A truncated body is a valid ticket — check has
+      nothing to say, the file parses, and the loss surfaces when someone
+      reads the ticket and a paragraph they remember is gone.
+
+STAYS MANUAL ON PURPOSE (3 rows)
+
+  what closed, or closed last     find, or git log
+
+      git owns history and pidly must not start recording it: a close is a
+      commit that moves a directory, and that is more honest than a field
+      pidly would have to maintain. What is closed right now is already
+      answerable — tree marks it [x] and field -a includes it. "Closed last"
+      is git log, and duplicating it would be state that can disagree with
+      the files, which is what the format exists to avoid.
+
+  search bodies                   grep -r, and knowing to exclude c/
+
+      grep is better at this than anything pidly would wrap, and the only
+      subtlety is one -prune the reference already publishes. Wrapping it
+      starts the query language the ticket's own boundary argument rules out.
+
+  anything in bulk                a shell loop
+
+      The boundary this ticket already drew. pidly hands over data in one
+      pass and the caller does the rest; every aggregate pidly owned would be
+      one somebody wanted differently.
+
+THE OTHER HALF: the reference and the command set agree
+
+  The reference publishes a hand idiom for every read it describes — lines
+  1-2 for takeability, line 3 for a listing, the awk for the field block, the
+  awk for the body, the pruned find for a full traversal, the schema awks —
+  and those idioms are POSIX, which 41 checked. Nothing in the reference
+  describes a command that does not exist, and nothing in the command set is
+  undocumented there.
+
+  What the reference does not yet do is publish a hand idiom beside a command
+  for the four gaps above, because there is no command to put it beside. Each
+  child ticket carries that requirement in its own Done-when, so the property
+  is maintained as they land rather than audited again afterwards.
+
+39 stays open until 47-50 close, which is the format's rule and the right
+outcome: the audit is the answers, and the answers are four tickets. To redo
+this later rather than trust it, work in the tracker for a day and write down
+every command that does not begin with pidly.

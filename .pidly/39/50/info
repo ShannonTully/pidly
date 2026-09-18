@@ -1,0 +1,41 @@
+claim:
+needs:
+title: Change part of a body without rewriting the whole one
+created: 2026-09-18T17:55:07Z
+updated: 2026-09-18T17:55:07Z
+effort: M
+area: cli
+handoff:
+
+The worst row in the audit, because the workaround is more dangerous than the
+gap. edit writes a body three ways: an editor, which an agent cannot drive;
+-a, which appends; and -b, which replaces the whole thing. So changing one
+paragraph non-interactively means reconstructing the entire body and piping
+it back, and anything left out is silently deleted.
+
+That is how 24 and 28 were corrected in 99ebca6 — extract with awk, replace a
+passage in a temp file, pipe it all back — and it survived review only
+because the tickets were short enough to check by eye. The tickets in this
+tracker are no longer short.
+
+The failure has no signal. A truncated body is a valid ticket: check has
+nothing to say about it, the file parses, and the loss shows up whenever
+someone next reads the ticket and the paragraph they remember is gone. Every
+other manual idiom in this audit fails loudly.
+
+What would remove it, roughly in order of how much they assume:
+
+- A way to replace a passage by match rather than by rewriting the file.
+- A way to edit in place through a filter, so the caller transforms what is
+  there instead of reconstructing it.
+- Accepting the risk and making the reconstruction safe: have -b refuse a
+  body dramatically shorter than the one it replaces unless forced. Cheap,
+  and catches the actual failure rather than preventing it.
+
+The last one is worth taking seriously even if a better command lands, since
+it costs little and the failure it catches is the one that has already
+happened twice.
+
+Done when changing a paragraph does not require reconstructing the body, or
+the reconstruction cannot silently lose one, and the suite covers a body that
+would have been truncated.

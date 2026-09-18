@@ -1,0 +1,43 @@
+claim:
+needs:
+title: Re-parenting: the one move that can silently change state
+created: 2026-09-18T17:55:06Z
+updated: 2026-09-18T17:55:06Z
+effort: M
+area: cli
+handoff:
+
+There is no command. The hand idiom is mv, and the audit's note that nothing
+checks where it lands is exact — measured 2026-09-18:
+
+- A clean move works and check passes. needs: holds numbers and the registry
+  keys on numbers, so dependencies and identity survive; only the hierarchy
+  is positional.
+- Moving an open ticket under a closed parent leaves "N: closed, but child M
+  is open", which check reports and reopen repairs. Documented, and fine.
+- Moving a closed parent back out of c/ silently reopens it and everything
+  under it, and check is happy. State is location, so a stray mv resurrects
+  closed work with nothing recording that it happened.
+
+That third one is the argument for a command. Every other manual idiom in
+the audit is wrong loudly — a bad field fails check, a bad line 3 stops
+parsing — and this one is wrong quietly, in the direction of work looking
+undone rather than done.
+
+Against a command, and it deserves stating: mv is exactly right for the
+clean case, the format is built so that moving a directory is the operation,
+and a wrapper that only calls mv with a guard is thin. The question is
+whether the guard is worth a verb.
+
+If yes, the guard is the whole value: refuse a destination inside c/ unless
+the ticket is being closed, refuse a move into the ticket's own subtree, and
+say what the move does to the ticket's state before doing it.
+
+Note for whoever takes this: tree renders by path, so a ticket under a closed
+ancestor shows [x] while check calls it open. The two are not in conflict —
+they answer different questions — but a reparent command that prints the
+resulting state has to pick one and say which.
+
+Done when the decision is written down, and if it is yes, the destination is
+validated, a move that would change open/closed state says so, and the suite
+covers the three cases above.

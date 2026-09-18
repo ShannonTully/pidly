@@ -1,0 +1,35 @@
+claim:
+needs:
+title: Resolve a number, and read one ticket
+created: 2026-09-18T17:55:04Z
+updated: 2026-09-18T17:55:04Z
+effort: S
+area: cli
+handoff:
+
+The primitive everything else needs, and it has no command. Resolving a
+number to a path was required to do almost anything by hand during 39's
+audit, including by the audit's own commands:
+
+  find .pidly -type d -name 17
+
+And reading one ticket is that plus a cat:
+
+  cat "$(find .pidly -type d -name 11)/info"
+
+Two rows of the audit fold into the same traversal, because both are asking
+for part of what a read would print: one field of one ticket, which is a sed,
+and the field block, which is the awk the reference already publishes.
+
+The shape worth considering is one command that prints a ticket and can print
+less of it, rather than four commands. pidly field already prints one field
+across every ticket; the missing direction is one ticket across its fields.
+
+Careful with the path form: printing a path invites callers to build their
+own idioms on it, which is fine — that is principle 1 — but a command that
+prints a path must not become the thing agents use to hand-edit info files
+that a command should be writing. See the sibling ticket on title and needs.
+
+Done when a number resolves and a ticket reads without a find, the reference
+keeps publishing the hand idiom beside the command, and the suite covers a
+number that does not exist.
