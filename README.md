@@ -84,11 +84,33 @@ files.
 
 Early, but whole. The format is settled and the script implements every
 command it is meant to have — `init`, `new`, `claim`, `release`, `status`,
-`reap`, `edit`, `close`, `reopen`, `list`, `tree`, `check`, `agents` — each
+`reap`, `edit`, `set`, `needs`, `fields`, `close`, `reopen`, `reparent`,
+`list`, `field`, `show`, `tree`, `check`, `agents`, `claude`, `man` — each
 of them something a person could have done with `mkdir`, `mv` and an editor.
 See [docs/DESIGN.md](docs/DESIGN.md) for the layout, the reasoning behind it,
 and the questions still open. The work itself is tracked in `.pidly/`, using
 pidly.
+
+## Installing
+
+pidly is one POSIX shell script with no build step and no dependencies beyond
+the usual coreutils and an optional `git`. Put it on your `PATH`:
+
+```sh
+curl -o ~/.local/bin/pidly \
+    https://raw.githubusercontent.com/ShannonTully/pidly/main/bin/pidly
+chmod +x ~/.local/bin/pidly
+pidly --version
+```
+
+Copying it into a repository that wants it works just as well — the script
+carries its own licence line and its own version, so a vendored copy answers
+for itself.
+
+Installing is convenience and discoverability, never capability. Nothing in
+pidly requires pidly: the tracker is files, every command is something you
+could do with `find`, `sed` and `mv`, and both generated documents say how. A
+checkout where pidly is not installed is fully usable by hand, and by an agent.
 
 ## Getting started
 
@@ -181,6 +203,34 @@ Claiming is the one thing not safe to do by hand while other agents are
 running: rewriting a line is read-modify-write, so two agents can both take a
 free ticket and the loser never finds out. `pidly claim` serializes it behind a
 lock directory. Everything else above is exactly what the script does.
+
+## Releasing
+
+For whoever cuts one. There is nothing to build: a release is a tag and the
+script at that tag.
+
+```sh
+# 1. bump VERSION in bin/pidly — it is the only place a version is recorded
+# 2. the generated documents quote the usage text, so refresh them
+pidly agents
+pidly man > docs/pidly.1
+pidly check                   # must be clean, and says so if they drifted
+./tests/run.sh
+
+# 3. tag it, and let the forge build the tarball
+git tag -a v0.1.0 -m 'pidly 0.1.0'
+git push origin v0.1.0
+
+# 4. the checksum a formula or PKGBUILD will want
+curl -sL https://github.com/ShannonTully/pidly/archive/refs/tags/v0.1.0.tar.gz |
+    shasum -a 256
+```
+
+Versions are `0.x` until the on-disk schema has been lived with by someone who
+did not write it. The tracker itself records no version and never will: that
+would be state that can disagree with the files. What a version is for is
+letting a person say what they are running, and letting a package name
+something — which is why it lives in the script and nowhere else.
 
 ## Licence
 

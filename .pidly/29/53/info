@@ -1,0 +1,22 @@
+claim:
+needs: 52 41
+title: A Homebrew tap
+created: 2026-09-18T22:00:31Z
+updated: 2026-09-18T22:00:48Z
+effort: M
+area: cli
+handoff:
+
+The first route in 29's list: immediate, no gatekeeping, works on Linux as
+well as macOS, and the formula is about ten lines ending in
+bin.install "bin/pidly".
+
+Needs a version and a release tarball with a checksum first, so it waits on
+the version ticket. Needs a second repository — homebrew-pidly — which is a
+publishing decision for the owner.
+
+Blocked in practice on 41 as well: the formula would serve macOS, and until
+the suite has been run on a real BSD find nobody knows pidly works there.
+
+Done when a clean macOS machine and a clean Linux one can brew install it
+from the tap and run pidly init in a fresh repo.

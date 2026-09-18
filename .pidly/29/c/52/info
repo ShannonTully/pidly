@@ -1,0 +1,68 @@
+claim:
+needs:
+title: Version the script, and a release anyone can install from
+created: 2026-09-18T22:00:30Z
+updated: 2026-09-18T22:07:04Z
+effort: M
+area: cli
+handoff:
+
+A package has nothing to name and a user has no way to say what they are
+running. Both blockers 29 found are down to this one: the licence is settled
+(30) and this is the other.
+
+  - a VERSION line at the top of bin/pidly, which a vendored copy carries
+  - pidly --version, printing it
+  - a tag, a tarball with a stable URL, and a checksum
+
+No build step, no compilation, nothing beyond a POSIX shell, the usual
+coreutils and an optional git.
+
+0.x, not 1.0: 28 has landed but the tap and the AUR have not, and 29 says not
+to call anything 1.0 before the schema file on disk has settled in the hands
+of someone who did not write it.
+
+The release itself — tagging and publishing — is the owner's, not an agent's.
+
+Done when the script carries a version, --version prints it, the suite covers
+both, and the steps to cut a release are written down where the next person
+will find them.
+
+
+Done 2026-09-18, except the release itself, which is the owner's.
+
+  VERSION=0.1.0 at the top of bin/pidly, beside the SPDX line and for the
+  same reason: a copy vendored into another repository is the whole of pidly
+  and has to answer for itself.
+
+  pidly --version, and -V, printing "pidly 0.1.0".
+
+Nothing on disk records it. A tracker carries no version and must not, which
+is 32's reasoning and the same sentence appears there: a version is state
+that can disagree with the files.
+
+--version answers before anything else does — outside a tracker, where every
+other command refuses, and on a first install before init has run. That is
+the case it exists for, so it is the case the suite pins.
+
+The release steps are in README.md under "Releasing", next to a new
+"Installing" section carrying the curl fallback 29 asked to have written down
+whatever else happened. A release is a tag and the script at that tag: bump
+VERSION, regenerate the two documents that quote the usage text, run check
+and the suite, tag, and take the checksum of the tarball the forge builds.
+Tagging and pushing are not an agent's to do.
+
+Also corrected README's Status section, which listed thirteen commands and
+had missed set, needs, fields, reparent, field, show, claude and man.
+
+tests/version.sh covers it, and the assertion worth naming is that what the
+flag prints is read back out of the script's own VERSION line: a literal in
+the printf would pass every other test here and lie after the next bump.
+
+The man page picked the flag up for free, since it is generated from the
+usage text.
+
+Not done here, and deliberately: 31 decided the manual page carries no
+version, and that decision still holds. A .TH version would put the page out
+of date at every bump, which is a release step rather than a fault, but it is
+31's call to revisit and not this ticket's.

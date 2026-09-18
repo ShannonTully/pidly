@@ -4,8 +4,8 @@ title: Ship pidly as a package: licence, version, release, tap
 effort: L
 area: cli
 created: 2026-09-17T06:43:08Z
-updated: 2026-09-17T22:23:10Z
-handoff:
+updated: 2026-09-18T22:07:21Z
+handoff: Split into children as this ticket asked. 30 licence and 31 man page are closed; 52 version and release is closed. What is left is 41 (macOS, needs a real BSD find), 53 the tap and 54 the AUR — both of which need a second repository and a publish, which is the owner's.
 
 Someone clones a repo that uses pidly, or wants to start one, and installs
 the CLI from their package manager. One file goes into their bin; nothing

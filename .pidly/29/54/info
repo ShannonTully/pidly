@@ -1,0 +1,18 @@
+claim:
+needs: 52
+title: An AUR package
+created: 2026-09-18T22:00:32Z
+updated: 2026-09-18T22:00:48Z
+effort: S
+area: cli
+handoff:
+
+A PKGBUILD for a single script is a few lines, and is what an Arch user
+expects. Second in 29's list because it reaches fewer people than the tap,
+not because it is harder.
+
+Waits on the version ticket for something to name, and on the owner for an
+AUR account and the push.
+
+Done when a clean Arch machine can install it from the AUR and run pidly init
+in a fresh repo.
