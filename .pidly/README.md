@@ -392,7 +392,32 @@ pidly edit -b 7 < body.md    # replace the body from stdin
 pidly edit -a 7 <<'EOF'      # append to it: findings, results, where you got to
 Reviewed the parser: the lexer loses nested quotes at depth 2.
 EOF
+pidly edit -r "the old sentence." -w "the new one." 7   # one passage
 ```
+
+`-r` matches **literally, not as a regex**, and the text must appear **exactly
+once**. A body quotes shell, awk and patterns constantly, so a caller made to
+escape what they can see in front of them will get it wrong; and a passage
+that appears twice is a caller who means one of them and cannot say which.
+Both cases are refused rather than guessed at.
+
+It exists because `-b` replaces the whole body, so changing one paragraph
+without an editor meant reconstructing all of it and piping it back — and
+anything left out was gone. That failure is silent: a truncated body is a
+legal ticket, `check` has nothing to say about it, and the loss surfaces when
+someone next reads the ticket and a paragraph they remember is missing.
+
+So `-b` also refuses a replacement that lost more than half of a body of at
+least 200 bytes:
+
+```
+pidly: the new body is 180 bytes against 4200: re-run with -f if that is
+       deliberate
+```
+
+The numbers are arbitrary and stated rather than tuned. The point is to catch
+a reconstruction that dropped most of the file, not to police editing, and
+`-f` is there for the times a body really is being cut down.
 
 By hand it is your editor, or `cat >> .pidly/7/info` — nothing records where
 a body starts or ends, so appending is appending. What the command adds is the

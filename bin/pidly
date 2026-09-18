@@ -741,17 +741,59 @@ cmd_reap() {
 # the body ended, because a hand-edit could leave that line lying; 20 removed
 # the derived data, and with it the only thing edit had to keep honest.
 
+# Replace one passage of a body, literally and exactly once.
+#
+# Literal, not a regex: a body is prose that quotes shell, awk and patterns
+# constantly, and a caller who has to escape the text they can see in front of
+# them will get it wrong. Exactly once, because a passage that appears twice
+# is a caller who means one of them and cannot say which — replacing both, or
+# the first, is a guess this has no business making.
+#
+# Both strings travel through the environment, for the same reason set_line
+# does: awk -v processes escape sequences.
+replace_passage() {
+	PIDLY_OLD=$2 PIDLY_NEW=$3; export PIDLY_OLD PIDLY_NEW
+	awk '
+		BEGIN { old = ENVIRON["PIDLY_OLD"]; new = ENVIRON["PIDLY_NEW"] }
+		# The body only: the same boundary get_body uses, the first blank
+		# line. Reading the whole file here folded the header into the body.
+		b { body = body $0 "\n"; next }
+		$0 == "" { b = 1 }
+		END {
+			if (old == "") exit 4
+			n = 0; rest = body
+			while ((i = index(rest, old)) > 0) {
+				n++
+				rest = substr(rest, i + length(old))
+			}
+			if (n == 0) exit 3
+			if (n > 1) exit 5
+			i = index(body, old)
+			printf "%s%s%s", substr(body, 1, i - 1), new,
+				substr(body, i + length(old))
+		}' "$1"
+}
+
 cmd_edit() {
-	_mode=editor
+	_mode=editor _ed_force=no _ed_old="" _ed_new=""
 	while [ $# -gt 0 ]; do
 		case $1 in
 		-a|--append) _mode=append; shift ;;
 		-b|--body)   _mode=body; shift ;;
+		-f|--force)  _ed_force=yes; shift ;;
+		-r|--replace)
+			[ $# -ge 2 ] || die 'pidly edit -r wants the text to replace'
+			_mode=passage; _ed_old=$2; shift 2 ;;
+		-w|--with)
+			[ $# -ge 2 ] || die 'pidly edit -w wants the replacement text'
+			_ed_new=$2; shift 2 ;;
 		-*) die "unknown option $1" ;;
 		*)  break ;;
 		esac
 	done
-	[ $# -eq 1 ] || die 'usage: pidly edit [-a|-b] <number>'
+	[ $# -eq 1 ] || die 'usage: pidly edit [-a|-b|-r OLD -w NEW] [-f] <number>'
+	[ "$_mode" = passage ] || [ -z "$_ed_new" ] ||
+		die '-w is the replacement for -r: give both or neither'
 	_r=$(root); _d=$(ticket_dir "$_r" "$1"); _f="$_d/info"
 
 	if [ "$_mode" = editor ]; then
@@ -765,7 +807,42 @@ cmd_edit() {
 
 	# Reading stdin whole, rather than streaming it into the file, keeps the
 	# window in which info is half-written down to the mv. A body is prose.
+	if [ "$_mode" = passage ]; then
+		_ed_out=$(replace_passage "$_f" "$_ed_old" "$_ed_new") && _ed_rc=0 || _ed_rc=$?
+		case $_ed_rc in
+		0) ;;
+		3) die "$1: that passage is not in the body" ;;
+		4) die '-r wants text to look for' ;;
+		5) die "$1: that passage appears more than once — say more of it" ;;
+		*) die "$1: the body could not be read" ;;
+		esac
+		lock "$_d" 100 || die "$1 is being modified by another process"
+		set_body "$_f" "$_ed_out"
+		mark_updated "$_f"
+		unlock "$_d"
+		printf '%s updated\n' "$1"
+		return 0
+	fi
+
 	_text=$(cat)
+
+	# The failure this guards is silent and has already happened twice: -b
+	# replaces the whole body, so changing one paragraph non-interactively
+	# means reconstructing all of it, and whatever is left out is gone. A
+	# truncated body is a legal ticket — check has nothing to say, the file
+	# parses — and the loss surfaces when someone next reads it.
+	#
+	# Half, and only for a body with something to lose. The numbers are
+	# arbitrary and stated rather than tuned: the point is to catch the
+	# reconstruction that dropped most of the file, not to police edits.
+	if [ "$_mode" = body ] && [ "$_ed_force" = no ]; then
+		_ed_was=$(get_body "$_f" | wc -c)
+		_ed_now=$(printf '%s' "$_text" | wc -c)
+		if [ "$_ed_was" -ge 200 ] && [ "$_ed_now" -lt $((_ed_was / 2)) ]; then
+			die "the new body is $_ed_now bytes against $_ed_was: re-run with -f if that is deliberate"
+		fi
+	fi
+
 	lock "$_d" 100 || die "$1 is being modified by another process"
 	if [ "$_mode" = append ]; then
 		append_body "$_f" "$_text"
@@ -1642,7 +1719,32 @@ pidly edit -b 7 < body.md    # replace the body from stdin
 pidly edit -a 7 <<'EOF'      # append to it: findings, results, where you got to
 Reviewed the parser: the lexer loses nested quotes at depth 2.
 EOF
+pidly edit -r "the old sentence." -w "the new one." 7   # one passage
 ```
+
+`-r` matches **literally, not as a regex**, and the text must appear **exactly
+once**. A body quotes shell, awk and patterns constantly, so a caller made to
+escape what they can see in front of them will get it wrong; and a passage
+that appears twice is a caller who means one of them and cannot say which.
+Both cases are refused rather than guessed at.
+
+It exists because `-b` replaces the whole body, so changing one paragraph
+without an editor meant reconstructing all of it and piping it back — and
+anything left out was gone. That failure is silent: a truncated body is a
+legal ticket, `check` has nothing to say about it, and the loss surfaces when
+someone next reads the ticket and a paragraph they remember is missing.
+
+So `-b` also refuses a replacement that lost more than half of a body of at
+least 200 bytes:
+
+```
+pidly: the new body is 180 bytes against 4200: re-run with -f if that is
+       deliberate
+```
+
+The numbers are arbitrary and stated rather than tuned. The point is to catch
+a reconstruction that dropped most of the file, not to police editing, and
+`-f` is there for the times a body really is being cut down.
 
 By hand it is your editor, or `cat >> .pidly/7/info` — nothing records where
 a body starts or ends, so appending is appending. What the command adds is the
@@ -3324,9 +3426,12 @@ usage: pidly <command> [args]
   status <n>     who holds it, and whether that can be verified
   reap [n]       clear claims whose process is positively gone, one ticket or
                  the whole tracker; never a claim it cannot check
-  edit [-a|-b] <n>
+  edit [-a|-b|-r OLD -w NEW] [-f] <n>
                  open it in $EDITOR; -b replaces the body from stdin, -a
-                 appends to it
+                 appends to it, and -r OLD -w NEW replaces one passage of it
+                 literally, refusing text that is absent or appears twice. -b
+                 refuses a body that lost more than half of what it replaced;
+                 -f says you meant it
   set <n> <field> [value]
                  write a project field; with no value, clear it. Also title
                  and needs, which are the format's lines rather than the

@@ -1,0 +1,78 @@
+claim:751.130120276@31917916.u1000
+needs:
+title: Change part of a body without rewriting the whole one
+created: 2026-09-18T17:55:07Z
+updated: 2026-09-18T18:43:41Z
+effort: M
+area: cli
+handoff:
+
+The worst row in the audit, because the workaround is more dangerous than the
+gap. edit writes a body three ways: an editor, which an agent cannot drive;
+-a, which appends; and -b, which replaces the whole thing. So changing one
+paragraph non-interactively means reconstructing the entire body and piping
+it back, and anything left out is silently deleted.
+
+That is how 24 and 28 were corrected in 99ebca6 — extract with awk, replace a
+passage in a temp file, pipe it all back — and it survived review only
+because the tickets were short enough to check by eye. The tickets in this
+tracker are no longer short.
+
+The failure has no signal. A truncated body is a valid ticket: check has
+nothing to say about it, the file parses, and the loss shows up whenever
+someone next reads the ticket and the paragraph they remember is gone. Every
+other manual idiom in this audit fails loudly.
+
+What would remove it, roughly in order of how much they assume:
+
+- A way to replace a passage by match rather than by rewriting the file.
+- A way to edit in place through a filter, so the caller transforms what is
+  there instead of reconstructing it.
+- Accepting the risk and making the reconstruction safe: have -b refuse a
+  body dramatically shorter than the one it replaces unless forced. Cheap,
+  and catches the actual failure rather than preventing it.
+
+The last one is worth taking seriously even if a better command lands, since
+it costs little and the failure it catches is the one that has already
+happened twice.
+
+Done when changing a paragraph does not require reconstructing the body, or
+the reconstruction cannot silently lose one, and the suite covers a body that
+would have been truncated.
+
+
+Done 2026-09-18. Both halves, as decided: the guard and the passage replace.
+
+  pidly edit -r "the old sentence." -w "the new one." 7
+  pidly edit -b 7 < body.md        refuses a body that lost most of itself
+  pidly edit -f -b 7 < body.md     unless you say you meant it
+
+-r matches literally, not as a regex, and the text must appear exactly once.
+Literal because a body quotes shell, awk and patterns constantly — this
+tracker's own tickets do it on nearly every line — and a caller made to escape
+what they can see in front of them will get it wrong. Exactly once because a
+passage appearing twice is a caller who means one of them and cannot say
+which; replacing both, or the first, is a guess the command has no business
+making. Absent and ambiguous are both refused with a message that says which.
+
+The guard: -b refuses a replacement under half the size of a body of at least
+200 bytes. The numbers are arbitrary and the reference says so rather than
+pretending they were tuned — the point is to catch a reconstruction that
+dropped most of the file, not to police editing. -f is the escape hatch, and
+append is never guarded because appending cannot lose anything.
+
+One bug worth recording, caught in testing rather than by reasoning: the
+first version of replace_passage read the whole info file, so the header was
+folded into the body and written back as prose. The fix is the same boundary
+get_body uses — the first blank line — and there is now a test asserting line
+3 is still the title after a replace.
+
+Both strings travel through the environment rather than awk -v, for the
+reason 48 found: awk -v processes escape sequences. That is also why -r can
+be given text containing \t or a backslash and have it match what is in the
+file.
+
+Covered in edit.sh: replacement, the surrounding paragraphs surviving, the
+header surviving, absent and duplicate passages, -w without -r, a literal
+regex-looking passage, the guard refusing and leaving the body untouched, -f,
+a small body not being policed, and append never being guarded.
