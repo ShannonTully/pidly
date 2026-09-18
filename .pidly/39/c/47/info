@@ -1,0 +1,65 @@
+claim:751.130120276@31917916.u1000
+needs:
+title: Resolve a number, and read one ticket
+created: 2026-09-18T17:55:04Z
+updated: 2026-09-18T18:30:29Z
+effort: S
+area: cli
+handoff:
+
+The primitive everything else needs, and it has no command. Resolving a
+number to a path was required to do almost anything by hand during 39's
+audit, including by the audit's own commands:
+
+  find .pidly -type d -name 17
+
+And reading one ticket is that plus a cat:
+
+  cat "$(find .pidly -type d -name 11)/info"
+
+Two rows of the audit fold into the same traversal, because both are asking
+for part of what a read would print: one field of one ticket, which is a sed,
+and the field block, which is the awk the reference already publishes.
+
+The shape worth considering is one command that prints a ticket and can print
+less of it, rather than four commands. pidly field already prints one field
+across every ticket; the missing direction is one ticket across its fields.
+
+Careful with the path form: printing a path invites callers to build their
+own idioms on it, which is fine — that is principle 1 — but a command that
+prints a path must not become the thing agents use to hand-edit info files
+that a command should be writing. See the sibling ticket on title and needs.
+
+Done when a number resolves and a ticket reads without a find, the reference
+keeps publishing the hand idiom beside the command, and the suite covers a
+number that does not exist.
+
+
+Done 2026-09-18. One command with flags, as decided: pidly field prints one
+field across every ticket, and show is the other direction.
+
+  pidly show 7              the whole info file
+  pidly show -p 7           its directory
+  pidly show -F 7           the field block
+  pidly show -b 7           the body
+  pidly show -f effort 7    one field's value
+
+All four audit rows are the same traversal asking for more or less of it, so
+they are one verb. -f is not checked against the schema, for the reason field
+is not either: a ticket written by hand is a legal ticket and may carry a key
+the schema never declared. An absent field prints nothing rather than failing.
+
+-p prints an absolute path, so cat "$(pidly show -p 7)/info" works from any
+directory. The ticket's worry about a resolved path inviting hand edits is
+answered in the reference rather than by withholding the path: the table now
+says a path is yours to read and not a licence to write lines a command owns,
+and points at set and reparent.
+
+The reference's read table gained a command column beside the idioms rather
+than replacing them. The right-hand column is still what the file is, and
+still works where pidly was never installed; the left is what to type when it
+was. That is the property this ticket exists to keep.
+
+Covered in views.sh: every mode, a number that does not exist, a field name
+with a colon, -f with no name, and that a closed ticket still reads — show
+answers about a ticket, not about what is takeable.

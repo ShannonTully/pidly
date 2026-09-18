@@ -60,14 +60,26 @@ So `updated` is not the file's mtime and not a record of every write. It is
 *when something last happened to this ticket, as far as pidly saw*. Use
 `pidly edit` if you want the stamp to follow your own edit.
 
-Read only as far as you need:
+Read only as far as you need. The right-hand column is what the file is, and
+it keeps working in a checkout where pidly was never installed; the left is
+what to type when it was.
 
-| want | read |
-|---|---|
-| can I take this? | `sed -n 1,2p info` |
-| a listing line | `sed -n 3p info` |
-| project fields | `awk 'NR>3 { if ($0=="") exit; print }' info` |
-| the body | `awk 'b { print } !b && $0=="" { b=1 }' info` |
+| want | command | read |
+|---|---|---|
+| the whole ticket | `pidly show 7` | `cat info` |
+| where ticket 7 is | `pidly show -p 7` | `find .pidly -type d -name 7` |
+| can I take this? | — | `sed -n 1,2p info` |
+| a listing line | — | `sed -n 3p info` |
+| project fields | `pidly show -F 7` | `awk 'NR>3 { if ($0=="") exit; print }' info` |
+| one field of one ticket | `pidly show -f effort 7` | `sed -n 's/^effort: //p' info` |
+| one field of every ticket | `pidly field effort` | a loop over the above |
+| the body | `pidly show -b 7` | `awk 'b { print } !b && $0=="" { b=1 }' info` |
+
+`show -p` is the one every hand idiom above needs first, and it is why the
+other rows can be written as a single `sed` against `info` rather than a
+`find` each. A resolved path is yours to read; it is not a licence to write
+lines that a command owns — see `set` for `title` and `needs`, and
+`reparent` for the directory itself.
 
 Nothing records where the body starts or ends. It runs to the end of the
 file, and the fields stop at the first blank line — which is ahead of the

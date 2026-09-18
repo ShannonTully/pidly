@@ -167,6 +167,31 @@ sedi 's/^A ticket is a directory.*/TAMPERED/' AGENTS.md
 has "a stale AGENTS.md section" "$($PIDLY check 2>&1 || true)" "pidly section is out of date"
 $PIDLY agents >/dev/null
 
+echo "show"
+check "the whole ticket is the info file" \
+	"$($PIDLY show 1)" "$(cat "$($PIDLY show -p 1)/info")"
+# Absolute, so that cat "$(pidly show -p 7)/info" works from anywhere.
+check "-p resolves a number to its directory" \
+	"$($PIDLY show -p 3)" "$(pwd)/$(find .pidly -type d -name 3 | head -n 1)"
+has "-F prints the field block" "$($PIDLY show -F 1)" "created:"
+hasnt "-F stops before the body" "$($PIDLY show -F 1)" "title:"
+check "-b prints the body" "$($PIDLY show -b 1)" "$(awk 'b { print } !b && $0=="" { b=1 }' "$($PIDLY show -p 1)/info")"
+$PIDLY set 1 effort M >/dev/null 2>&1 || true
+check "-f prints one field" "$($PIDLY show -f created 1)" "$($PIDLY show -F 1 | sed -n 's/^created: //p')"
+check "-f on an absent field prints nothing" "$($PIDLY show -f nosuch 1)" ""
+out=$($PIDLY show 999 2>&1) && rc=0 || rc=$?
+check "a number that does not exist is refused" "$rc" "1"
+has "and says so" "$out" "no ticket 999"
+out=$($PIDLY show -f 'a:b' 1 2>&1) && rc=0 || rc=$?
+check "a field name with a colon is refused" "$rc" "1"
+out=$($PIDLY show -f 2>&1) && rc=0 || rc=$?
+check "-f with no name is refused" "$rc" "1"
+# A closed ticket still reads: show answers about a ticket, not about what is
+# takeable, so unlike list it has no opinion about where the ticket sits.
+$PIDLY close 2 >/dev/null
+has "a closed ticket still reads" "$($PIDLY show 2)" "title: root two"
+$PIDLY reopen 2 >/dev/null
+
 echo "check changes nothing"
 $PIDLY agents >/dev/null
 before=$(find .pidly -type f -exec cksum {} + | sort)

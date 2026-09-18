@@ -1131,14 +1131,26 @@ So `updated` is not the file's mtime and not a record of every write. It is
 *when something last happened to this ticket, as far as pidly saw*. Use
 `pidly edit` if you want the stamp to follow your own edit.
 
-Read only as far as you need:
+Read only as far as you need. The right-hand column is what the file is, and
+it keeps working in a checkout where pidly was never installed; the left is
+what to type when it was.
 
-| want | read |
-|---|---|
-| can I take this? | `sed -n 1,2p info` |
-| a listing line | `sed -n 3p info` |
-| project fields | `awk 'NR>3 { if ($0=="") exit; print }' info` |
-| the body | `awk 'b { print } !b && $0=="" { b=1 }' info` |
+| want | command | read |
+|---|---|---|
+| the whole ticket | `pidly show 7` | `cat info` |
+| where ticket 7 is | `pidly show -p 7` | `find .pidly -type d -name 7` |
+| can I take this? | — | `sed -n 1,2p info` |
+| a listing line | — | `sed -n 3p info` |
+| project fields | `pidly show -F 7` | `awk 'NR>3 { if ($0=="") exit; print }' info` |
+| one field of one ticket | `pidly show -f effort 7` | `sed -n 's/^effort: //p' info` |
+| one field of every ticket | `pidly field effort` | a loop over the above |
+| the body | `pidly show -b 7` | `awk 'b { print } !b && $0=="" { b=1 }' info` |
+
+`show -p` is the one every hand idiom above needs first, and it is why the
+other rows can be written as a single `sed` against `info` rather than a
+`find` each. A resolved path is yours to read; it is not a licence to write
+lines that a command owns — see `set` for `title` and `needs`, and
+`reparent` for the directory itself.
 
 Nothing records where the body starts or ends. It runs to the end of the
 file, and the fields stop at the first blank line — which is ahead of the
@@ -2683,6 +2695,53 @@ cmd_list() {
 # Rows, not a summary: aggregating is sort | uniq -c on this output, and a
 # ticket missing the field prints - so the gap shows up in that tally, which
 # is usually the question being asked.
+# One ticket, or less of it. pidly field prints one field across every ticket;
+# this is the other direction, every field of one ticket, and the flags are
+# the parts of an info file a caller would otherwise reach for with sed or
+# awk. The reference publishes those idioms and goes on publishing them: this
+# is a convenience over the format, never a replacement for reading it.
+#
+# -p prints the directory, which is the primitive every hand idiom needs —
+# resolving a number was required to do almost anything else by hand. It
+# invites callers to build on a path, which is principle 1 working, but a
+# path is not a licence to hand-edit lines that a command should write: see
+# set for title and needs, and reparent for the directory itself.
+cmd_show() {
+	_sh_mode=all _sh_k=""
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-p|--path)   _sh_mode=path; shift ;;
+		-F|--fields) _sh_mode=fields; shift ;;
+		-b|--body)   _sh_mode=body; shift ;;
+		-f|--field)
+			[ $# -ge 2 ] || die 'pidly show -f wants a field name'
+			_sh_mode=field; _sh_k=$2; shift 2 ;;
+		-*) die "unknown option $1" ;;
+		*)  break ;;
+		esac
+	done
+	[ $# -eq 1 ] || die 'usage: pidly show [-p|-F|-b|-f <name>] <number>'
+	# Not checked against the schema, for the reason field does not check
+	# either: a ticket written by hand is a legal ticket and may carry a key
+	# the schema never declared. An absent field prints nothing.
+	if [ "$_sh_mode" = field ]; then
+		case $_sh_k in
+		''|*:*) die "a field name, not '$_sh_k'" ;;
+		esac
+	fi
+	_r=$(root); _sh_d=$(ticket_dir "$_r" "$1"); _sh_f="$_sh_d/info"
+	[ "$_sh_mode" = path ] || [ -f "$_sh_f" ] ||
+		die "$1 has no info file in $_sh_d"
+	case $_sh_mode in
+	path)   printf '%s\n' "$_sh_d" ;;
+	all)    cat "$_sh_f" ;;
+	fields) awk 'NR > 3 { if ($0 == "") exit; print }' "$_sh_f" ;;
+	body)   get_body "$_sh_f" ;;
+	field)  get_field "$_sh_f" "$_sh_k" ;;
+	esac
+	return 0
+}
+
 cmd_field() {
 	_all=no
 	while [ $# -gt 0 ]; do
@@ -3031,6 +3090,9 @@ usage: pidly <command> [args]
   field [-a] <name>
                  that field's value in every open ticket, one row each, - for
                  a ticket that has no value; -a includes closed work
+  show [-p|-F|-b|-f <name>] <n>
+                 one ticket: the whole info file, or -p its directory, -F its
+                 field block, -b its body, -f one field's value
   tree           the hierarchy, closed tickets marked [x]
   check          report anything wrong; changes nothing, nonzero if it finds
                  something, so it can run in CI. Notes — drift a migration
@@ -3067,6 +3129,7 @@ close)   cmd_close "$@" ;;
 reopen)  cmd_reopen "$@" ;;
 list)    cmd_list "$@" ;;
 field)   cmd_field "$@" ;;
+show)    cmd_show "$@" ;;
 set)     cmd_set "$@" ;;
 fields)  cmd_fields "$@" ;;
 tree)    cmd_tree "$@" ;;
