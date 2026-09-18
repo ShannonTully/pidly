@@ -182,6 +182,41 @@ because the pattern is not in a file you can open:
    followed by a lease expiry, or <agent>@- <expiry>
 ```
 
+### A field this build does not know
+
+`check` is the only version-sensitive part of pidly. Everything else degrades
+because it is files: a build older than the tracker can still read, claim,
+close and reopen it.
+
+`check` could not, because it enforced a closed world. A field it had never
+heard of was a finding, so a tracker written by a newer pidly failed — every
+field of every ticket reported as an error, none of them true, and reported
+to whoever cloned the repository rather than to whoever upgraded.
+
+So a field that is in no schema is a **note**, not a finding. It is printed,
+because an unknown field is worth seeing whether it arrived from a newer
+build or from a typo, and it does not change the exit status. Its value is
+not read: nothing here knows what the field means, so nothing here judges it.
+When `check` sees one, it says what it is most likely to be:
+
+```
+note: 7: field 'severity' is not in the schema
+note: fields this build does not know
+      — this tracker may have been written by a newer pidly,
+        or the schema may be missing a stanza
+```
+
+A suggestion is all it can honestly be. **The tracker records no format
+version**, and must not: a version is state that can disagree with the files,
+which is the thing this format exists to avoid, and it would have to be
+maintained by every hand-edit.
+
+Nothing else is softened. A line that is not a field, a missing `title:`, a
+required field with no value, a schema this build cannot find — all still
+findings, all still nonzero. `pidly edit` follows the same rule from the other
+side: it saves a ticket carrying a field it does not know, saying so, and
+still refuses a file that is no longer a ticket.
+
 ## Telling Claude Code about it
 
 ```sh

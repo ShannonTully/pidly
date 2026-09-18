@@ -1,0 +1,98 @@
+claim:
+needs:
+title: What check does with a tracker a newer pidly wrote
+effort: M
+area: format
+created: 2026-09-17T06:47:11Z
+updated: 2026-09-18T21:57:25Z
+handoff:
+
+check is the only version-sensitive part of pidly. Everything else degrades
+gracefully because it is files: an older build can still read, claim, close
+and reopen a tracker written by a newer one.
+
+check cannot, because it enforces a closed world. A field it has never heard
+of is "not in schema.md", so any build older than 17 calls created and
+updated undeclared, and after 28 an older build will not find .pidly/schema
+at all and will treat every declared field as undeclared. The failure is
+loud and wrong, and it happens to the person who cloned the repo rather than
+to whoever upgraded.
+
+The tracker must not record a format version. That is state that can
+disagree with the files, which is the thing the format is built to avoid,
+and it would have to be maintained by every hand-edit.
+
+So the question is what check does about it:
+
+- Nothing. Release notes name format changes and an old build is the user's
+  problem. Cheapest, and the failure mode is a stranger's first run.
+- Soften unknown fields from a finding to a note, keeping the nonzero exit
+  for everything else. An unknown field is not damage — it is a field this
+  build does not know about, which is exactly what a newer tracker looks
+  like.
+- Let check say it: when it finds fields it does not know, print one line
+  suggesting the tracker may have been written by a newer pidly. Costs
+  nothing and turns a confusing failure into an obvious one.
+
+The second and third together look right, but this is a decision about what
+check is for — it reports damage, and a version gap is not damage.
+
+Bears on 29, which is what makes old builds reachable in the first place,
+but does not depend on it.
+
+Done when the decision is written down in the design and check behaves that
+way, with a test that an unknown field does not fail a tracker whose other
+findings are clean.
+
+
+Decided 2026-09-18, and implemented. The second and third options together,
+as the ticket expected.
+
+check reports damage, and a version gap is not damage. So a field in no
+schema is a note: printed, because an unknown field is worth seeing whether
+it came from a newer build or from a typo, and not a reason to fail. Its
+value is not read at all — nothing here knows what the field means, so
+nothing here may judge it against another field's pattern.
+
+When check sees one it says what it most likely is:
+
+  note: 7: field 'severity' is not in the schema
+  note: fields this build does not know
+        — this tracker may have been written by a newer pidly,
+          or the schema may be missing a stanza
+
+A suggestion is all it can honestly be, and the reason is the one the ticket
+gave: the tracker records no format version and must not, because a version
+is state that can disagree with the files.
+
+The case this exists for, measured on a tracker whose schema this build
+cannot find — which is exactly what a build older than 28 sees:
+
+  before   13 problems, twelve of them one per field per ticket, all wrong
+  after     1 problem: the schema does not exist, which is true
+
+Nothing else softened. A line that is not a field, a missing title:, a
+required field with no value, a schema that is absent, an unparsable claim —
+all still findings, all still nonzero.
+
+The part the ticket did not name: edit. It reads everything info_faults
+prints on stdout as a reason to refuse the save, so had the note gone there
+an older build could never edit a newer tracker — the same stranger-hostile
+failure, one command over. note() now writes to check's report when check is
+the caller and to stderr when it is not, so edit saves a ticket carrying a
+field it does not know, says so, and still refuses a file that is no longer
+a ticket.
+
+Written down in the design under "A field this build does not know", in the
+schema section, and .pidly/README.md regenerated from it.
+
+tests/newer.sh covers it: an unknown field does not fail an otherwise clean
+tracker, is still printed as a note, and carries the suggestion; a real fault
+alongside it still fails and the problem count counts only the fault; the
+suggestion is absent when there is nothing to suggest; a tracker with no
+schema at all reports one finding rather than one per field per ticket; edit
+saves the unknown field and still refuses structural damage; and a value that
+would fail another field's pattern is not judged by it.
+
+portable.sh caught the first draft of that suite using sed's GNU-only "3a
+text" — the guard 41 added, working on a file written after it.

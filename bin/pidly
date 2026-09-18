@@ -472,10 +472,19 @@ info_faults() {
 			*)   printf "%s: '%s' is not a field\n" "$_if_n" "$_if_line"
 			     continue ;;
 			esac
+			# A field this build does not know is a note, not a
+			# finding. check reports damage, and a version gap is not
+			# damage: a tracker written by a newer pidly carries
+			# fields this one has never heard of, and calling them
+			# errors fails the build for whoever cloned the
+			# repository rather than for whoever upgraded. The line
+			# is still printed — an unknown field is worth seeing,
+			# whether it came from a newer build or from a typo —
+			# and the value is not read, because nothing here knows
+			# what it means.
 			case $_FL_DECL in
 			*"$NL$_if_k$NL"*) ;;
-			*) printf "%s: field '%s' is not in the schema\n" \
-				"$_if_n" "$_if_k"
+			*) note "$_if_n: field '$_if_k' is not in the schema"
 			   continue ;;
 			esac
 			_if_v=${_if_line#*:}; _if_v=${_if_v# }
@@ -1576,6 +1585,41 @@ because the pattern is not in a file you can open:
 7: claim is 'garbage', which is not <pid>.<starttime>@<runtime>, alone or
    followed by a lease expiry, or <agent>@- <expiry>
 ```
+
+### A field this build does not know
+
+`check` is the only version-sensitive part of pidly. Everything else degrades
+because it is files: a build older than the tracker can still read, claim,
+close and reopen it.
+
+`check` could not, because it enforced a closed world. A field it had never
+heard of was a finding, so a tracker written by a newer pidly failed — every
+field of every ticket reported as an error, none of them true, and reported
+to whoever cloned the repository rather than to whoever upgraded.
+
+So a field that is in no schema is a **note**, not a finding. It is printed,
+because an unknown field is worth seeing whether it arrived from a newer
+build or from a typo, and it does not change the exit status. Its value is
+not read: nothing here knows what the field means, so nothing here judges it.
+When `check` sees one, it says what it is most likely to be:
+
+```
+note: 7: field 'severity' is not in the schema
+note: fields this build does not know
+      — this tracker may have been written by a newer pidly,
+        or the schema may be missing a stanza
+```
+
+A suggestion is all it can honestly be. **The tracker records no format
+version**, and must not: a version is state that can disagree with the files,
+which is the thing this format exists to avoid, and it would have to be
+maintained by every hand-edit.
+
+Nothing else is softened. A line that is not a field, a missing `title:`, a
+required field with no value, a schema this build cannot find — all still
+findings, all still nonzero. `pidly edit` follows the same rule from the other
+side: it saves a ticket carrying a field it does not know, saying so, and
+still refuses a file that is no longer a ticket.
 
 ## Telling Claude Code about it
 
@@ -3356,7 +3400,15 @@ flag() { printf '%s\n' "$*" >> "$PIDLY_REPORT"; }
 # written by hand is a legal ticket, and it will not carry a slot for every
 # field the schema has grown. Failing CI over that would make the format's
 # own promise — mkdir and an editor — the thing that breaks the build.
-note() { printf '%s\n' "$*" >> "$PIDLY_NOTES"; }
+# A note reaches the report when check is the caller and stderr otherwise.
+# info_faults raises one, and its other caller is edit, which has no report to
+# collect it — and must not mistake it for a reason to refuse the save, since
+# everything edit reads on stdout is a refusal.
+note() {
+	if [ -n "${PIDLY_NOTES:-}" ]
+	then printf '%s\n' "$*" >> "$PIDLY_NOTES"
+	else printf 'note: %s\n' "$*" >&2; fi
+}
 
 cmd_check() {
 	[ $# -eq 0 ] || die 'usage: pidly check'
@@ -3608,7 +3660,22 @@ $_e
 	done
 	rm -f "$_tmp"
 
-	[ -s "$PIDLY_NOTES" ] && sort "$PIDLY_NOTES" | sed 's/^/note: /'
+	if [ -s "$PIDLY_NOTES" ]; then
+		sort "$PIDLY_NOTES" | sed 's/^/note: /'
+		# Fields this build does not know have one likely explanation,
+		# and it is not the one a reader reaches for. Saying it turns a
+		# confusing result into an obvious one, and costs a grep over a
+		# file that is almost always empty.
+		#
+		# The tracker records no format version and must not: that is
+		# state that can disagree with the files, and it would have to
+		# be maintained by every hand-edit. So this is a suggestion,
+		# which is all it can honestly be.
+		grep -q "is not in the schema" "$PIDLY_NOTES" &&
+			printf '%s\n' "note: fields this build does not know" \
+				"      — this tracker may have been written by a newer pidly," \
+				"        or the schema may be missing a stanza"
+	fi
 	rm -f "$PIDLY_NOTES"
 	if [ -s "$PIDLY_REPORT" ]; then
 		sort "$PIDLY_REPORT"

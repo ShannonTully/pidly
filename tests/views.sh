@@ -143,7 +143,7 @@ sedi '2s/.*/needs:/' .pidly/1/info
 sedi '2s/.*/needs:/' .pidly/2/info
 
 insert_after 3 .pidly/2/info 'strayfield: x'
-has "an undeclared field" "$($PIDLY check 2>&1 || true)" "field 'strayfield' is not in the schema"
+has "an undeclared field, as a note" "$($PIDLY check 2>&1 || true)" "field 'strayfield' is not in the schema"
 sedi '/^strayfield:/d' .pidly/2/info
 
 mkdir .pidly/2/notes
