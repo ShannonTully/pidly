@@ -1,0 +1,51 @@
+claim:
+needs:
+title: migrate's staleness remedy cannot clear the guard it prints
+created: 2026-09-21T22:58:59Z
+updated: 2026-09-21T22:58:59Z
+effort: S
+area: cli
+handoff:
+
+Found 2026-09-21 while migrating ../idol, the corpus this guard was built
+against.
+
+The guard fires correctly. Its remedy line does not work:
+
+  Run 'bd export' there and try again, or --anyway to import what is here.
+
+Two things go wrong following it literally.
+
+`bd export` with no arguments writes JSONL to **stdout**. It does not touch
+.beads/issues.jsonl. So the first try changes nothing and the guard repeats
+itself unchanged, which reads like the guard is broken.
+
+`bd export -o .beads/issues.jsonl` does write the file — and does **not**
+update .beads/export-state.json. That sidecar is bd's bookkeeping for its own
+automatic export, and no bd subcommand refreshes it on demand (checked the
+full command list: no sync; export's only flags are --all, --include-infra,
+--no-memories, -o, --scrub).
+
+So the remedy moves the failure rather than clearing it:
+
+  before   contains  445 issues
+           104 ticket(s) the interaction log names are not in it
+  after    contains  445 issues
+           declares  332, so the file and its own state disagree
+
+The second message is accurate and is the more useful of the two. But there
+is now no way to satisfy this guard through bd, so every real migration ends
+at --anyway, which is the escape hatch rather than the path. A guard whose
+only exit is its own override teaches people to reach for the override.
+
+The file itself was genuinely fresh in that second state — exported minutes
+earlier. Only the sidecar was stale. That is the case worth separating: the
+count check reads export-state.json, and it is the one input that bd will not
+refresh.
+
+Worth considering: when the id-based check passes (no ticket the interaction
+log names is missing from the file), the file is demonstrably current and a
+disagreeing sidecar is a fact about bd's bookkeeping rather than about the
+export. That is the sharper signal, and the README already says so.
+
+Whatever the fix, the remedy line should say -o and name the file.

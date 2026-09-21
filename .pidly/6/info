@@ -4,8 +4,9 @@ title: Replace beads in the clockwork workflow
 effort: L
 area: cli
 created: 2026-09-17T03:06:47Z
-updated: 2026-09-18T22:58:17Z
-handoff:
+updated: 2026-09-21T23:01:13Z
+handoff: Verified both clockwork.toml edits are gated on the cog change: dropping bd_prefix fails validate.go:80 today, and [project.tracker] would guess a key name clockwork has not chosen. Three lines of work, waiting on clockwork-city.
+defer: clockwork-city can name a tracker: the Tracker interface in cog, filed there by the owner
 
 clockwork.toml and the project's skills are wired to bd. Once the format
 and script are stable, map the concepts across, migrate any existing bd
@@ -108,3 +109,82 @@ What belongs to this ticket, once clockwork can name a tracker:
                    and does not use
 
 Nothing was changed in clockwork-city. Blocked there, not here.
+
+Migration trialled 2026-09-21 against ../idol, the first project to move.
+
+Done as a dry run into a scratch tracker, not into idol: the import is the
+half that can be verified without committing anyone to anything.
+
+  bd export -o .beads/issues.jsonl      445 issues, 12 memories
+  pidly migrate beads ../idol/.beads --anyway
+  imported 445 tickets: 14 open, 431 closed
+  pidly check -> ok: 445 tickets, exit 0
+
+Fidelity checked against bd rather than taken on trust:
+
+  bd count            445    pidly              445
+  bd list open         12    pidly open          14
+                            = 12 + the 2 deferred, imported open as documented
+
+  needs renumbered     438 needs 441 440 439, from bd's ids
+  origin preserved     idol-6d5c, idol-xdyn.8 — commit messages still resolve
+  hierarchy kept       epic idol-xdyn -> 193, children nested, depth 6
+  bodies intact        full description, scope and test-integration prose
+
+Nothing was reported as a closed parent holding open work, and no in_progress
+claims needed dropping. Two edge kinds are named as not carried — 15
+discovered-from and 3 related — and neither is in the README's mapping table.
+Not wrong, just undocumented; both are reported rather than dropped quietly.
+
+Two things this turned up, neither of them about idol:
+
+The staleness guard's remedy cannot clear the guard. Filed as 55. It is why
+this import needed --anyway despite the export being minutes old.
+
+.beads/issues.jsonl was 7 weeks behind in idol before this — Aug 2 against an
+interaction log written today, 104 tickets missing. That is exactly the
+scenario migrate was built to refuse, found in the wild on the first project
+tried. The guard earned itself here.
+
+What this does NOT do, and the reason nothing was installed into idol:
+
+cog is still a beads client. A migrated idol would have a tracker convoy
+cannot read, so importing it today buys a second tracker to keep in step
+rather than a migration. The import is additive — .beads stays, bd keeps
+working — so the sequencing is free: idol can move whenever clockwork can
+name a tracker, and this run shows the import itself is not the risk.
+
+Still blocked on clockwork-city. Unchanged by this.
+
+Checked 2026-09-21 whether the two clockwork.toml edits can land ahead of the
+cog change. Neither can, and the reasons are in clockwork-city's sources
+rather than in judgement:
+
+  internal/config/load.go:60   toml.DecodeFile, and md.Undecoded() is never
+                               consulted — an unknown key is silently ignored
+  internal/config/validate.go:80
+                               if p.BdPrefix == "" -> "[project] bd_prefix is
+                               empty" as a validation issue
+
+So:
+
+Dropping bd_prefix = "pi" **breaks validation today**. cog requires the key of
+every project, whether or not that project has a beads database. The key stops
+being required as part of the same change that teaches cog to name a tracker —
+it is not a separate cleanup that can go first.
+
+Adding [project.tracker] kind = "pidly" is safe in the sense that nothing
+rejects it: the decoder ignores what it has no field for. That is exactly what
+makes it the wrong thing to write now. It would validate, do nothing, and
+commit this repository to a key name the clockwork ticket has not chosen yet.
+If that ticket picks a different shape, pidly is left carrying a dead key that
+check cannot see and validate will not complain about — a copy that drifts,
+which is the one thing this project refuses everywhere else.
+
+never_touch "**/.beads/**" is the only piece that is genuinely free: it is a
+glob in a list, nothing reads it structurally, and pidly has no .beads. Left
+in place anyway — it is inert, and removing one of three coupled lines just to
+show movement on the ticket would make the remaining two harder to find.
+
+Ticket 6 is finishable in one sitting once cog can name a tracker, and not
+before. The estimate stands: the pidly half is three lines.
