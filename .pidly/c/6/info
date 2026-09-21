@@ -1,12 +1,12 @@
-claim:
+claim:9910.158503301@31917916.u1000
 needs: 2
 title: Replace beads in the clockwork workflow
 effort: L
 area: cli
 created: 2026-09-17T03:06:47Z
-updated: 2026-09-21T23:01:13Z
+updated: 2026-09-21T23:13:51Z
 handoff: Verified both clockwork.toml edits are gated on the cog change: dropping bd_prefix fails validate.go:80 today, and [project.tracker] would guess a key name clockwork has not chosen. Three lines of work, waiting on clockwork-city.
-defer: clockwork-city can name a tracker: the Tracker interface in cog, filed there by the owner
+defer:
 
 clockwork.toml and the project's skills are wired to bd. Once the format
 and script are stable, map the concepts across, migrate any existing bd
@@ -188,3 +188,52 @@ show movement on the ticket would make the remaining two harder to find.
 
 Ticket 6 is finishable in one sitting once cog can name a tracker, and not
 before. The estimate stands: the pidly half is three lines.
+
+Done 2026-09-21. The clockwork work landed, so this ticket's own three lines
+could land with it.
+
+In clockwork-city, on branch tracker-interface:
+
+  dc23e78  extract a Tracker interface
+  a33c0f4  implement it for pidly, and let a project name one
+  c505f0c  document [project.tracker] in SPEC 11.2
+
+The estimate on this ticket was wrong, and worth correcting for next time.
+"a concrete Client struct, no interface" was true of internal/bd and false of
+everything above it: convoy, supervisor, messaging, approval and spec each
+already declared a narrow bdClient interface, and lookout takes a pre-fetched
+count specifically to avoid the concrete type. The extraction was mostly
+naming the union of what was already there. ~937 references was a grep count,
+not a work estimate; the real change was 27 files and no behaviour change.
+
+internal/pidly reads the tracker as files rather than shelling out, which is
+what this format asks for — the find-and-sed column in the guide is exactly
+that promise — and a 445-ticket tracker answers in 0.58s. Only mutations
+shell out, for the lock.
+
+Two things do not map, and are refused rather than faked:
+
+  assignee   a claim names a process that can be verified; writing a person
+             into it would invent the unverifiable claim this format refuses
+  labels     no home here, so routing by domain label does not reach a pidly
+             project unless it declares a labels field of its own
+
+Priority and kind DO map, because migrate writes fields of those names when
+importing from beads. Reading them back is symmetric, and idol's imported
+epic keeps its P1 and its type through the round trip.
+
+Finding, in cog rather than here: `cog spec` enumerated children with DepList
+alone, which works under beads only because a spec records its children as
+down-dependencies there. Against a real beads epic whose children are native
+parent-child, `cog spec show idol-xdyn` said "(no children — not a valid
+convoy target)" about five ready children. Fixed by unioning the three edge
+kinds as convoy already did, which repairs the beads path too.
+
+This repository is now a pidly project as far as clockwork is concerned:
+bd_prefix and the .beads boundary are gone from clockwork.toml, and
+[project.tracker] kind = "pidly" is in. `cog config validate` passes and
+`cog spec show 29` agrees with `pidly tree`.
+
+Not migrated: bowmaster, clockwork-city and idol stay on beads, which costs
+them nothing — an absent [project.tracker] means beads. idol's import is
+proven (see above) and can happen whenever its owner wants it.
