@@ -1,10 +1,10 @@
-claim:9910.158503301@31917916.u1000
+claim:
 needs: 2
 title: Replace beads in the clockwork workflow
 effort: L
 area: cli
 created: 2026-09-17T03:06:47Z
-updated: 2026-09-21T23:13:51Z
+updated: 2026-09-21T23:43:22Z
 handoff: Verified both clockwork.toml edits are gated on the cog change: dropping bd_prefix fails validate.go:80 today, and [project.tracker] would guess a key name clockwork has not chosen. Three lines of work, waiting on clockwork-city.
 defer:
 
