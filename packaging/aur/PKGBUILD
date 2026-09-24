@@ -1,0 +1,26 @@
+# Maintainer: Shannon Tully
+#
+# The PKGBUILD the AUR would carry (54), kept here so that publishing is
+# copying a file rather than writing one. pkgver must match VERSION in
+# bin/pidly, which tests/packaging.sh checks, and .SRCINFO must agree with
+# this file. The sha256 cannot be real until the tag is pushed; the README's
+# release steps say how to fill it in.
+
+pkgname=pidly
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='File-based issue tracker that needs no server or database'
+arch=('any')
+url='https://github.com/ShannonTully/pidly'
+license=('MIT')
+depends=('sh' 'coreutils' 'findutils' 'gawk' 'grep' 'sed')
+optdepends=('git: dating older tickets from history when pidly init adopts them')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('UNRELEASED')
+
+package() {
+	cd "$pkgname-$pkgver"
+	install -Dm755 bin/pidly "$pkgdir/usr/bin/pidly"
+	install -Dm644 docs/pidly.1 "$pkgdir/usr/share/man/man1/pidly.1"
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

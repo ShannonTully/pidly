@@ -1,0 +1,18 @@
+pkgbase = pidly
+	pkgdesc = File-based issue tracker that needs no server or database
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/ShannonTully/pidly
+	arch = any
+	license = MIT
+	depends = sh
+	depends = coreutils
+	depends = findutils
+	depends = gawk
+	depends = grep
+	depends = sed
+	optdepends = git: dating older tickets from history when pidly init adopts them
+	source = pidly-0.1.0.tar.gz::https://github.com/ShannonTully/pidly/archive/refs/tags/v0.1.0.tar.gz
+	sha256sums = UNRELEASED
+
+pkgname = pidly

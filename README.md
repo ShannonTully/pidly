@@ -114,6 +114,9 @@ chmod +x ~/.local/bin/pidly
 pidly --version
 ```
 
+A Homebrew formula and an AUR PKGBUILD are kept in `packaging/`, ready to
+submit but not yet published.
+
 Copying it into a repository that wants it works just as well — the script
 carries its own licence line and its own version, so a vendored copy answers
 for itself.
@@ -241,6 +244,19 @@ git push origin v0.1.0
 curl -sL https://github.com/ShannonTully/pidly/archive/refs/tags/v0.1.0.tar.gz |
     shasum -a 256
 ```
+
+The recipes in `packaging/` follow the script. With the version bumped in step
+1, change it in the formula's `url`, in `pkgver` in the PKGBUILD and in
+`.SRCINFO` too (putting `pkgrel` back to 1), then run `./tests/packaging.sh`,
+which fails until all of them name the script's VERSION. After step 4, put the
+checksum into the formula's `sha256`, the PKGBUILD's `sha256sums` and
+`.SRCINFO`. Before that it is `UNRELEASED`, which brew and makepkg both refuse,
+so an unreleased recipe cannot be installed by mistake.
+
+Nothing here publishes anything. The formula goes to a `homebrew-pidly` tap
+and the PKGBUILD and `.SRCINFO` go to the AUR, and both wait until publishing
+is approved. Where `makepkg` is available, `makepkg --printsrcinfo > .SRCINFO`
+regenerates `.SRCINFO` rather than you editing it by hand.
 
 Versions are `0.x` until the on-disk schema has been lived with by someone who
 did not write it. The tracker itself records no version and never will: that

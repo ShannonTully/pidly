@@ -1,8 +1,8 @@
-claim:
+claim:claude-code-825e553b@- 2026-09-24T23:37:24Z
 needs:
 title: Package recipes kept in the repo, ready to submit
 created: 2026-09-24T21:07:44Z
-updated: 2026-09-24T21:07:44Z
+updated: 2026-09-24T21:39:24Z
 effort: S
 area: cli
 handoff:
@@ -37,3 +37,20 @@ Done when both recipes are in the repo and name the current VERSION, the
 suite checks they agree with it, and the README's release steps cover
 updating them. Lint them with brew audit and namcap if either is ever to
 hand, and say in this ticket if they were not.
+
+
+Done 2026-09-24. packaging/homebrew/pidly.rb, packaging/aur/PKGBUILD and
+packaging/aur/.SRCINFO name 0.1.0 and carry sha256 UNRELEASED, which brew
+and makepkg both refuse, until a tag is pushed. The formula's test block runs
+pidly --version and pidly init, which works outside a git repo. The
+PKGBUILD lists coreutils, findutils, gawk, grep and sed; git is optional,
+because it is only used to date tickets that init adopts.
+
+tests/packaging.sh (in run.sh) holds all three to VERSION, the SPDX
+licence and each other's checksum and description, and checks the files
+they install exist. Checked that it fails on a bumped VERSION and a
+mismatched checksum. The README's release steps say how to update them.
+
+NOT linted: this machine has no brew, ruby, makepkg or namcap. Run brew
+audit --strict and namcap on them before 53 and 54 publish, and regenerate
+.SRCINFO with makepkg --printsrcinfo, since it was written by hand.
