@@ -144,6 +144,10 @@ out=$($PIDLY migrate beads "$tmp/stale" 2>&1) && rc=0 || rc=$?
 check "a count that disagrees with the file is refused" "$rc" "1"
 has "and both numbers are shown" "$out" "declares  9"
 has "with what to do about it" "$out" "bd export"
+# bd export with no -o writes to stdout, so a remedy without it leaves the
+# file as it was and the refusal repeats itself.
+has "saying -o and naming the file" "$out" "bd export -o $tmp/stale/issues.jsonl"
+has "and that bd export -o leaves the count behind" "$out" "does not update export-state.json"
 check "nothing was written" "$($PIDLY tree | grep -c . || true)" "0"
 
 # The sharper signal, and the one that needs no database: ids the interaction
@@ -155,10 +159,33 @@ printf '{"last_dolt_commit":"abc","timestamp":"2026-01-09T00:00:00Z","issues":5,
 out=$($PIDLY migrate beads "$tmp/stale" 2>&1) && rc=0 || rc=$?
 check "an id the log knows and the export does not is refused" "$rc" "1"
 has "and counted" "$out" "1 ticket(s) the interaction log names are not in it"
+check "where bd export -o does fix it, so --anyway is not offered as the way" \
+	"$(printf '%s\n' "$out" | grep -c 'does not update' || true)" "0"
 
 out=$($PIDLY migrate beads "$tmp/stale" --anyway 2>&1) && rc=0 || rc=$?
 check "--anyway imports it" "$rc" "0"
 has "while still saying it is behind" "$out" "importing anyway, as asked"
+check "and the result is a valid tracker" \
+	"$($PIDLY check >/dev/null 2>&1 && echo clean)" "clean"
+cd "$tmp"
+
+echo "a fresh export whose count bd left behind"
+# What bd export -o leaves: the file current, export-state.json not. With a
+# log naming nothing the file lacks, the count is a fact about bd's
+# bookkeeping and not about the export, and refusing it would leave --anyway
+# as the only way through for every real migration.
+mkdir -p skew && cp beads/issues.jsonl skew/
+printf '{"id":"int-1","kind":"field_change","issue_id":"p-1","created_at":"2026-02-01T00:00:00Z"}\n' \
+	> skew/interactions.jsonl
+printf '{"last_dolt_commit":"abc","timestamp":"2026-01-09T00:00:00Z","issues":9,"memories":1}\n' \
+	> skew/export-state.json
+mkdir -p skewed && cd skewed
+$PIDLY init >/dev/null
+out=$($PIDLY migrate beads "$tmp/skew" 2>&1) && rc=0 || rc=$?
+check "it imports without --anyway" "$rc" "0"
+has "saying the count disagrees" "$out" "export-state.json declares 9 issues"
+has "and why that is not a refusal" "$out" "so it is current"
+check "without calling the export behind" "$(printf '%s\n' "$out" | grep -c 'is behind' || true)" "0"
 check "and the result is a valid tracker" \
 	"$($PIDLY check >/dev/null 2>&1 && echo clean)" "clean"
 cd "$tmp"
@@ -194,7 +221,7 @@ check "an unknown source is refused" "$rc" "1"
 has "by name" "$out" "unknown source 'github'"
 out=$($PIDLY migrate beads "$tmp/nothing-here" 2>&1) && rc=0 || rc=$?
 check "and a directory with no export is too" "$rc" "1"
-has "saying what to run" "$out" "bd export"
+has "saying what to run" "$out" "bd export -o $tmp/nothing-here/issues.jsonl"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

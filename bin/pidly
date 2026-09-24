@@ -1679,10 +1679,17 @@ pidly: this export is behind the tracker it came from
   100 ticket(s) the interaction log names are not in it
 ```
 
-The count comes from `export-state.json` and is compared with the file. The
-sharper signal needs no database: ids the interaction log names that the
-export does not contain were created after it was taken. `bd export` fixes
-both. `--anyway` imports what is there and still says it is behind.
+The sharper signal needs no database: ids the interaction log names that the
+export does not contain were created after it was taken, and
+`bd export -o .beads/issues.jsonl` fixes it. `bd export` with no `-o` writes
+to stdout and changes nothing.
+
+The count comes from `export-state.json`, which is bd's bookkeeping for its
+own automatic export. `bd export -o` does not update it and nothing in bd does
+on demand, so with an interaction log a count that disagrees is reported and
+not refused. Without a log it is the only signal and still refuses, and
+`--anyway` is the way through for a file you have just exported. `--anyway`
+imports what is there and still says it is behind.
 
 Reading the database directly would mean depending on a database engine,
 which is the thing pidly exists not to have.
@@ -3909,7 +3916,7 @@ cmd_migrate() {
 
 	_mg_j="$_mg_src/issues.jsonl"
 	[ -f "$_mg_j" ] ||
-		die "no issues.jsonl in $_mg_src — run 'bd export' there first"
+		die "no issues.jsonl in $_mg_src — run 'bd export -o $_mg_j' first"
 
 	_mg_t="${TMPDIR:-/tmp}/pidly.migrate.$$"
 	mkdir -p "$_mg_t"
@@ -3943,9 +3950,22 @@ cmd_migrate() {
 		_mg_orphans=$(comm -23 "$_mg_t/seen" "$_mg_t/known" | grep -c . || true)
 	fi
 
-	_mg_stale=""
-	[ -n "$_mg_said" ] && [ "$_mg_said" != "$_mg_have" ] && _mg_stale=yes
+	# The count is the weaker signal, and with a log to hand it is not a
+	# signal about the file at all. export-state.json is bd's bookkeeping for
+	# its own automatic export: bd export -o writes the file and leaves the
+	# count where it was, and nothing in bd refreshes it on demand. If the
+	# log names nothing the file lacks, the file is current and a count that
+	# disagrees is a fact about bd, which is said and not refused. Without a
+	# log the count is all there is, so it still refuses.
+	_mg_stale="" _mg_skew=""
+	[ -n "$_mg_said" ] && [ "$_mg_said" != "$_mg_have" ] && _mg_skew=yes
 	[ "$_mg_orphans" -gt 0 ] && _mg_stale=yes
+	[ -n "$_mg_skew" ] && [ ! -f "$_mg_log" ] && _mg_stale=yes
+	if [ -n "$_mg_skew" ] && [ -z "$_mg_stale" ]; then
+		printf 'pidly: export-state.json declares %s issues and the file has %s\n' \
+			"$_mg_said" "$_mg_have" >&2
+		printf '  the interaction log names none the file lacks, so it is current\n' >&2
+	fi
 	if [ -n "$_mg_stale" ]; then
 		printf 'pidly: this export is behind the tracker it came from\n' >&2
 		[ -n "$_mg_when" ] &&
@@ -3959,7 +3979,10 @@ cmd_migrate() {
 				"$_mg_orphans" >&2
 		if [ -z "$_mg_any" ]; then
 			rm -rf "$_mg_t"
-			printf "\nRun 'bd export' there and try again, or --anyway to import what is here.\n" >&2
+			printf "\nRun 'bd export -o %s' and try again, or --anyway to import what is here.\n" \
+				"$_mg_j" >&2
+			[ "$_mg_orphans" -eq 0 ] &&
+				printf "bd export -o does not update export-state.json, so if the file is\nfresh already, --anyway is the way through.\n" >&2
 			exit 1
 		fi
 		printf '  importing anyway, as asked\n' >&2

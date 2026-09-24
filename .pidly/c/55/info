@@ -1,8 +1,8 @@
-claim:
+claim:claude-code-825e553b@- 2026-09-24T23:54:55Z
 needs:
 title: migrate's staleness remedy cannot clear the guard it prints
 created: 2026-09-21T22:58:59Z
-updated: 2026-09-21T22:58:59Z
+updated: 2026-09-24T21:59:24Z
 effort: S
 area: cli
 handoff:
@@ -49,3 +49,15 @@ disagreeing sidecar is a fact about bd's bookkeeping rather than about the
 export. That is the sharper signal, and the README already says so.
 
 Whatever the fix, the remedy line should say -o and name the file.
+
+
+Done 2026-09-24. With an interaction log, it alone decides: if it names
+nothing the file lacks, a count that disagrees with export-state.json is
+printed as a note and the import goes ahead. Without a log the count still
+refuses, and the message says bd export -o does not refresh the count, so
+--anyway is the way through for a file just exported. Both remedy lines now
+say bd export -o and give the full path to issues.jsonl. The reference text
+says the same, and tests/migrate.sh covers all three cases.
+
+Not re-run against ../idol: its .beads is gone, so the real corpus was not
+available.

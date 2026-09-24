@@ -266,10 +266,17 @@ pidly: this export is behind the tracker it came from
   100 ticket(s) the interaction log names are not in it
 ```
 
-The count comes from `export-state.json` and is compared with the file. The
-sharper signal needs no database: ids the interaction log names that the
-export does not contain were created after it was taken. `bd export` fixes
-both. `--anyway` imports what is there and still says it is behind.
+The sharper signal needs no database: ids the interaction log names that the
+export does not contain were created after it was taken, and
+`bd export -o .beads/issues.jsonl` fixes it. `bd export` with no `-o` writes
+to stdout and changes nothing.
+
+The count comes from `export-state.json`, which is bd's bookkeeping for its
+own automatic export. `bd export -o` does not update it and nothing in bd does
+on demand, so with an interaction log a count that disagrees is reported and
+not refused. Without a log it is the only signal and still refuses, and
+`--anyway` is the way through for a file you have just exported. `--anyway`
+imports what is there and still says it is behind.
 
 Reading the database directly would mean depending on a database engine,
 which is the thing pidly exists not to have.
