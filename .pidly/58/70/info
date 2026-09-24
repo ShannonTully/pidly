@@ -1,0 +1,22 @@
+claim:
+needs:
+title: Bring the docs back in line with the tool
+created: 2026-09-24T22:58:18Z
+updated: 2026-09-24T22:58:18Z
+effort: M
+area: docs
+handoff:
+
+- The generated skill (.claude/skills/pidly/SKILL.md:52) and .pidly/README.md
+  (:460, :547-548) use `-f effort=M`, which fails in a fresh project whose
+  schema only declares handoff. Fix it in the generators.
+- docs/DESIGN.md:861-863 lists 13 commands; set, needs, fields, reparent,
+  field, show, claude, man and migrate are missing.
+- docs/DESIGN.md:168 reads "## Names## Names".
+- DESIGN's Deferred section (:1227-1231) still lists the subagent session id
+  question that ticket 33 answered.
+- README.md:188-199's by-hand "what can I start" loop ignores defer: and
+  leases, and uses sort -V (not POSIX). Consider adding README.md to
+  tests/portable.sh.
+- VISUAL (read before EDITOR), TMPDIR, and exit 2 for usage versus 1 for a
+  refusal are undocumented.

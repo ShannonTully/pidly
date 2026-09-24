@@ -1,0 +1,13 @@
+claim:
+needs:
+title: Tidy the repository for contributors
+created: 2026-09-24T22:58:18Z
+updated: 2026-09-24T22:58:18Z
+effort: S
+area: docs
+handoff:
+
+- Add .claude/settings.local.json to .gitignore.
+- Add a short CONTRIBUTING (POSIX only, run tests/run.sh and pidly check)
+  and a CHANGELOG seeded with 0.1.0.
+- The AUR PKGBUILD depends on gawk, though the script runs on any awk.

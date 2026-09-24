@@ -1,0 +1,13 @@
+claim:
+needs:
+title: Accept or cleanly refuse durations with a leading zero
+created: 2026-09-24T22:57:36Z
+updated: 2026-09-24T22:57:36Z
+effort: S
+area: cli
+handoff:
+
+duration_seconds (bin/pidly:199-213) only checks for digits, so
+PIDLY_LEASE=08s reaches $((08 * 1)) and the shell prints "Illegal number: 08"
+before pidly's own message. Strip leading zeros (or refuse them) before the
+arithmetic, for PIDLY_LEASE and list --stale alike.

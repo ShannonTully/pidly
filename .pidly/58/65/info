@@ -1,0 +1,14 @@
+claim:
+needs:
+title: Use mktemp for temporary files
+created: 2026-09-24T22:57:48Z
+updated: 2026-09-24T22:57:48Z
+effort: S
+area: cli
+handoff:
+
+Several paths use predictable names in ${TMPDIR:-/tmp}: bin/pidly:798, 947
+(the edit draft, which holds the whole ticket), 1222, 3450-3451, 3662, and
+3921 (a directory made with mkdir -p). On a shared machine another user can
+pre-create or symlink them. match_open (bin/pidly:3026) already uses
+mktemp -d; do the same everywhere.

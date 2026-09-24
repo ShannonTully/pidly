@@ -1,0 +1,16 @@
+claim:
+needs:
+title: Match field names literally, not as grep patterns
+created: 2026-09-24T22:57:34Z
+updated: 2026-09-24T22:57:34Z
+effort: S
+area: cli
+handoff:
+
+bin/pidly:1097, 1106 and 2532 check a user-supplied field name with
+`grep -qx "$name"`, so it is a regex. `pidly set 1 'ar.a' x` succeeds against
+a schema declaring `area`, writing an off-schema field that skipped
+required: and match:.
+
+Done when the membership checks compare exactly (grep -qxF or awk), with a
+test that `ar.a` is refused.

@@ -1,0 +1,14 @@
+claim:
+needs:
+title: Accept -- so a title can start with a dash
+created: 2026-09-24T22:57:35Z
+updated: 2026-09-24T22:57:35Z
+effort: S
+area: cli
+handoff:
+
+`pidly new "-1 tests failing"` dies with "unknown option", and `--` is itself
+rejected as an unknown option (cmd_new, bin/pidly:2469). Check the other
+commands that take free text (release -m, set values) for the same thing.
+
+Done when `pidly new -- "-1 tests failing"` creates the ticket, with a test.

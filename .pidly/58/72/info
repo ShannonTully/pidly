@@ -1,0 +1,20 @@
+claim:
+needs:
+title: Small refactors the audit suggested
+created: 2026-09-24T22:58:19Z
+updated: 2026-09-24T22:58:19Z
+effort: M
+area: cli
+handoff:
+
+- The claim-line read `sed -n '1s/^claim://p'` is repeated at seven places
+  (bin/pidly:628, 641, 695, 723, 760, 781, 804); add read_claim and
+  read_needs helpers.
+- info_faults (bin/pidly:456-592) does five jobs in one function; split out
+  the header parse at least.
+- The test suites repeat the same ok/no/check preamble and mktemp setup;
+  move it into tests/lib.sh.
+- Internal PIDLY_KEY/VAL/BLK/NOTES/REPORT variables share the public PIDLY_
+  namespace; a _PIDLY_ prefix would separate them.
+- runtime() keeps only the first group of the boot id; say why in a
+  comment, or keep more of it.

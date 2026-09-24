@@ -1,0 +1,13 @@
+claim:
+needs:
+title: Read the start time from after the last ) in /proc/PID/stat
+created: 2026-09-24T22:58:15Z
+updated: 2026-09-24T22:58:15Z
+effort: S
+area: cli
+handoff:
+
+starttime (bin/pidly:136) takes awk's $22 of /proc/PID/stat. The second
+field is the process name in parentheses and may contain spaces, which
+shifts every later field, so liveness checks misjudge that process without
+any error. Strip up to the last ")" and count from there.

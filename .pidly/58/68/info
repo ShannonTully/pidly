@@ -1,0 +1,16 @@
+claim:
+needs:
+title: Run the tests in CI on Linux and macOS
+created: 2026-09-24T22:58:16Z
+updated: 2026-09-24T22:58:16Z
+effort: M
+area: cli
+handoff:
+
+There is no CI. Add a GitHub workflow that runs tests/run.sh on
+ubuntu-latest and macos-latest (with PIDLY_TEST_RACE lowered), plus
+`pidly check` and shellcheck with a .shellcheckrc set to shell=sh. The suites
+have never run on a Mac.
+
+Also make tests/run.sh find the *.sh suites itself rather than list them, so
+a new suite cannot be skipped by forgetting to add it.

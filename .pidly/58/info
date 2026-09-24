@@ -1,0 +1,11 @@
+claim:
+needs:
+title: Act on the 2026-09-24 audit
+created: 2026-09-24T22:57:33Z
+updated: 2026-09-24T22:57:33Z
+effort: L
+area: cli
+handoff:
+
+An audit of the script, docs, tests and packaging on 2026-09-24 turned up
+the findings filed as children here. Close this when they are all closed.

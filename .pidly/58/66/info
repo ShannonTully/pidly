@@ -1,0 +1,14 @@
+claim:
+needs:
+title: Check process start time where there is no /proc
+created: 2026-09-24T22:58:01Z
+updated: 2026-09-24T22:58:01Z
+effort: M
+area: cli
+handoff:
+
+Without /proc, holder_alive (bin/pidly:141-153) falls back to kill -0 and
+ignores the recorded start time, so on macOS and the BSDs a reused pid
+looks like a live claim — the case the pid.starttime scheme exists to
+catch. `ps -o lstart= -p PID` or similar could restore it; at the least,
+document the weaker guarantee in the README.

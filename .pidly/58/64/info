@@ -1,0 +1,14 @@
+claim:
+needs:
+title: Let a reap sweep skip a busy ticket instead of stopping
+created: 2026-09-24T22:57:48Z
+updated: 2026-09-24T22:57:48Z
+effort: S
+area: cli
+handoff:
+
+In the tracker-wide sweep (bin/pidly:800-807), reap_one runs inside the
+`map | while` subshell and dies when it cannot take a ticket's lock. die
+exits that subshell, so `|| true` never runs and the sweep stops at the
+first contended ticket. reap_one should return nonzero and the sweep should
+carry on, the way cmd_fields handles lock failure.

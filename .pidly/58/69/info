@@ -1,0 +1,12 @@
+claim:
+needs:
+title: Clear the claim when a ticket is closed
+created: 2026-09-24T22:58:17Z
+updated: 2026-09-24T22:58:17Z
+effort: S
+area: format
+handoff:
+
+Closed tickets .pidly/c/55 and .pidly/29/c/57 still carry claims from the
+session that closed them, and `pidly check` says nothing. Have close clear
+claim: (or check warn about a claim under c/), and clear those two.

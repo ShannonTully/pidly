@@ -1,0 +1,17 @@
+claim:
+needs:
+title: Refuse a ticket number that is not all digits
+created: 2026-09-24T22:57:34Z
+updated: 2026-09-24T22:57:34Z
+effort: S
+area: cli
+handoff:
+
+ticket_dir (bin/pidly:48) hands its argument straight to find -name, and no
+single-ticket command checks it first. `pidly close .n` exits 0 and moves
+the number registry into c/, which silently removes the merge-conflict
+protection it exists for. A glob such as '*' can match .pidly itself once
+the top level is empty.
+
+Done when every command that takes <n> refuses anything but digits, with a
+test for `close .n` and `close '*'`.

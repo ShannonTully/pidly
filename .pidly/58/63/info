@@ -1,0 +1,16 @@
+claim:
+needs:
+title: Make help a command and finish the reparent help line
+created: 2026-09-24T22:57:47Z
+updated: 2026-09-24T22:57:47Z
+effort: S
+area: cli
+handoff:
+
+`pidly help`, `-h` and `--help` fall through to usage on stderr and exit 2,
+though .pidly/README.md refers to `pidly help` as a thing that prints. `-V`
+works but is not documented beside --version.
+
+The reparent entry in the usage text (bin/pidly:4297-4299) stops at
+"refuses a destination that would". Finish it, then regenerate docs/pidly.1
+with `pidly man` and the agent files with `pidly agents`.
