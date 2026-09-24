@@ -2,10 +2,11 @@ claim:
 needs: 52
 title: An AUR package
 created: 2026-09-18T22:00:32Z
-updated: 2026-09-18T22:00:48Z
+updated: 2026-09-24T21:07:44Z
 effort: S
 area: cli
 handoff:
+defer: approval to publish pidly to package managers, which the owner does not have yet (2026-09-24)
 
 A PKGBUILD for a single script is a few lines, and is what an Arch user
 expects. Second in 29's list because it reaches fewer people than the tap,

@@ -1,0 +1,39 @@
+claim:
+needs:
+title: Package recipes kept in the repo, ready to submit
+created: 2026-09-24T21:07:44Z
+updated: 2026-09-24T21:07:44Z
+effort: S
+area: cli
+handoff:
+
+The owner's goal, 2026-09-24: pidly packaged so that when publishing is
+approved, it can go to every package manager without further work. Hosting
+itself is not approved yet, so 53 (tap) and 54 (AUR) are deferred until it is.
+
+Already done: the MIT licence (30), VERSION and --version (52), docs/pidly.1,
+the curl install and the release steps in the README. What is missing is the
+recipes themselves:
+
+  - packaging/homebrew/pidly.rb — the formula 53 would publish: desc,
+    homepage, url of the v<VERSION> tag tarball, sha256, license "MIT",
+    bin.install "bin/pidly", man1.install "docs/pidly.1", and a test block
+    that runs pidly --version.
+  - packaging/aur/PKGBUILD and .SRCINFO — the same for 54: pkgver, source,
+    sha256sums, install -Dm755 for the script and -Dm644 for the man page
+    and the licence.
+
+The checksum cannot be real until a tag is pushed, which is also publishing.
+So the recipes carry the version and a placeholder sha256, and step 4 of the
+README's release steps says where the checksum goes.
+
+Something in the suite should fail if a recipe names a version other than
+the one in bin/pidly, so a release cannot go out with stale recipes.
+
+Nothing here may make pidly depend on being installed: packaging is
+convenience, never capability, as 29 says.
+
+Done when both recipes are in the repo and name the current VERSION, the
+suite checks they agree with it, and the README's release steps cover
+updating them. Lint them with brew audit and namcap if either is ever to
+hand, and say in this ticket if they were not.

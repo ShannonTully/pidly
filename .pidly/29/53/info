@@ -2,10 +2,11 @@ claim:
 needs: 52 41
 title: A Homebrew tap
 created: 2026-09-18T22:00:31Z
-updated: 2026-09-18T22:00:48Z
+updated: 2026-09-24T21:07:44Z
 effort: M
 area: cli
 handoff:
+defer: approval to publish pidly to package managers, which the owner does not have yet (2026-09-24)
 
 The first route in 29's list: immediate, no gatekeeping, works on Linux as
 well as macOS, and the formula is about ten lines ending in
