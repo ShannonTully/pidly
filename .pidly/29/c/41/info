@@ -4,8 +4,8 @@ title: find -printf is GNU-only, so pidly does not run on macOS
 effort: M
 area: cli
 created: 2026-09-17T07:12:58Z
-updated: 2026-09-17T20:10:37Z
-handoff: Only the macOS run is left; script and suites are both portable now.
+updated: 2026-09-24T20:50:12Z
+handoff: Needs a run of tests/run.sh on a Mac; nothing else is left, and this machine cannot do it.
 
 map() is how every traversal in pidly works — list, tree, check, new, reap,
 init, and anything 25 or 27 adds — and it is written as:
@@ -72,3 +72,7 @@ wants; and the GNU-only sed forms, addr,+N and "3a text", are awk and
 head/sed -n instead. portable.sh greps the suites for all four, and skips
 itself and lib.sh, which have to write the spellings down to forbid and
 explain them.
+
+Re-checked 2026-09-24: every suite passes on bfs, portable.sh included. This machine has no BSD find, no container runtime and no ssh host configured, so the macOS run still needs someone with a Mac: run tests/run.sh there, and close this if it is clean.
+
+Closed 2026-09-24 without the macOS run, on the owner's call. If pidly fails on a Mac, open a new ticket against this one.
