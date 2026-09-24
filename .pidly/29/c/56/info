@@ -1,0 +1,10 @@
+claim:
+needs:
+title: Tidy the repository for going public
+created: 2026-09-24T18:43:07Z
+updated: 2026-09-24T20:21:41Z
+effort: S
+area: docs
+handoff:
+
+Before the repository is public: bring README.md up to date, drop the files that belong to the owner's machine rather than the project, shorten the AGENTS.md block and make it true for any schema, and drop the commentary header from the seeded schema, which .pidly/README.md already documents.

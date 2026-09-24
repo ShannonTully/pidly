@@ -29,8 +29,8 @@ check "nothing is written to a root .gitignore" "$([ -f .gitignore ] && echo yes
 echo "the seeded schema"
 check "has no extension, so no editor reflows it" \
 	"$([ -f .pidly/schema.md ] && echo yes || echo no)" "no"
-check "explains the structural lines it does not declare" \
-	"$(count 'claim:, needs: and title:' .pidly/schema)" "1"
+check "points at the reference for its format" \
+	"$(count '.pidly/README.md' .pidly/schema)" "1"
 check "ships the handoff field as a stanza" \
 	"$(grep -c '^field: handoff$' .pidly/schema)" "1"
 check "and nothing else opinionated" "$(grep -c '^field: effort' .pidly/schema || true)" "0"

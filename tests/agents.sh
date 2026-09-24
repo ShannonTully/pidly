@@ -72,7 +72,7 @@ check "the block explains state is location" "$(count 'State is location' CLAUDE
 check "it documents the lease path for cloud agents" "$(count 'PIDLY_LEASE' CLAUDE.md)" "1"
 check "it tells agents not to delete tickets" "$(count 'Never delete a ticket' CLAUDE.md)" "1"
 lines=$(awk '/pidly:begin/,/pidly:end/' CLAUDE.md | wc -l)
-if [ "$lines" -le 60 ]; then ok "the block stays small ($lines lines)"
+if [ "$lines" -le 40 ]; then ok "the block stays small ($lines lines)"
 else no "the block has grown to $lines lines; move detail to .pidly/README.md"; fi
 
 # Both documents once published PIDLY_AGENT=$SESSION_ID, and SESSION_ID is set

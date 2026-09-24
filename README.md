@@ -15,7 +15,8 @@ carry a lease with an expiry instead.
 
 ```
 .pidly/
-  schema
+  schema          # the project's own fields
+  .n/             # every number ever issued, so none is reused
   1/
     info          # ticket 1 itself
     3/            # an open child
@@ -46,8 +47,14 @@ Nothing else records it, so nothing else can disagree with it.
 `.pidly/1/3/8/` is ticket 8 under 3 under 1. `find .pidly -name 8` locates it
 and shows its ancestry in the same breath. Because the name never changes, a
 `8` written in a commit message today still resolves after the ticket is
-re-parented or closed. There's no counter file — the next number is the highest
-in the tree plus one.
+re-parented or closed.
+
+The next number is the highest ever issued plus one. Nothing holds a counter
+to keep current: `.pidly/.n/` has a file per number issued, written once and
+never changed, and the highest of those and of the tree is the answer. The
+registry is there for merges — two branches that both issue 5 write
+`.n/5` with different content, so git stops on a conflict naming the number
+instead of quietly merging two tickets 5. It is committed, not ignored.
 
 ## The ticket file
 
@@ -55,6 +62,8 @@ in the tree plus one.
 claim:
 needs: 1 4
 title: Write the pidly shell script
+created: 2026-09-16T21:43:59Z
+updated: 2026-09-17T08:02:11Z
 effort: L
 area: cli
 
@@ -62,7 +71,8 @@ A single POSIX shell script providing the ergonomics layer over the
 format. Every command must be something a person could have done by hand.
 ```
 
-Three fixed header lines, then your own fields, then a blank line, then the
+Three fixed header lines, then pidly's `created` and `updated` stamps and
+whatever fields your `.pidly/schema` declares, then a blank line, then the
 body to the end of the file. Lines 1 and 2 are the status pair: an agent
 deciding what to pick up reads those two and nothing else, so *what can I
 start right now?* never opens a body. Nothing records where the body starts
@@ -85,7 +95,8 @@ files.
 Early, but whole. The format is settled and the script implements every
 command it is meant to have — `init`, `new`, `claim`, `release`, `status`,
 `reap`, `edit`, `set`, `needs`, `fields`, `close`, `reopen`, `reparent`,
-`list`, `field`, `show`, `tree`, `check`, `agents`, `claude`, `man` — each
+`list`, `field`, `show`, `tree`, `check`, `agents`, `claude`, `man`,
+`migrate` — each
 of them something a person could have done with `mkdir`, `mv` and an editor.
 See [docs/DESIGN.md](docs/DESIGN.md) for the layout, the reasoning behind it,
 and the questions still open. The work itself is tracked in `.pidly/`, using
@@ -131,7 +142,7 @@ pidly agents          # writes a section into AGENTS.md, CLAUDE.md, ...
 pidly agents -f docs/AGENTS.md
 ```
 
-This writes two things: a ~50 line summary into `AGENTS.md`, between
+This writes two things: a short summary into `AGENTS.md`, between
 `<!-- pidly:begin -->` and `<!-- pidly:end -->` so re-running updates it in
 place and leaves the rest of the file alone; and `.pidly/README.md`, a fuller
 reference the summary points at.
@@ -142,6 +153,11 @@ is actually needed. Both explain the format before the commands, so they still
 work for an agent in a checkout where pidly isn't installed — and both ship
 inside the tracker, since a project using pidly doesn't have this repo's
 design document.
+
+For Claude Code, `pidly claude` adds a skill, `/pidly-next`, `/pidly-mine`
+and `/pidly-drop`, and a permissions block that allows the read-only
+commands. `pidly check` notices when any of these generated files have
+drifted from what this version of pidly would write.
 
 ## Tests
 
@@ -190,7 +206,7 @@ PIDLY_PID=$$ pidly claim 7
 pidly status 7
 
 # a cloud agent, which has no pid anyone here can check, leases instead
-PIDLY_AGENT=$SESSION_ID PIDLY_LEASE=2h pidly claim 7
+PIDLY_AGENT=ci-run-4821 PIDLY_LEASE=2h pidly claim 7   # a name you pick
 
 # close a ticket: move it into its container's c/
 mkdir -p .pidly/c && mv .pidly/2 .pidly/c/
