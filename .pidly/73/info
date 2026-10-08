@@ -1,0 +1,42 @@
+claim:
+needs:
+title: Check a ticket's health whenever a command touches it, and warn on drift
+created: 2026-10-08T01:19:58Z
+updated: 2026-10-08T01:19:58Z
+effort: M
+area: cli
+handoff:
+
+Drift is only found when someone runs `pidly check`, and only edit validates
+the ticket it writes (info_faults, bin/pidly:969). claim, release, set,
+needs, close, reopen, reparent and reap all read and rewrite an info file
+without looking at it, so a hand-edit that broke a ticket, a field the
+schema has since tightened, or a needs: naming nothing is carried along
+silently until the next full check — usually by someone else.
+
+Every write command already has the ticket open under the lock. Run
+info_faults on that one ticket (and the structural checks that concern it:
+a claim under c/, an open child under a closed parent, a needs: nothing
+resolves) after the write, and print what it finds to stderr as warnings.
+
+Constraints:
+
+- Warn, never refuse. The command did what it was asked; a drifted ticket
+  must stay claimable and closable, or the check becomes the thing that
+  blocks work. Exit status unchanged.
+- One ticket, not the tree. The cost has to stay negligible next to the
+  command itself; the whole-tracker scan stays in check.
+- Same wording as check, from the same code, so a warning can be looked up
+  and the two never disagree. Notes (unknown field, missing slot) stay
+  notes, or a ticket written by hand nags on every touch.
+- Read-only commands (list, show, tree) stay quiet — a listing full of
+  warnings is noise. Possibly show, since it is looking at one ticket
+  anyway; decide when building it.
+- A way to silence it (PIDLY_QUIET or similar) for scripts and the tests.
+
+Open question: whether to check the ticket before the write too, so a
+warning can say "was already wrong" versus "this command made it wrong" —
+the second would be a pidly bug and worth saying loudly.
+
+Related: 69 (claim left on a closed ticket) is one of the drifts this would
+have surfaced at the moment close ran.
