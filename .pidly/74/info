@@ -1,0 +1,51 @@
+claim:
+needs:
+title: Refuse empty stdin as a body in edit -a, edit -b and new
+created: 2026-10-22T04:25:36Z
+updated: 2026-10-22T04:25:36Z
+effort: S
+area: cli
+handoff:
+
+Reported from IDOL against 0.1.0; reproduced on 0bc4fcb.
+
+`edit -a`, `edit -b` and `new` read the body from stdin and take empty
+stdin as an empty body. Each one reports success and exits 0:
+
+- `edit -a N </dev/null` prints `N updated` and appends nothing.
+- `edit -b N </dev/null` prints `N updated` and erases the body. The
+  half-body guard (README "-b also refuses…") only covers bodies of at
+  least 200 bytes, so a short body goes without `-f`. On a 640-byte
+  body it refuses correctly.
+- `new T </dev/null` creates a ticket with no body.
+
+How it bit: IDOL's agent instructions say to run pidly with `</dev/null`.
+An agent that also piped a body in wrote
+`printf 'note\n' | pidly edit -a 7 </dev/null`. The later redirect
+replaces the pipe, pidly said `7 updated`, and the closing notes on two
+tickets were lost. The shell line is the agent's mistake. pidly's part is
+reporting success for a write that did nothing, which hid it.
+
+Repro:
+
+```sh
+mkdir t && cd t && git init -q && pidly init </dev/null
+printf 'The original body, several words long.\n' | pidly new t
+pidly edit -a 1 </dev/null; echo "rc=$?"   # 1 updated, rc=0, nothing added
+pidly edit -b 1 </dev/null; echo "rc=$?"   # 1 updated, rc=0, body gone
+pidly new t2 </dev/null;    echo "rc=$?"   # rc=0, ticket 2 has no body
+```
+
+Direction (not decided):
+
+- `edit -a` with empty stdin refuses and exits non-zero. Appending
+  nothing is never what was meant, so there is nothing to override.
+- `edit -b` and `new` refuse an empty body unless `-f` is given. An empty
+  body is a legal ticket, so it has to stay reachable on purpose.
+
+Ask the owner before building: refusing empty stdin changes visible CLI
+behaviour. Decide whether `-f` is the right escape for `new`, and whether
+"empty" means zero bytes or whitespace only.
+
+Not confirmed: the report says `updated:` is stamped on the no-op `-a`.
+The repro ran within one second, so I couldn't see whether it was.
