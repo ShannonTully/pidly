@@ -2,7 +2,7 @@ claim:
 needs:
 title: Refuse empty stdin as a body in edit -a, edit -b and new
 created: 2026-10-22T04:25:36Z
-updated: 2026-10-22T04:25:36Z
+updated: 2026-10-22T04:41:34Z
 effort: S
 area: cli
 handoff:
@@ -49,3 +49,18 @@ behaviour. Decide whether `-f` is the right escape for `new`, and whether
 
 Not confirmed: the report says `updated:` is stamped on the no-op `-a`.
 The repro ran within one second, so I couldn't see whether it was.
+
+
+## Decided, 2026-10-21 (owner)
+
+- `edit -a` with empty stdin refuses and exits 1, with no override.
+  Whitespace-only stdin counts as empty. Nothing is written and updated:
+  is not bumped. Message along the lines of
+  `pidly: 7: nothing on stdin to append`.
+- `edit -b` with empty (or whitespace-only) stdin refuses unless -f, at any
+  body size, separately from the 200-byte half-body guard. Message along
+  the lines of `pidly: 7: stdin is empty, so this would erase the body:
+  re-run with -f if that is deliberate`.
+- `new` is left as is. A title-only ticket made with `new "t" </dev/null` is
+  the normal idiom (the tests use it 69 times), nothing is lost, and new's
+  -f already means a field, so there is no free override flag.

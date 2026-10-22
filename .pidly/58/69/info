@@ -2,7 +2,7 @@ claim:
 needs:
 title: Clear the claim when a ticket is closed
 created: 2026-09-24T22:58:17Z
-updated: 2026-09-24T22:58:17Z
+updated: 2026-10-22T04:41:34Z
 effort: S
 area: format
 handoff:
@@ -10,3 +10,11 @@ handoff:
 Closed tickets .pidly/c/55 and .pidly/29/c/57 still carry claims from the
 session that closed them, and `pidly check` says nothing. Have close clear
 claim: (or check warn about a claim under c/), and clear those two.
+
+
+## Decided, 2026-10-21 (owner)
+
+- Do both: close empties claim: as it moves the ticket, and check warns
+  (a warning, not a fault) about any claim under c/, which catches a close
+  done by hand with mv.
+- Clear the stale claims on c/55 and 29/c/57 in the same commit.
