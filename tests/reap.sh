@@ -78,8 +78,9 @@ check "the live claim is untouched" \
 $PIDLY release 2 >/dev/null
 
 echo "closed work"
+# By hand: close empties claim:, so a claim reaches c/ only through an mv.
 dead_claim 1
-$PIDLY close 1 >/dev/null
+mkdir -p .pidly/c && mv .pidly/1 .pidly/c/
 has "a dead claim on a finished ticket is still swept" "$($PIDLY reap)" "1: cleared"
 check "and check is clean afterwards" "$($PIDLY check >/dev/null && echo clean)" "clean"
 

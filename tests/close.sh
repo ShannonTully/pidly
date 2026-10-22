@@ -85,6 +85,35 @@ has "naming the parent and the child" "$out" "1: closed, but child 2 is open"
 $PIDLY reopen 2 >/dev/null
 check "and reopen is the fix" "$($PIDLY check >/dev/null && echo clean)" "clean"
 
+echo "closing a claimed ticket"
+$PIDLY claim 4 >/dev/null
+updated=$(sed -n 's/^updated: //p' "$($PIDLY show -p 4)/info")
+$PIDLY close 4 >/dev/null
+check "empties claim:" "$(sed -n 1p .pidly/c/4/info)" "claim:"
+check "and leaves updated alone, as a move always has" \
+	"$(sed -n 's/^updated: //p' .pidly/c/4/info)" "$updated"
+check "and leaves nothing of its lock behind" "$(ls -A .pidly/c/4)" "info"
+check "and check is content" "$($PIDLY check >/dev/null && echo clean)" "clean"
+$PIDLY reopen 4 >/dev/null
+
+echo "a claim left on a closed ticket"
+$PIDLY claim 4 >/dev/null
+held=$(sed -n '1s/^claim://p' .pidly/4/info)
+mkdir -p .pidly/c && mv .pidly/4 .pidly/c/          # closed by hand
+out=$($PIDLY check 2>&1) && rc=0 || rc=$?
+check "is a warning, not a problem" "$rc" "0"
+has "check names the ticket and the holder" "$out" \
+	"note: 4: closed, but still claimed by $held"
+# A dead holder on a closed ticket is still only the warning: nobody can
+# be working on finished work, so "which is gone" adds nothing.
+printf 'claim:999999.1@nobody.u0\n' > "$tmp/l1"
+sed 1d .pidly/c/4/info >> "$tmp/l1" && mv "$tmp/l1" .pidly/c/4/info
+out=$($PIDLY check 2>&1) && rc=0 || rc=$?
+check "even when the holder is gone" "$rc" "0"
+has "it is the same warning" "$out" "note: 4: closed, but still claimed by 999999.1@nobody.u0"
+sed '1s/^claim:.*/claim:/' .pidly/c/4/info > "$tmp/l1" && mv "$tmp/l1" .pidly/c/4/info
+$PIDLY reopen 4 >/dev/null
+
 echo "reparent"
 at() { dirname "$($PIDLY show -p "$1")"; }
 $PIDLY new "root three" </dev/null >/dev/null            # 5

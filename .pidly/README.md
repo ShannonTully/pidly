@@ -52,9 +52,9 @@ ticket, which is what the stamp is asked about.
 A write that landed on every ticket at once does not bump it: `pidly fields`
 adds a slot to the whole tracker and says nothing about any one piece of
 work, and stamping all of them would flatten `list --stale` on the day it
-ran. Nor do `close` and `reopen`, which move a directory without opening the
-file, and nor can an edit made by hand or with `sed`, which cannot call
-anything at all.
+ran. Nor do `close` and `reopen`, which are moves — the one write either
+makes is `close` emptying `claim:` — and nor can an edit made by hand or with
+`sed`, which cannot call anything at all.
 
 So `updated` is not the file's mtime and not a record of every write. It is
 *when something last happened to this ticket, as far as pidly saw*. Use
@@ -641,6 +641,10 @@ pidly reopen 12
 
 A ticket **cannot close while it has children outside its own `c/`**. That is
 what keeps a finished tree from containing live work.
+
+`close` also empties `claim:`, because finished work is held by nobody. A
+close done by hand should do the same; `check` notes a claim it finds under a
+`c/`, without failing.
 
 `reopen` moves it back, and **cascades upward**: if a closed ancestor holds
 it, that ancestor reopens too, one move per level. If a subtask needs redoing

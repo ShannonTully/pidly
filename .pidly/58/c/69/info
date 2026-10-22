@@ -2,7 +2,7 @@ claim:
 needs:
 title: Clear the claim when a ticket is closed
 created: 2026-09-24T22:58:17Z
-updated: 2026-10-22T04:41:34Z
+updated: 2026-10-22T04:42:07Z
 effort: S
 area: format
 handoff:

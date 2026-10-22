@@ -989,9 +989,9 @@ edit_in_editor() {
 
 # --- close / reopen --------------------------------------------------------
 #
-# Both commands are moves and nothing else. Neither writes to an info file,
-# because there is no status field to keep in step: state is the path, so
-# moving the directory is the whole operation.
+# Both commands are moves. There is no status field to keep in step: state is
+# the path, so moving the directory is the operation. The one write is close
+# emptying claim:, because finished work is held by nobody.
 
 # A ticket is closed when it sits in its container's c/ — that is, when its
 # immediate parent directory is named c. Not "the path contains /c/": that is
@@ -1304,8 +1304,24 @@ cmd_close() {
 
 	# An open child in a finished tree is the one thing the layout rules
 	# out, and the parent is the only place that can refuse it.
+	lock "$_d" || die "$1 is being modified by another process"
 	_kids=$(open_children "$_d" | tr '\n' ' ')
-	[ -z "$_kids" ] || die "$1 has open children: ${_kids%% } — close them first"
+	if [ -n "$_kids" ]; then
+		unlock "$_d"
+		die "$1 has open children: ${_kids%% } — close them first"
+	fi
+
+	# Finished work is held by nobody. A claim carried into c/ would say
+	# someone is still on it, so it is emptied on the way — and only when
+	# there is one, so closing an unclaimed ticket stays a pure move.
+	# updated is left alone either way: close is a move, not an event the
+	# stamp records.
+	_held=$(sed -n '1s/^claim://p' "$_d/info")
+	[ -z "$_held" ] || set_line "$_d/info" 1 'claim:'
+	# Unlocked before the move, not after: the lock is a hard link, and
+	# where link(2) is emulated — proot's link2symlink, on Android — moving
+	# the directory under it strands the emulation's files in the ticket.
+	unlock "$_d"
 
 	_cdir=$(dirname "$_d")/c
 	mkdir -p "$_cdir"
@@ -1488,9 +1504,9 @@ ticket, which is what the stamp is asked about.
 A write that landed on every ticket at once does not bump it: `pidly fields`
 adds a slot to the whole tracker and says nothing about any one piece of
 work, and stamping all of them would flatten `list --stale` on the day it
-ran. Nor do `close` and `reopen`, which move a directory without opening the
-file, and nor can an edit made by hand or with `sed`, which cannot call
-anything at all.
+ran. Nor do `close` and `reopen`, which are moves — the one write either
+makes is `close` emptying `claim:` — and nor can an edit made by hand or with
+`sed`, which cannot call anything at all.
 
 So `updated` is not the file's mtime and not a record of every write. It is
 *when something last happened to this ticket, as far as pidly saw*. Use
@@ -2054,6 +2070,10 @@ pidly reopen 12
 
 A ticket **cannot close while it has children outside its own `c/`**. That is
 what keeps a finished tree from containing live work.
+
+`close` also empties `claim:`, because finished work is held by nobody. A
+close done by hand should do the same; `check` notes a claim it finds under a
+`c/`, without failing.
 
 `reopen` moves it back, and **cascades upward**: if a closed ancestor holds
 it, that ancestor reopens too, one move per level. If a subtask needs redoing
@@ -2772,8 +2792,9 @@ known_fields() {
 }
 
 # Record that a ticket changed. Called by everything that writes to info,
-# and by nothing else: close and reopen move a directory without opening the
-# file, and a hand-edit cannot call anything at all. Callers hold the lock.
+# and by nothing else: close and reopen are moves, and close emptying claim:
+# on the way is not an event of its own; a hand-edit cannot call anything at
+# all. Callers hold the lock.
 mark_updated() { set_field "$1" updated "$(now_iso)"; }
 
 # --- the schema ------------------------------------------------------------
@@ -3530,8 +3551,12 @@ $_dep
 				flag "$_num: closed, but child $_sn is open"
 		done
 
-		# Claims and locks whose holder is gone.
-		if [ -n "$_held" ]; then
+		# Claims and locks whose holder is gone. A claim on closed work
+		# is a note whoever holds it: close empties claim:, so this is a
+		# close done by hand with mv, and nobody is working on it.
+		if [ -n "$_held" ] && in_closed "$_r" "$_path"; then
+			note "$_num: closed, but still claimed by $_held"
+		elif [ -n "$_held" ]; then
 			case $(claim_state "$_r" "$_held") in
 			dead) flag "$_num: claimed by $_held, which is gone" ;;
 			esac
@@ -4291,7 +4316,7 @@ usage: pidly <command> [args]
                  without retyping the others
   fields         give every ticket a slot for every field the schema declares,
                  adding keys only — never removing, reordering or restamping
-  close <n>      finish it: move it into its container's c/
+  close <n>      finish it: move it into its container's c/ and empty its claim
   reopen <n>     move it back, reopening any closed ancestors
   reparent [-r] <n> <parent>
                  move a ticket under another one, or -r to the top. Never
@@ -4310,7 +4335,8 @@ usage: pidly <command> [args]
   tree           the hierarchy, closed tickets marked [x]
   check          report anything wrong; changes nothing, nonzero if it finds
                  something, so it can run in CI. Notes — drift a migration
-                 would close — are printed without failing it
+                 would close, a claim left on closed work — are printed
+                 without failing it
   agents [-f F]  write .pidly/README.md and a summary into AGENTS.md (or F),
                  replacing the summary if already present
   claude         write the Claude Code integration into .claude: a skill, the

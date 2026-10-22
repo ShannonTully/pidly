@@ -50,7 +50,7 @@ gives the equivalent of every command below.
                  without retyping the others
   fields         give every ticket a slot for every field the schema declares,
                  adding keys only \(em never removing, reordering or restamping
-  close <n>      finish it: move it into its container's c/
+  close <n>      finish it: move it into its container's c/ and empty its claim
   reopen <n>     move it back, reopening any closed ancestors
   reparent [-r] <n> <parent>
                  move a ticket under another one, or -r to the top. Never
@@ -69,7 +69,8 @@ gives the equivalent of every command below.
   tree           the hierarchy, closed tickets marked [x]
   check          report anything wrong; changes nothing, nonzero if it finds
                  something, so it can run in CI. Notes \(em drift a migration
-                 would close \(em are printed without failing it
+                 would close, a claim left on closed work \(em are printed
+                 without failing it
   agents [-f F]  write .pidly/README.md and a summary into AGENTS.md (or F),
                  replacing the summary if already present
   claude         write the Claude Code integration into .claude: a skill, the

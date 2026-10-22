@@ -211,7 +211,8 @@ pidly status 7
 # a cloud agent, which has no pid anyone here can check, leases instead
 PIDLY_AGENT=ci-run-4821 PIDLY_LEASE=2h pidly claim 7   # a name you pick
 
-# close a ticket: move it into its container's c/
+# close a ticket: empty its claim, then move it into its container's c/
+sed '1s/.*/claim:/' .pidly/2/info > t && mv t .pidly/2/info
 mkdir -p .pidly/c && mv .pidly/2 .pidly/c/
 ```
 

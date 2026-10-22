@@ -107,6 +107,12 @@ A ticket cannot close while it has open children — children sitting directly i
 it rather than in its `c/`. That is what keeps a closed tree from containing
 live work.
 
+Closing also empties `claim:`: finished work is held by nobody, and a claim
+carried into `c/` would read as someone still on it. A close done by hand with
+`mv` does not, so `check` reports a claim under a `c/` — as a note rather than
+a problem, whoever the holder is, because the claim is stale but no work is at
+risk.
+
 **Reopening cascades upward.** Moving a ticket out of its container's `c/` is
 only half the job: if that container is itself closed, a closed tree now holds
 live work. So reopening a ticket reopens every closed ancestor between it and
@@ -751,9 +757,10 @@ It records an event on one ticket — `claim`, `release`, `edit`, `set`,
 says something about *this* ticket: `pidly fields` writes to every info in
 the tracker and says nothing about any single piece of work, so it leaves the
 stamp alone, and stamping the lot would flatten `list --stale` the day it
-ran. `close` and `reopen` do not bump it either, because they move a
-directory without opening the file, and a hand-edit cannot bump anything at
-all. So it means *when something last happened to this ticket, as far as
+ran. `close` and `reopen` do not bump it either, because they are moves —
+the one write either makes is `close` emptying `claim:`, which is part of the
+close rather than an event of its own — and a hand-edit cannot bump anything
+at all. So it means *when something last happened to this ticket, as far as
 pidly saw* — not mtime, and not a log of writes.
 
 Claiming is on the bumping side of that line, which is worth saying because
