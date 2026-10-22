@@ -40,7 +40,10 @@ n=$($PIDLY new "after a close" </dev/null | cut -f1)
 check "closed tickets still count toward the next number" "$n" "4"
 
 echo "the header"
-$PIDLY new "titled" </dev/null >/dev/null
+# A title-only ticket from empty stdin is the normal idiom, and stays one:
+# edit refuses empty stdin, new does not (ticket 74).
+$PIDLY new "titled" </dev/null >/dev/null && rc=0 || rc=$?
+check "empty stdin makes a ticket with no body" "$rc" "0"
 f=.pidly/5/info
 check "line 1 is an empty claim" "$(sed -n 1p $f)" "claim:"
 check "line 2 is an empty needs" "$(sed -n 2p $f)" "needs:"

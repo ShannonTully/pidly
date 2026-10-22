@@ -533,6 +533,20 @@ The numbers are arbitrary and stated rather than tuned. The point is to catch
 a reconstruction that dropped most of the file, not to police editing, and
 `-f` is there for the times a body really is being cut down.
 
+Empty stdin — nothing, or only whitespace — is refused by both. It is what a
+trailing `</dev/null` leaves after it replaces the pipe that carried the text,
+and a write that did nothing used to report success:
+
+```
+pidly: 7: nothing on stdin to append
+pidly: 7: stdin is empty, so this would erase the body: re-run with -f if
+       that is deliberate
+```
+
+`-a` has no override, since appending nothing is never what was meant. `-b`
+takes `-f` at any body size, because an empty body is a legal ticket. `new`
+is not affected: `pidly new "title" </dev/null` makes a title-only ticket.
+
 By hand it is your editor, or `cat >> .pidly/7/info` — nothing records where
 a body starts or ends, so appending is appending. What the command adds is the
 lock, so an edit and a claim landing together cannot lose each other, and a

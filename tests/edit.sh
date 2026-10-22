@@ -48,7 +48,7 @@ check "gains one, with its separator" \
 check "and is still valid" "$($PIDLY check >/dev/null && echo clean)" "clean"
 
 echo "emptying a body"
-: | $PIDLY edit -b 2 >/dev/null
+: | $PIDLY edit -f -b 2 >/dev/null
 check "leaves no body" "$(awk 'b { print } !b && $0 == "" { b = 1 }' .pidly/2/info)" ""
 check "and a valid ticket" "$($PIDLY check >/dev/null && echo clean)" "clean"
 
@@ -166,6 +166,47 @@ printf 'x\n' | $PIDLY edit -b "$sn" >/dev/null && rc=0 || rc=$?
 check "a body with little to lose is not policed" "$rc" "0"
 printf 'appended\n' | $PIDLY edit -a "$pn" >/dev/null && rc=0 || rc=$?
 check "append is never guarded" "$rc" "0"
+
+echo "empty stdin"
+# A later </dev/null replaces a pipe, and the write it meant reported
+# success while doing nothing (ticket 74). Each refusal touches nothing,
+# updated: included, so the file is compared whole.
+$PIDLY new "short" >/dev/null <<'B'
+A short body, well under the guard.
+B
+en=$($PIDLY list -a | awk 'END{print $1}')
+ef=.pidly/$en/info
+before=$(cat "$ef")
+out=$($PIDLY edit -a "$en" </dev/null 2>&1) && rc=0 || rc=$?
+check "-a with empty stdin is refused" "$rc" "1"
+has "and says there was nothing" "$out" "$en: nothing on stdin to append"
+check "and the file is untouched" "$(cat "$ef")" "$before"
+out=$(printf ' \n\t\n' | $PIDLY edit -a "$en" 2>&1) && rc=0 || rc=$?
+check "-a with only whitespace is refused too" "$rc" "1"
+check "and the file is untouched" "$(cat "$ef")" "$before"
+out=$(printf ' \n' | $PIDLY edit -f -a "$en" 2>&1) && rc=0 || rc=$?
+check "-f does not override it" "$rc" "1"
+
+out=$($PIDLY edit -b "$en" </dev/null 2>&1) && rc=0 || rc=$?
+check "-b with empty stdin is refused on a short body" "$rc" "1"
+has "and says what it would do" "$out" "$en: stdin is empty, so this would erase the body: re-run with -f"
+check "and the file is untouched" "$(cat "$ef")" "$before"
+out=$(printf '\n  \n' | $PIDLY edit -b "$en" 2>&1) && rc=0 || rc=$?
+check "-b with only whitespace is refused" "$rc" "1"
+check "and the file is untouched" "$(cat "$ef")" "$before"
+
+lf=.pidly/$pn/info
+awk 'BEGIN { for (i = 0; i < 20; i++) print "A line of a body long enough to guard." }' |
+	$PIDLY edit -f -b "$pn" >/dev/null
+before=$(cat "$lf")
+out=$($PIDLY edit -b "$pn" </dev/null 2>&1) && rc=0 || rc=$?
+check "and on a long one" "$rc" "1"
+has "with the empty-stdin reason, not the size one" "$out" "stdin is empty"
+check "and the file is untouched" "$(cat "$lf")" "$before"
+
+$PIDLY edit -f -b "$en" </dev/null >/dev/null && rc=0 || rc=$?
+check "-f empties it on purpose" "$rc" "0"
+check "leaving no body" "$($PIDLY show -b "$en")" ""
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

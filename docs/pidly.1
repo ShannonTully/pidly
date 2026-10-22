@@ -40,7 +40,8 @@ gives the equivalent of every command below.
                  appends to it, and -r OLD -w NEW replaces one passage of it
                  literally, refusing text that is absent or appears twice. -b
                  refuses a body that lost more than half of what it replaced;
-                 -f says you meant it
+                 -f says you meant it. Both refuse empty stdin, and only -b
+                 takes -f for it
   set <n> <field> [value]
                  write a project field; with no value, clear it. Also title
                  and needs, which are the format's lines rather than the

@@ -2,7 +2,7 @@ claim:
 needs:
 title: Refuse empty stdin as a body in edit -a, edit -b and new
 created: 2026-10-22T04:25:36Z
-updated: 2026-10-22T04:41:34Z
+updated: 2026-10-22T05:03:10Z
 effort: S
 area: cli
 handoff:

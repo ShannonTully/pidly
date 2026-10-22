@@ -912,6 +912,20 @@ cmd_edit() {
 
 	_text=$(cat)
 
+	# Empty stdin is almost never the text that was meant: it is what a
+	# trailing </dev/null leaves after replacing the pipe that carried it,
+	# and reporting "updated" hid two lost closing notes. Whitespace counts
+	# as empty — append_body would add only a separator. Appending nothing
+	# has no deliberate form, so -a has no override; an empty body is a
+	# legal ticket, so -b keeps one, at any size. new is left alone: a
+	# title-only ticket from </dev/null is its normal use.
+	case $_text in
+	*[![:space:]]*) ;;
+	*)	[ "$_mode" = append ] && die "$1: nothing on stdin to append"
+		[ "$_ed_force" = yes ] ||
+			die "$1: stdin is empty, so this would erase the body: re-run with -f if that is deliberate" ;;
+	esac
+
 	# The failure this guards is silent and has already happened twice: -b
 	# replaces the whole body, so changing one paragraph non-interactively
 	# means reconstructing all of it, and whatever is left out is gone. A
@@ -1961,6 +1975,20 @@ pidly: the new body is 180 bytes against 4200: re-run with -f if that is
 The numbers are arbitrary and stated rather than tuned. The point is to catch
 a reconstruction that dropped most of the file, not to police editing, and
 `-f` is there for the times a body really is being cut down.
+
+Empty stdin — nothing, or only whitespace — is refused by both. It is what a
+trailing `</dev/null` leaves after it replaces the pipe that carried the text,
+and a write that did nothing used to report success:
+
+```
+pidly: 7: nothing on stdin to append
+pidly: 7: stdin is empty, so this would erase the body: re-run with -f if
+       that is deliberate
+```
+
+`-a` has no override, since appending nothing is never what was meant. `-b`
+takes `-f` at any body size, because an empty body is a legal ticket. `new`
+is not affected: `pidly new "title" </dev/null` makes a title-only ticket.
 
 By hand it is your editor, or `cat >> .pidly/7/info` — nothing records where
 a body starts or ends, so appending is appending. What the command adds is the
@@ -4306,7 +4334,8 @@ usage: pidly <command> [args]
                  appends to it, and -r OLD -w NEW replaces one passage of it
                  literally, refusing text that is absent or appears twice. -b
                  refuses a body that lost more than half of what it replaced;
-                 -f says you meant it
+                 -f says you meant it. Both refuse empty stdin, and only -b
+                 takes -f for it
   set <n> <field> [value]
                  write a project field; with no value, clear it. Also title
                  and needs, which are the format's lines rather than the
