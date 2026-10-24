@@ -1,0 +1,17 @@
+claim:
+needs:
+title: Make the test suite pass on macOS
+created: 2026-10-24T21:42:57Z
+updated: 2026-10-24T21:42:57Z
+effort: M
+area: cli
+handoff:
+
+Found running tests/run.sh on macOS (2026-10-24, after 85 and 86): 11 failures left.
+
+- Six assertions compare `wc -l` output unpiped through `tr -d ' '`; BSD wc pads it (`       7`). header, fields x3, the number-after-scan race, no false conflicts.
+- Three are the missing /proc start time, already ticket 66 (process identity; claims list can and cannot verify x2).
+- init backfills: `and says how many it dated` gets only `refreshed ...`, no `dated 1 ticket(s)`.
+- the shapes a regex gets wrong: `a literal backslash-n stays two characters` gets empty output.
+
+The last two need a look; they may be more BSD awk/sed differences in the script, not the tests.

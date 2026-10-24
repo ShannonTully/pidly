@@ -79,7 +79,7 @@ out=$($PIDLY fields)
 has "the migration reports what it added" "$out" "3     + handoff area"
 hasnt "and leaves the ticket that already had it alone" "$out" "1     +"
 check "every ticket now has the slot" \
-	"$(grep -lc '^area' .pidly/1/info .pidly/c/2/info .pidly/3/info | wc -l)" "3"
+	"$(grep -l '^area' .pidly/1/info .pidly/c/2/info .pidly/3/info | wc -l)" "3"
 check "a closed ticket is migrated too" "$(grep -c '^area:$' .pidly/c/2/info || true)" "1"
 check "the value a ticket already had is untouched" \
 	"$(sed -n 's/^area: //p' .pidly/1/info)" "cli"

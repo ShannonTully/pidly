@@ -3533,7 +3533,7 @@ cmd_field() {
 			close(f)
 			# A field present but empty is the same gap as a field
 			# that is absent: nobody has answered the question.
-			printf "%-5s %s\n", n, v == "" ? "-" : v
+			printf "%-5s %s\n", n, (v == "" ? "-" : v)
 		}' | sort -n
 }
 

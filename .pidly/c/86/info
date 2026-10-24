@@ -1,0 +1,10 @@
+claim:
+needs:
+title: Parenthesise the conditional in pidly field's printf for BSD awk
+created: 2026-10-24T21:41:52Z
+updated: 2026-10-24T21:41:52Z
+effort: S
+area: cli
+handoff:
+
+BSD awk (macOS) fails to parse `printf "%-5s %s\n", n, v == "" ? "-" : v` in cmd_field (`awk: syntax error ... illegal statement`), so `pidly field <name>` prints nothing there; tests/views.sh fails 9 assertions and set.sh one. Parenthesise the conditional.
