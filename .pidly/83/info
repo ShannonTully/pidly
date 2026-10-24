@@ -1,0 +1,10 @@
+claim:
+needs:
+title: check does not report a leftover .lock.<pid>.brk from a breaker that died
+created: 2026-10-24T10:29:01Z
+updated: 2026-10-24T10:29:01Z
+effort: S
+area: cli
+handoff:
+
+Ported from idol pidly 1524. Since ticket 78, a pidly killed mid-break leaves .lock.<pid>.brk, and if .lock still names the dead owner the next command stops and asks for both to be removed by hand. check flags a .lock held by a dead pid but says nothing about the .brk; have it name the file and the cleanup.

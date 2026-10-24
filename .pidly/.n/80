@@ -1,0 +1,1 @@
+boh28l3v needs -a/-d and new -n word-split their argument, so a glob expands against the cwd, and an empty one passes
