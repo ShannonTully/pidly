@@ -1,0 +1,24 @@
+claim:
+needs:
+title: Don't issue a number twice when new runs under two parents at once
+created: 2026-10-24T09:49:14Z
+updated: 2026-10-24T09:49:19Z
+effort: S
+area: cli
+handoff:
+
+Ported from IDOL's vendored copy (IDOL 1363), where it was found and fixed.
+
+new scans for the highest number before it takes the tracker lock, and
+inside the lock tries mkdir on successive numbers. mkdir only sees
+siblings, so a number another new issued under a different parent since
+the scan was taken again: a top-level ticket and a child created at once
+both came out as the same number, and every needs: on it became
+ambiguous.
+
+Fix: inside the lock, skip any number already in .pidly/.n/. Every new
+registers its number before unlocking, so the registry holds it even
+when the directory sits under another parent.
+
+Done when tests/new.sh pins both a new that queued on the lock while a
+child took the next number, and a race of top-level and child creations.

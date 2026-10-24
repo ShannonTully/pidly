@@ -2598,17 +2598,24 @@ REQ
 	[ -z "$_missing" ] ||
 		die "the schema requires a value for:$_missing — supply it with -f name=value"
 
-	# Scan before locking. A stale answer only costs a few extra mkdir
-	# attempts, and it keeps the critical section down to those attempts
-	# rather than a full traversal of the tracker.
+	# Scan before locking. A stale answer only costs a few extra attempts,
+	# and it keeps the critical section down to those attempts rather than
+	# a full traversal of the tracker.
 	_n=$(highest "$_r")
 
 	# mkdir only arbitrates between siblings, so two agents adding children
 	# to different parents would otherwise both take the same number. 200
 	# attempts at 50ms is ten seconds, far longer than any real contention.
+	#
+	# The registry check is what makes the stale scan safe: a number issued
+	# since the scan may sit under another parent, where mkdir here cannot
+	# see it, but every new registers its number before unlocking, so the
+	# registry already holds it.
+	_reg=$(registry_dir "$_r")
 	lock "$_r" 200 || die 'the tracker is busy; try again'
 	while :; do
 		_n=$((_n + 1))
+		[ -e "$_reg/$_n" ] && continue
 		mkdir "$_pd/$_n" 2>/dev/null && break
 		[ "$_n" -gt 1000000 ] && { unlock "$_r"; die 'cannot allocate a number'; }
 	done

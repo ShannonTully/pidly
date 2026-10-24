@@ -443,9 +443,16 @@ unique numbers: the invariant held and the command was useless.
 
 The same lock, at `.pidly/.lock`, serializes number allocation. The expensive
 part of allocating — scanning the tree for the highest number — happens
-*before* the lock is taken. A stale answer only costs a few extra `mkdir`
-attempts, and it keeps the critical section down to those attempts rather
-than a full traversal.
+*before* the lock is taken. A stale answer only costs a few extra attempts,
+and it keeps the critical section down to those attempts rather than a full
+traversal.
+
+What makes the stale answer safe is the registry, not `mkdir`. A number
+issued since the scan may sit under another parent, where `mkdir` in this
+one cannot see it; every allocation registers its number in `.pidly/.n/`
+before it unlocks, so inside the lock a number already in the registry is
+skipped. Without that check, a top-level ticket and a child created at once
+both came out as the same number (ticket 75).
 
 ### What a pid is worth, and when
 

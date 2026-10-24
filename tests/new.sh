@@ -155,6 +155,46 @@ check "a multi-line value is refused" "$rc" "1"
 check "none of the refusals created anything" "$(find .pidly -name info | wc -l)" "2"
 cd "$tmp"
 
+echo "a number issued after the scan"
+# new scans for the highest number before it takes the lock, and mkdir only
+# sees siblings. So a number another new issued under a different parent in
+# between was taken again: two tickets numbered 2 (ticket 75). Hold the lock
+# with a live pid, let new scan and queue on it, then do what a `new -p 1`
+# does while holding the lock, and let go.
+mkdir scan; cd scan; mkdir .pidly
+$PIDLY new "parent" </dev/null >/dev/null
+echo $$ > .pidly/.lock
+( $PIDLY new "top level" </dev/null > out 2>&1; echo $? > rc ) &
+i=0
+while [ -z "$(find .pidly -maxdepth 1 -name '.lock.*' -print)" ] && [ $i -lt 600 ]; do
+	sleep 0.05 2>/dev/null || sleep 1; i=$((i+1))
+done
+mkdir .pidly/1/2
+printf 'nonce\tchild\n' > .pidly/.n/2
+rm -f .pidly/.lock
+wait
+check "a new that waited on the lock succeeds" "$(cat rc)" "0"
+check "and skips the number issued while it waited" "$(cut -f1 out)" "3"
+check "no number is issued twice" "$(nums)" "1 2 3 "
+cd "$tmp"
+
+echo "concurrency under two parents ($PIDLY_TEST_RACE processes)"
+mkdir parents; cd parents; mkdir .pidly
+$PIDLY new "parent" </dev/null >/dev/null
+i=0; while [ $i -lt "$PIDLY_TEST_RACE" ]; do
+	i=$((i+1))
+	if [ $((i % 2)) -eq 0 ]; then
+		( $PIDLY new -p 1 "child $i" </dev/null >/dev/null 2>&1 ) &
+	else
+		( $PIDLY new "top $i" </dev/null >/dev/null 2>&1 ) &
+	fi
+done
+wait
+check "every creation succeeds" "$(find .pidly -name info | wc -l | tr -d ' ')" "$((PIDLY_TEST_RACE + 1))"
+dupes=$(nums | tr ' ' '\n' | sed '/^$/d' | uniq -d | tr -d '\n')
+check "and no number is issued twice across parents" "$dupes" ""
+cd "$tmp"
+
 echo "concurrency ($PIDLY_TEST_RACE processes)"
 before=$(find .pidly -name info | wc -l)
 i=0; while [ $i -lt "$PIDLY_TEST_RACE" ]; do
