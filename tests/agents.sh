@@ -88,5 +88,22 @@ for f in CLAUDE.md .pidly/README.md; do
 done
 [ "$bad" -eq 0 ] && ok "neither document claims with a \$variable"
 
+# Both once said `PIDLY_PID=$$ pidly claim 7`. $$ is the shell running the
+# command, and a harness that gives each command a fresh shell ends it when
+# the call returns, so the claim read dead at once (ticket 76). A line may
+# still name the idiom to warn against it.
+bad=0
+for f in CLAUDE.md .pidly/README.md; do
+	if grep -F 'PIDLY_PID=$$' "$f" | grep -Evq "Don't|Never"; then
+		no "$f tells the reader to claim with PIDLY_PID=\$\$"
+		bad=1
+	fi
+done
+[ "$bad" -eq 0 ] && ok "neither document claims with PIDLY_PID=\$\$"
+check "the block claims with plain pidly claim" \
+	"$(grep -c '^pidly claim 7 ' CLAUDE.md)" "1"
+check "the reference warns against PIDLY_PID=\$\$" \
+	"$(grep -cF "Don't prefix a claim with \`PIDLY_PID=\$\$\`" .pidly/README.md)" "1"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

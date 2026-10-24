@@ -1,0 +1,10 @@
+claim:
+needs:
+title: Option-parsing commands call -1 an unknown option rather than not a ticket number
+created: 2026-10-24T10:29:01Z
+updated: 2026-10-24T10:29:01Z
+effort: S
+area: cli
+handoff:
+
+Found porting idol's fixes (2026-10-24). release, show, needs, edit and reparent report `-1` as "unknown option", while other commands say "not a ticket number" since ticket 59. Harmless; make the wording consistent.

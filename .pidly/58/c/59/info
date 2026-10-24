@@ -2,7 +2,7 @@ claim:
 needs:
 title: Refuse a ticket number that is not all digits
 created: 2026-09-24T22:57:34Z
-updated: 2026-09-24T22:57:34Z
+updated: 2026-10-24T09:54:15Z
 effort: S
 area: cli
 handoff:
@@ -15,3 +15,13 @@ the top level is empty.
 
 Done when every command that takes <n> refuses anything but digits, with a
 test for `close .n` and `close '*'`.
+
+
+## Done, 2026-10-24
+
+Ported from IDOL's vendored copy (IDOL 1367), where `pidly close '*'`
+moved the whole tracker. ticket_dir refuses anything but [0-9]+ and
+searches with -mindepth 1; reopen resolves the ticket on its own line so
+a failed lookup stops it; new refuses an empty -p ''. tests/args.sh runs
+close '*' and close .n, and every command that takes <n> against eight
+non-numbers.

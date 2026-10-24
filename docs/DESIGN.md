@@ -396,7 +396,7 @@ lock() {
 		if kill -0 "$_owner" 2>/dev/null; then
 			rm -f "$_t"; return 1               # a live holder
 		fi
-		rm -f "$_d/.lock"                           # a dead one: break it
+		break_dead "$_d" "$_owner" || return 1      # a dead one: see below
 	done
 	rm -f "$_t"; return 1
 }
@@ -422,7 +422,8 @@ two writers: **an empty lock means in-flight, never abandoned.**
 Three properties matter. The lock is **transient** — held for the microseconds
 of one rewrite, so a repository at rest still has exactly one file per ticket.
 It is **self-healing**: a crash leaves a pid that the next caller finds dead
-and breaks, rather than wedging the ticket forever. And that recovery is **the
+and breaks, rather than wedging the ticket forever (the one exception, a
+process killed while breaking a lock, is below). And that recovery is **the
 same idiom as stale claim detection**, so the system has one liveness
 mechanism rather than two.
 
@@ -430,6 +431,32 @@ The pid in the lock is the `pidly` process's own, not the agent's. A lock is
 alive exactly as long as the command holding it; a claim outlives many.
 
 Measured: 100 concurrent claims on one free ticket, one winner, no leftovers.
+
+**Breaking a dead lock takes a lock of its own.** It used to be a bare
+`rm -f .lock`, and that had a race: two contenders both read the dead owner
+X; the first removes the lock, publishes its own and starts writing; the
+second, arriving late at its `rm`, deletes that live lock and walks in
+beside it (ticket 78). So breaking X's lock means publishing
+`.lock.X.brk` the same way — `link(2)` of our pid file — and, holding it,
+reading `.lock` again and removing it only if it still names X. While
+`.lock.X.brk` is held nothing can replace `.lock`: X is dead and cannot
+unlock, `ln` cannot publish over an existing `.lock`, and every other breaker
+of X is waiting on the same `.brk`. A breaker of another owner Y reads X, not
+Y, and leaves it. So a `.lock` that still names X at the re-read is X's at
+the `rm`.
+
+A `.brk` whose owner is alive is treated like a live lock. One whose owner is
+dead is either litter — the `.lock` naming X is already gone and can never
+come back, so anyone may remove it — or a breaker killed inside its few
+calls, with X's `.lock` still there. That last case stops with a message
+naming both files to remove by hand: breaking the `.brk` in turn would have
+the same race one level down, and a wedge a human clears beats two writers.
+
+Renaming `.lock` aside and reading it there was the other candidate, and it
+is worse: whoever is late moves a live lock aside, and putting it back races
+a third process's `ln`. The `.brk` uses only `link`, `read` and `unlink`, the
+calls the lock already relied on, so nothing new is asked of emulations
+such as proot's link2symlink, where rename is not something to lean on.
 
 **Whether to wait for the lock is the caller's decision.** `claim` returns
 immediately if someone else holds it: there is other work to pick up, and
@@ -443,9 +470,16 @@ unique numbers: the invariant held and the command was useless.
 
 The same lock, at `.pidly/.lock`, serializes number allocation. The expensive
 part of allocating — scanning the tree for the highest number — happens
-*before* the lock is taken. A stale answer only costs a few extra `mkdir`
-attempts, and it keeps the critical section down to those attempts rather
-than a full traversal.
+*before* the lock is taken. A stale answer only costs a few extra attempts,
+and it keeps the critical section down to those attempts rather than a full
+traversal.
+
+What makes the stale answer safe is the registry, not `mkdir`. A number
+issued since the scan may sit under another parent, where `mkdir` in this
+one cannot see it; every allocation registers its number in `.pidly/.n/`
+before it unlocks, so inside the lock a number already in the registry is
+skipped. Without that check, a top-level ticket and a child created at once
+both came out as the same number (ticket 75).
 
 ### What a pid is worth, and when
 
@@ -511,6 +545,13 @@ tool call's shell is a direct child of the runner; wrap that call in another
 shell and `$PPID` quietly becomes the wrapper. Naming the runner explicitly
 is free and does not guess.
 
+So the generated docs say plain `pidly claim 7`, and tell agents not to
+write `PIDLY_PID=$$ pidly claim 7`, which they once recommended. `$$` is the
+shell running the command, and a harness that gives each command a fresh
+shell, as Claude Code does, ends that shell when the call returns: the claim
+reads dead at once, its own release fails, and anyone may reap it (ticket
+76). `PIDLY_PID` is for a wrapper that knows a longer-lived process to name.
+
 **Delegation is a convention, not a hook.** Claude Code has `SubagentStart`
 and `SubagentStop`, but `PreToolUse` cannot modify tool input, so a hook
 cannot put a ticket number into a subagent's prompt. It does not need to:
@@ -555,8 +596,17 @@ Resolution order, once for every claim:
 | 3 | `dead` | our runtime, and it positively is not |
 | 4 | `unverifiable` | someone else's runtime, lease still good |
 
-Only `free` and `expired` allow a claim. Only `dead` may be reaped, and only
-locally.
+Only `free` and `expired` allow a claim, plus one case: a `live` or
+`unverifiable` claim whose holder is the one asking is renewed, which is how
+a lease is extended. A lease's runtime is `-`, which never matches this
+machine's, so before that case existed a live lease read as unverifiable and
+its own agent was refused (ticket 77). Renewing a pid claim rewrites the same
+line; renewing a lease writes a fresh expiry. Only `dead` may be reaped, and
+only locally.
+
+Who is asking, and the expiry, are worked out before the ticket's lock is
+taken. Either can die — a `PIDLY_PID` that is not running, a malformed
+`PIDLY_LEASE` — and dying while holding the lock would leave it behind.
 
 The costs are the ones a clock always brings: skew between machines, which
 UTC and generous leases absorb, and the chance of preempting a slow agent that
@@ -881,6 +931,16 @@ was written on has bfs as its `find`, which implements the GNU options, so
 nothing ever complained. The basename now comes from the `awk` every caller
 already pipes through, and `ticket_dir` stops with `head -n 1` rather than
 `-quit`. `-mindepth` stays, being the one non-POSIX primary BSD ships too.
+
+**A ticket argument is checked to be digits before `find` sees it.** `-name`
+takes a glob, so `ticket_dir` once resolved `1*` or `[3]` to whichever ticket
+`find` met first, `.n` to the number registry (closing it silently removed
+the merge protection it exists for), and `*` to the tracker root itself:
+with nothing open at the top, `pidly close '*'` moved the whole of `.pidly`
+into `./c/`. Every command that takes `<n>` goes through `ticket_dir`, which
+now refuses anything but `[0-9]+` and searches with `-mindepth 1`, so the
+root is out of reach even so; `new -p ''` is refused rather than read as no
+parent (ticket 59, `tests/args.sh`).
 
 A suite running on one machine cannot prove portability, so `tests/
 portable.sh` does the two things it can: it greps the script and both

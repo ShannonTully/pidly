@@ -45,11 +45,19 @@ root() {
 
 # The directory of one ticket, by number. One traversal, not a search per
 # call: callers needing many lookups should use map() instead.
+#
+# The number is checked before it reaches find, because -name takes a glob:
+# '1*' or '[3]' resolved to whichever ticket find met first, and '*' matched
+# the tracker root itself, so `pidly close '*'` moved the whole of .pidly
+# into ./c/. -mindepth 1 keeps the root out of reach even so.
 ticket_dir() {
 	_td_r=$1 _td_n=$2
+	case $_td_n in
+	''|*[!0-9]*) die "not a ticket number: '$_td_n'" ;;
+	esac
 	# head, not -quit: find stops anyway when the pipe closes, and -quit is
 	# not POSIX. Nothing here needs an option BSD find might not have.
-	_td_p=$(find "$_td_r" -type d -name "$_td_n" -print | head -n 1)
+	_td_p=$(find "$_td_r" -mindepth 1 -type d -name "$_td_n" -print | head -n 1)
 	[ -n "$_td_p" ] || die "no ticket $_td_n"
 	printf '%s\n' "$_td_p"
 }
@@ -330,10 +338,71 @@ lock() {
 			# lock is treated as in-flight, never as abandoned.
 			continue
 		fi
+		_lk_busy=""
 		if kill -0 "$_lk_owner" 2>/dev/null; then
-			# A live holder. Wait if we were given a budget: the
-			# lock is held for a few syscalls, so a short sleep
-			# almost always clears it.
+			_lk_busy=1                             # a live holder
+		else
+			# A dead one: break it, but never with a bare rm. Two
+			# contenders can both read the dead owner; if the first
+			# breaks the lock and wins it before the second gets
+			# to its rm, that rm deletes the first one's live lock
+			# and both walk in (ticket 78).
+			#
+			# So breaking the lock of owner X takes a second lock,
+			# .lock.X.brk, published the same way (link(2) of our
+			# pid file), and under it the owner is read again and
+			# .lock removed only if it still names X. While we
+			# hold .lock.X.brk nothing else can replace .lock: X
+			# is dead so cannot unlock, ln cannot publish over an
+			# existing .lock, and every other breaker of X is
+			# waiting on .lock.X.brk. A breaker of some other
+			# owner Y reads X, not Y, and leaves it. So a .lock
+			# that still names X at the re-read is X's at the rm.
+			#
+			# Renaming .lock aside (mv .lock .lock.stale.$$) and
+			# reading it there was the other candidate. It is
+			# worse: whoever is late moves a live lock aside, and
+			# putting it back races a third process's ln. Only
+			# link, read and unlink are used here, the calls this
+			# lock already relied on, so nothing new is asked of
+			# proot's link2symlink emulation (where a hard link is
+			# a symlink pair and rename is not something to lean on).
+			_lk_b="$_lk_d/.lock.$_lk_owner.brk"
+			if ln "$_lk_t" "$_lk_b" 2>/dev/null; then
+				_lk_now=""
+				read -r _lk_now < "$_lk_d/.lock" 2>/dev/null || true
+				[ "$_lk_now" = "$_lk_owner" ] && rm -f "$_lk_d/.lock"
+				rm -f "$_lk_b"
+				continue
+			fi
+			_lk_breaker=""
+			read -r _lk_breaker < "$_lk_b" 2>/dev/null || true
+			if [ -z "$_lk_breaker" ]; then
+				continue           # just released, or in flight
+			elif kill -0 "$_lk_breaker" 2>/dev/null; then
+				_lk_busy=1         # a live breaker: as a live holder
+			elif _lk_now="" &&
+				read -r _lk_now < "$_lk_d/.lock" 2>/dev/null &&
+				[ "$_lk_now" = "$_lk_owner" ]; then
+				# The breaker died inside its few calls. Breaking
+				# its .brk in turn would have the same race one
+				# level down, so this stops and says so: a wedge
+				# a human clears beats two writers.
+				printf 'pidly: %s names %s, which is gone, and %s died breaking it; with no pidly running, remove it and %s by hand\n' \
+					"$_lk_d/.lock" "$_lk_owner" "$_lk_breaker" "$_lk_b" >&2
+				rm -f "$_lk_t"
+				return 1
+			else
+				# It died after the lock was gone. Its .brk only
+				# ever guarded a .lock naming X, which can never
+				# come back, so it is litter: anyone may clear it.
+				rm -f "$_lk_b"
+			fi
+		fi
+		if [ -n "$_lk_busy" ]; then
+			# Wait if we were given a budget: the lock is held for
+			# a few syscalls, so a short sleep almost always
+			# clears it.
 			if [ "$_lk_waited" -lt "$_lk_budget" ]; then
 				sleep 0.05 2>/dev/null || sleep 1
 				_lk_waited=$((_lk_waited + 1))
@@ -343,7 +412,6 @@ lock() {
 			rm -f "$_lk_t"
 			return 1
 		fi
-		rm -f "$_lk_d/.lock"                           # a dead one: break it
 	done
 	rm -f "$_lk_t"
 	return 1
@@ -637,11 +705,27 @@ cmd_claim() {
 		[ -z "$_open" ] || die "$1 is blocked by open tickets:$_open"
 	fi
 
+	# Who is asking and until when, before the lock: both can die, and
+	# dying while holding the lock would wedge the ticket.
+	_who=$(holder "$_r")
+	_new=$_who
+	if [ -n "${PIDLY_LEASE:-}" ]; then
+		_new="$_who $(lease_expiry "$PIDLY_LEASE")"
+	fi
+
 	lock "$_d" || die "$1 is being modified by another process"
 	_held=$(sed -n '1s/^claim://p' "$_d/info")
 	_state=$(claim_state "$_r" "$_held")
+	# Claiming what you already hold renews it. A lease's runtime is `-`,
+	# which never matches this machine's, so without this a live lease read
+	# as unverifiable and its own agent could not extend it (ticket 77).
 	case $_state in
-	free|expired) ;;
+	live|unverifiable)
+		parse_claim "$_held"
+		[ "$_c_who" = "$_who" ] && _state=renewed ;;
+	esac
+	case $_state in
+	free|expired|renewed) ;;
 	live)         unlock "$_d"; die "$1 is held by $_held, which is running" ;;
 	dead)         unlock "$_d"
 	              die "$1 is held by $_held, which is gone — 'pidly reap' clears it" ;;
@@ -649,15 +733,14 @@ cmd_claim() {
 	              die "$1 is held by $_held, which this machine cannot check" ;;
 	esac
 
-	_who=$(holder "$_r")
-	if [ -n "${PIDLY_LEASE:-}" ]; then
-		_who="$_who $(lease_expiry "$PIDLY_LEASE")"
-	fi
+	_who=$_new
 	set_line "$_d/info" 1 "claim:$_who"
 	mark_updated "$_d/info"
 	unlock "$_d"
 	if [ "$_state" = expired ]; then
 		printf '%s claimed by %s (previous lease had expired)\n' "$1" "$_who"
+	elif [ "$_state" = renewed ]; then
+		printf '%s renewed by %s\n' "$1" "$_who"
 	else
 		printf '%s claimed by %s\n' "$1" "$_who"
 	fi
@@ -1425,7 +1508,10 @@ cmd_reopen() {
 	# Closed, or open inside a closed ancestor: either way there is a c/
 	# between the ticket and the surface, and lifting those out is what
 	# reopening means. A ticket with none of them is already open.
-	in_closed "$_r" "$(ticket_dir "$_r" "$1")" || die "$1 is already open"
+	# Resolved on its own line: a failed lookup inside the argument list
+	# would not stop the script, and would report "already open" instead.
+	_d=$(ticket_dir "$_r" "$1")
+	in_closed "$_r" "$_d" || die "$1 is already open"
 
 	# Outermost first. A closed ancestor holding live work is exactly what
 	# the cascade exists to prevent, so each pass re-locates the ticket and
@@ -1821,14 +1907,20 @@ every lookup from it. On a 2000-ticket tree the difference is 26.5s against
 ## Claiming
 
 ```sh
-PIDLY_PID=$$ pidly claim 7     # $$ is your agent's process, not the CLI's
+pidly claim 7
 pidly status 7
 pidly release 7
 ```
 
-Export `PIDLY_PID` once for the life of your agent. A release only succeeds
-for the process that made the claim, so claiming and releasing from separate
-invocations have to agree on who you are.
+A claim names your agent's long-lived process: `$CLAUDE_PID` if it is set,
+else the process that ran pidly. A release only succeeds for the process that
+made the claim, so claiming and releasing from separate invocations have to
+agree on who you are.
+
+Don't prefix a claim with `PIDLY_PID=$$`. A harness that runs each command in
+a fresh shell, as Claude Code does, ends that shell when the call returns, so
+the claim reads dead at once: a later release fails and anyone may reap it.
+Set `PIDLY_PID` only in a wrapper that knows a longer-lived process to name.
 
 A claim records `<pid>.<starttime>@<runtime>`. The start time is what stops a
 recycled pid from looking like the original process; the runtime is boot id,
@@ -1874,7 +1966,10 @@ pidly reap        # sweep the whole tracker, closed work included
 and `reap` will not do it for you. It refuses a live claim, an unverifiable
 one, and an expired lease, which needs no clearing because it is already
 takeable. A stale `.lock` needs no clearing either: it names a local process,
-and the next command to want the lock breaks it.
+and the next command to want the lock breaks it. The one exception is a pidly
+killed in the instant it was breaking one: it leaves a `.lock.<pid>.brk`
+beside the `.lock`, and the next command stops and names both files to
+remove by hand rather than risk two writers.
 
 Claiming rewrites line 1, so it is the one operation that is not safe to do
 by hand while other agents are running: `pidly claim` serializes it behind a
@@ -2177,7 +2272,7 @@ in `needs:` is under a `c/`.
 find .pidly -type d -name c -prune -o -name info -print   # open tickets
 pidly list                             # the takeable ones
 
-PIDLY_PID=$$ pidly claim 7             # $$ is your process, not the CLI's
+pidly claim 7                          # names your agent's process
 PIDLY_AGENT=ci-run-4821 PIDLY_LEASE=2h pidly claim 7   # no local process
 pidly release -m "Where I got to" 7    # stopping before it is done
 pidly close 7      # by hand: mkdir -p .pidly/c && mv .pidly/7 .pidly/c/
@@ -2515,11 +2610,11 @@ pair_value() {
 NEW_USAGE='usage: pidly new [-p parent] [-n "3 8"] [-f name=value] <title>'
 
 cmd_new() {
-	_parent="" _needs="" _pairs=""
+	_parent="" _has_parent=no _needs="" _pairs=""
 	while [ $# -gt 0 ]; do
 		case $1 in
 		-p) [ $# -ge 2 ] || die "$NEW_USAGE"
-		    _parent=$2; shift 2 ;;
+		    _parent=$2 _has_parent=yes; shift 2 ;;
 		-n) [ $# -ge 2 ] || die "$NEW_USAGE"
 		    _needs=$2; shift 2 ;;
 		-f) [ $# -ge 2 ] || die "$NEW_USAGE"
@@ -2544,7 +2639,9 @@ cmd_new() {
 
 	_r=$(root)
 
-	if [ -n "$_parent" ]; then
+	# -p given counts even when empty: `-p "$unset"` filing at the top
+	# would put the ticket somewhere the caller never asked for.
+	if [ "$_has_parent" = yes ]; then
 		_pd=$(ticket_dir "$_r" "$_parent")
 		# An open child inside a closed parent would put live work in a
 		# finished tree, which is the one thing the layout rules out.
@@ -2598,17 +2695,24 @@ REQ
 	[ -z "$_missing" ] ||
 		die "the schema requires a value for:$_missing — supply it with -f name=value"
 
-	# Scan before locking. A stale answer only costs a few extra mkdir
-	# attempts, and it keeps the critical section down to those attempts
-	# rather than a full traversal of the tracker.
+	# Scan before locking. A stale answer only costs a few extra attempts,
+	# and it keeps the critical section down to those attempts rather than
+	# a full traversal of the tracker.
 	_n=$(highest "$_r")
 
 	# mkdir only arbitrates between siblings, so two agents adding children
 	# to different parents would otherwise both take the same number. 200
 	# attempts at 50ms is ten seconds, far longer than any real contention.
+	#
+	# The registry check is what makes the stale scan safe: a number issued
+	# since the scan may sit under another parent, where mkdir here cannot
+	# see it, but every new registers its number before unlocking, so the
+	# registry already holds it.
+	_reg=$(registry_dir "$_r")
 	lock "$_r" 200 || die 'the tracker is busy; try again'
 	while :; do
 		_n=$((_n + 1))
+		[ -e "$_reg/$_n" ] && continue
 		mkdir "$_pd/$_n" 2>/dev/null && break
 		[ "$_n" -gt 1000000 ] && { unlock "$_r"; die 'cannot allocate a number'; }
 	done

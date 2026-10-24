@@ -20,7 +20,7 @@ in `needs:` is under a `c/`.
 find .pidly -type d -name c -prune -o -name info -print   # open tickets
 pidly list                             # the takeable ones
 
-PIDLY_PID=$$ pidly claim 7             # $$ is your process, not the CLI's
+pidly claim 7                          # names your agent's process
 PIDLY_AGENT=ci-run-4821 PIDLY_LEASE=2h pidly claim 7   # no local process
 pidly release -m "Where I got to" 7    # stopping before it is done
 pidly close 7      # by hand: mkdir -p .pidly/c && mv .pidly/7 .pidly/c/
