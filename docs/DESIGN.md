@@ -569,8 +569,17 @@ Resolution order, once for every claim:
 | 3 | `dead` | our runtime, and it positively is not |
 | 4 | `unverifiable` | someone else's runtime, lease still good |
 
-Only `free` and `expired` allow a claim. Only `dead` may be reaped, and only
-locally.
+Only `free` and `expired` allow a claim, plus one case: a `live` or
+`unverifiable` claim whose holder is the one asking is renewed, which is how
+a lease is extended. A lease's runtime is `-`, which never matches this
+machine's, so before that case existed a live lease read as unverifiable and
+its own agent was refused (ticket 77). Renewing a pid claim rewrites the same
+line; renewing a lease writes a fresh expiry. Only `dead` may be reaped, and
+only locally.
+
+Who is asking, and the expiry, are worked out before the ticket's lock is
+taken. Either can die — a `PIDLY_PID` that is not running, a malformed
+`PIDLY_LEASE` — and dying while holding the lock would leave it behind.
 
 The costs are the ones a clock always brings: skew between machines, which
 UTC and generous leases absorb, and the chance of preempting a slow agent that

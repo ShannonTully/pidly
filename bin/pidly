@@ -637,11 +637,27 @@ cmd_claim() {
 		[ -z "$_open" ] || die "$1 is blocked by open tickets:$_open"
 	fi
 
+	# Who is asking and until when, before the lock: both can die, and
+	# dying while holding the lock would wedge the ticket.
+	_who=$(holder "$_r")
+	_new=$_who
+	if [ -n "${PIDLY_LEASE:-}" ]; then
+		_new="$_who $(lease_expiry "$PIDLY_LEASE")"
+	fi
+
 	lock "$_d" || die "$1 is being modified by another process"
 	_held=$(sed -n '1s/^claim://p' "$_d/info")
 	_state=$(claim_state "$_r" "$_held")
+	# Claiming what you already hold renews it. A lease's runtime is `-`,
+	# which never matches this machine's, so without this a live lease read
+	# as unverifiable and its own agent could not extend it (ticket 77).
 	case $_state in
-	free|expired) ;;
+	live|unverifiable)
+		parse_claim "$_held"
+		[ "$_c_who" = "$_who" ] && _state=renewed ;;
+	esac
+	case $_state in
+	free|expired|renewed) ;;
 	live)         unlock "$_d"; die "$1 is held by $_held, which is running" ;;
 	dead)         unlock "$_d"
 	              die "$1 is held by $_held, which is gone — 'pidly reap' clears it" ;;
@@ -649,15 +665,14 @@ cmd_claim() {
 	              die "$1 is held by $_held, which this machine cannot check" ;;
 	esac
 
-	_who=$(holder "$_r")
-	if [ -n "${PIDLY_LEASE:-}" ]; then
-		_who="$_who $(lease_expiry "$PIDLY_LEASE")"
-	fi
+	_who=$_new
 	set_line "$_d/info" 1 "claim:$_who"
 	mark_updated "$_d/info"
 	unlock "$_d"
 	if [ "$_state" = expired ]; then
 		printf '%s claimed by %s (previous lease had expired)\n' "$1" "$_who"
+	elif [ "$_state" = renewed ]; then
+		printf '%s renewed by %s\n' "$1" "$_who"
 	else
 		printf '%s claimed by %s\n' "$1" "$_who"
 	fi

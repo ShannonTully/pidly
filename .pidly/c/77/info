@@ -1,0 +1,25 @@
+claim:
+needs:
+title: Renew a claim when its holder claims it again
+created: 2026-10-24T09:52:25Z
+updated: 2026-10-24T09:52:25Z
+effort: S
+area: cli
+handoff:
+
+Ported from IDOL's vendored copy (IDOL 1365), where it was found and fixed.
+
+The docs say an agent renews a lease by claiming again, but claim refused
+it: a lease's runtime is `-`, which never matches this machine's, so the
+agent's own live lease read as unverifiable ("which this machine cannot
+check"). A process claiming a ticket it already holds was refused the same
+way, as "which is running".
+
+Fix: when the claim is live or unverifiable and its holder is the one
+asking, renew it (a fresh expiry for a lease) and print `N renewed by
+<who>`. Also work out holder and lease_expiry before taking the lock:
+both can die, and a die under the lock left it behind.
+
+Done when claim.sh pins renewal of a lease and of a pid claim, the
+refusal of a different holder, and no lock left by a bad PIDLY_LEASE or
+PIDLY_PID.
