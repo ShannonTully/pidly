@@ -905,6 +905,16 @@ nothing ever complained. The basename now comes from the `awk` every caller
 already pipes through, and `ticket_dir` stops with `head -n 1` rather than
 `-quit`. `-mindepth` stays, being the one non-POSIX primary BSD ships too.
 
+**A ticket argument is checked to be digits before `find` sees it.** `-name`
+takes a glob, so `ticket_dir` once resolved `1*` or `[3]` to whichever ticket
+`find` met first, `.n` to the number registry (closing it silently removed
+the merge protection it exists for), and `*` to the tracker root itself:
+with nothing open at the top, `pidly close '*'` moved the whole of `.pidly`
+into `./c/`. Every command that takes `<n>` goes through `ticket_dir`, which
+now refuses anything but `[0-9]+` and searches with `-mindepth 1`, so the
+root is out of reach even so; `new -p ''` is refused rather than read as no
+parent (ticket 59, `tests/args.sh`).
+
 A suite running on one machine cannot prove portability, so `tests/
 portable.sh` does the two things it can: it greps the script and both
 generated documents for the extensions — the documents publish `find`

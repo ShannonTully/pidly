@@ -45,11 +45,19 @@ root() {
 
 # The directory of one ticket, by number. One traversal, not a search per
 # call: callers needing many lookups should use map() instead.
+#
+# The number is checked before it reaches find, because -name takes a glob:
+# '1*' or '[3]' resolved to whichever ticket find met first, and '*' matched
+# the tracker root itself, so `pidly close '*'` moved the whole of .pidly
+# into ./c/. -mindepth 1 keeps the root out of reach even so.
 ticket_dir() {
 	_td_r=$1 _td_n=$2
+	case $_td_n in
+	''|*[!0-9]*) die "not a ticket number: '$_td_n'" ;;
+	esac
 	# head, not -quit: find stops anyway when the pipe closes, and -quit is
 	# not POSIX. Nothing here needs an option BSD find might not have.
-	_td_p=$(find "$_td_r" -type d -name "$_td_n" -print | head -n 1)
+	_td_p=$(find "$_td_r" -mindepth 1 -type d -name "$_td_n" -print | head -n 1)
 	[ -n "$_td_p" ] || die "no ticket $_td_n"
 	printf '%s\n' "$_td_p"
 }
@@ -1440,7 +1448,10 @@ cmd_reopen() {
 	# Closed, or open inside a closed ancestor: either way there is a c/
 	# between the ticket and the surface, and lifting those out is what
 	# reopening means. A ticket with none of them is already open.
-	in_closed "$_r" "$(ticket_dir "$_r" "$1")" || die "$1 is already open"
+	# Resolved on its own line: a failed lookup inside the argument list
+	# would not stop the script, and would report "already open" instead.
+	_d=$(ticket_dir "$_r" "$1")
+	in_closed "$_r" "$_d" || die "$1 is already open"
 
 	# Outermost first. A closed ancestor holding live work is exactly what
 	# the cascade exists to prevent, so each pass re-locates the ticket and
@@ -2536,11 +2547,11 @@ pair_value() {
 NEW_USAGE='usage: pidly new [-p parent] [-n "3 8"] [-f name=value] <title>'
 
 cmd_new() {
-	_parent="" _needs="" _pairs=""
+	_parent="" _has_parent=no _needs="" _pairs=""
 	while [ $# -gt 0 ]; do
 		case $1 in
 		-p) [ $# -ge 2 ] || die "$NEW_USAGE"
-		    _parent=$2; shift 2 ;;
+		    _parent=$2 _has_parent=yes; shift 2 ;;
 		-n) [ $# -ge 2 ] || die "$NEW_USAGE"
 		    _needs=$2; shift 2 ;;
 		-f) [ $# -ge 2 ] || die "$NEW_USAGE"
@@ -2565,7 +2576,9 @@ cmd_new() {
 
 	_r=$(root)
 
-	if [ -n "$_parent" ]; then
+	# -p given counts even when empty: `-p "$unset"` filing at the top
+	# would put the ticket somewhere the caller never asked for.
+	if [ "$_has_parent" = yes ]; then
 		_pd=$(ticket_dir "$_r" "$_parent")
 		# An open child inside a closed parent would put live work in a
 		# finished tree, which is the one thing the layout rules out.
