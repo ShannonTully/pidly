@@ -205,7 +205,7 @@ f=.pidly/2/info; awk 'b { print } !b && $0 == "" { b = 1 }' "$f"
 awk 'NR>3 { if ($0 == "") exit; print }' "$f"
 
 # claim it, and ask who holds one
-PIDLY_PID=$$ pidly claim 7
+pidly claim 7
 pidly status 7
 
 # a cloud agent, which has no pid anyone here can check, leases instead

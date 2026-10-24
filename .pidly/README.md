@@ -378,14 +378,20 @@ every lookup from it. On a 2000-ticket tree the difference is 26.5s against
 ## Claiming
 
 ```sh
-PIDLY_PID=$$ pidly claim 7     # $$ is your agent's process, not the CLI's
+pidly claim 7
 pidly status 7
 pidly release 7
 ```
 
-Export `PIDLY_PID` once for the life of your agent. A release only succeeds
-for the process that made the claim, so claiming and releasing from separate
-invocations have to agree on who you are.
+A claim names your agent's long-lived process: `$CLAUDE_PID` if it is set,
+else the process that ran pidly. A release only succeeds for the process that
+made the claim, so claiming and releasing from separate invocations have to
+agree on who you are.
+
+Don't prefix a claim with `PIDLY_PID=$$`. A harness that runs each command in
+a fresh shell, as Claude Code does, ends that shell when the call returns, so
+the claim reads dead at once: a later release fails and anyone may reap it.
+Set `PIDLY_PID` only in a wrapper that knows a longer-lived process to name.
 
 A claim records `<pid>.<starttime>@<runtime>`. The start time is what stops a
 recycled pid from looking like the original process; the runtime is boot id,

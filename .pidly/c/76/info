@@ -1,0 +1,23 @@
+claim:
+needs:
+title: Stop telling agents to claim with PIDLY_PID=$$
+created: 2026-10-24T09:50:52Z
+updated: 2026-10-24T09:50:52Z
+effort: S
+area: docs
+handoff:
+
+Ported from IDOL's vendored copy (IDOL 1364), where it was found and fixed.
+
+The generated docs (AGENTS.md block, .pidly/README.md "## Claiming")
+told agents to claim with `PIDLY_PID=$$ pidly claim 7`. $$ is the shell
+running the command. A harness that runs each command in a fresh shell
+(Claude Code does) ends that shell when the call returns, so the claim
+reads dead at once: the agent's own release fails and anyone may reap it.
+
+Fix: recommend plain `pidly claim 7`, which names $CLAUDE_PID or the
+process that ran pidly, and say not to prefix PIDLY_PID=$$; PIDLY_PID is
+for a wrapper that knows a longer-lived process to name. Same in README.md.
+
+Done when agents.sh fails on a generated document that recommends
+PIDLY_PID=$$.

@@ -518,6 +518,13 @@ tool call's shell is a direct child of the runner; wrap that call in another
 shell and `$PPID` quietly becomes the wrapper. Naming the runner explicitly
 is free and does not guess.
 
+So the generated docs say plain `pidly claim 7`, and tell agents not to
+write `PIDLY_PID=$$ pidly claim 7`, which they once recommended. `$$` is the
+shell running the command, and a harness that gives each command a fresh
+shell, as Claude Code does, ends that shell when the call returns: the claim
+reads dead at once, its own release fails, and anyone may reap it (ticket
+76). `PIDLY_PID` is for a wrapper that knows a longer-lived process to name.
+
 **Delegation is a convention, not a hook.** Claude Code has `SubagentStart`
 and `SubagentStop`, but `PreToolUse` cannot modify tool input, so a hook
 cannot put a ticket number into a subagent's prompt. It does not need to:
