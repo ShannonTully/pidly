@@ -1,0 +1,10 @@
+claim:
+needs:
+title: The generated AGENTS block tells subagents to claim child tickets, which breaks for subagents in separate worktrees
+created: 2026-10-24T15:45:31Z
+updated: 2026-10-24T15:45:31Z
+effort: S
+area: docs
+handoff:
+
+Ported from idol pidly 939 (2026-10-21). The block `pidly agents` writes says "A subagent gets a child ticket and claims it with PIDLY_AGENT, a name you pick." Projects whose subagents work in separate git worktrees (idol and game) have the lead do all tracker work instead, because worktrees cannot see each other's claims or ticket numbers; the generated line contradicts their own AGENTS.md, and it cannot be hand-edited because `pidly check` flags drift. Either word the line so it fits both setups (for example "a subagent sharing your checkout gets a child ticket ...; in separate worktrees, leave the tracker to the lead"), or let a project override generated text.
