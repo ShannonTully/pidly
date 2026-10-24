@@ -1281,13 +1281,18 @@ cmd_needs() {
 }
 
 # Declared fields one ticket has no line for, in schema order, space-separated.
+#
+# The list is one name per line, so it travels through the environment: BSD
+# awk (macOS) refuses a newline inside an awk -v value outright, printing
+# "newline in string" and running nothing. The same goes for every other
+# field list handed to awk below.
 missing_fields() {
-	awk -v decl="$2" '
+	PIDLY_DECL=$2 awk '
 		NR <= 3 { next }
 		$0 == "" { exit }
 		{ k = substr($0, 1, index($0, ":") - 1); seen[k] = 1 }
 		END {
-			n = split(decl, d, "\n")
+			n = split(ENVIRON["PIDLY_DECL"], d, "\n")
 			for (i = 1; i <= n; i++)
 				if (d[i] != "" && !(d[i] in seen)) printf "%s ", d[i]
 		}' "$1"
@@ -1334,11 +1339,11 @@ cmd_fields() {
 			continue
 		fi
 		_ftmp="$_ff.$$"
-		awk -v decl="$_fdecl" '
+		PIDLY_DECL=$_fdecl awk '
 			{ line[NR] = $0 }
 			END {
 				if (NR < 3) { for (i = 1; i <= NR; i++) print line[i]; exit }
-				n = split(decl, d, "\n")
+				n = split(ENVIRON["PIDLY_DECL"], d, "\n")
 				for (i = 1; i <= n; i++) if (d[i] != "") idx[d[i]] = i
 				# The field block: line 4 to the blank line that
 				# starts the body, or to the end of the file.
@@ -3240,10 +3245,10 @@ schema_faults() {
 
 	# \047 is the apostrophe: the program is inside single quotes, so it
 	# cannot contain one.
-	awk -v mine="$(format_fields)" '
+	PIDLY_MINE=$(format_fields) awk '
 		BEGIN {
 			q = "\047"
-			n = split(mine, f, "\n")
+			n = split(ENVIRON["PIDLY_MINE"], f, "\n")
 			for (i = 1; i <= n; i++) if (f[i] != "") owned[f[i]] = 1
 		}
 		function say(msg) { print "schema: " msg ", at line " NR }
@@ -3751,10 +3756,10 @@ $_e
 	# ticket, which is an awk per ticket, plus a grep per field to ask
 	# whether it was required. Both answers are in here now.
 	if [ -n "$_decl" ]; then
-		printf '%s\n' "$_m" | awk -v decl="$_decl" -v req="$_req" '
+		printf '%s\n' "$_m" | PIDLY_DECL=$_decl PIDLY_REQ=$_req awk '
 			BEGIN {
-				dn = split(decl, d, "\n")
-				rn = split(req, r, "\n")
+				dn = split(ENVIRON["PIDLY_DECL"], d, "\n")
+				rn = split(ENVIRON["PIDLY_REQ"], r, "\n")
 				for (i = 1; i <= rn; i++)
 					if (r[i] != "") isreq[r[i]] = 1
 			}

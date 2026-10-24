@@ -1,0 +1,1 @@
+dewey7qs Pass field lists to awk through the environment, not -v, for BSD awk

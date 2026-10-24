@@ -1,0 +1,12 @@
+claim:
+needs:
+title: Pass field lists to awk through the environment, not -v, for BSD awk
+created: 2026-10-24T21:39:19Z
+updated: 2026-10-24T21:39:19Z
+effort: S
+area: cli
+handoff:
+
+BSD awk (macOS, `awk version 20200816`) refuses a newline inside an `awk -v` value: `awk: newline in string claim ...`. Four calls pass a newline-separated field list that way: schema_faults (`mine`), missing_fields and the field-slate rewrite (`decl`), and check's missing-field pass (`decl`). On macOS `pidly check` then prints the awk error, skips the schema and missing-field checks, and still says `ok: N tickets`; tests/schema.sh fails 9 assertions there.
+
+Fix: pass the lists through the environment, as set_line and get_field already do for escape sequences.
