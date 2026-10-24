@@ -338,10 +338,71 @@ lock() {
 			# lock is treated as in-flight, never as abandoned.
 			continue
 		fi
+		_lk_busy=""
 		if kill -0 "$_lk_owner" 2>/dev/null; then
-			# A live holder. Wait if we were given a budget: the
-			# lock is held for a few syscalls, so a short sleep
-			# almost always clears it.
+			_lk_busy=1                             # a live holder
+		else
+			# A dead one: break it, but never with a bare rm. Two
+			# contenders can both read the dead owner; if the first
+			# breaks the lock and wins it before the second gets
+			# to its rm, that rm deletes the first one's live lock
+			# and both walk in (ticket 78).
+			#
+			# So breaking the lock of owner X takes a second lock,
+			# .lock.X.brk, published the same way (link(2) of our
+			# pid file), and under it the owner is read again and
+			# .lock removed only if it still names X. While we
+			# hold .lock.X.brk nothing else can replace .lock: X
+			# is dead so cannot unlock, ln cannot publish over an
+			# existing .lock, and every other breaker of X is
+			# waiting on .lock.X.brk. A breaker of some other
+			# owner Y reads X, not Y, and leaves it. So a .lock
+			# that still names X at the re-read is X's at the rm.
+			#
+			# Renaming .lock aside (mv .lock .lock.stale.$$) and
+			# reading it there was the other candidate. It is
+			# worse: whoever is late moves a live lock aside, and
+			# putting it back races a third process's ln. Only
+			# link, read and unlink are used here, the calls this
+			# lock already relied on, so nothing new is asked of
+			# proot's link2symlink emulation (where a hard link is
+			# a symlink pair and rename is not something to lean on).
+			_lk_b="$_lk_d/.lock.$_lk_owner.brk"
+			if ln "$_lk_t" "$_lk_b" 2>/dev/null; then
+				_lk_now=""
+				read -r _lk_now < "$_lk_d/.lock" 2>/dev/null || true
+				[ "$_lk_now" = "$_lk_owner" ] && rm -f "$_lk_d/.lock"
+				rm -f "$_lk_b"
+				continue
+			fi
+			_lk_breaker=""
+			read -r _lk_breaker < "$_lk_b" 2>/dev/null || true
+			if [ -z "$_lk_breaker" ]; then
+				continue           # just released, or in flight
+			elif kill -0 "$_lk_breaker" 2>/dev/null; then
+				_lk_busy=1         # a live breaker: as a live holder
+			elif _lk_now="" &&
+				read -r _lk_now < "$_lk_d/.lock" 2>/dev/null &&
+				[ "$_lk_now" = "$_lk_owner" ]; then
+				# The breaker died inside its few calls. Breaking
+				# its .brk in turn would have the same race one
+				# level down, so this stops and says so: a wedge
+				# a human clears beats two writers.
+				printf 'pidly: %s names %s, which is gone, and %s died breaking it; with no pidly running, remove it and %s by hand\n' \
+					"$_lk_d/.lock" "$_lk_owner" "$_lk_breaker" "$_lk_b" >&2
+				rm -f "$_lk_t"
+				return 1
+			else
+				# It died after the lock was gone. Its .brk only
+				# ever guarded a .lock naming X, which can never
+				# come back, so it is litter: anyone may clear it.
+				rm -f "$_lk_b"
+			fi
+		fi
+		if [ -n "$_lk_busy" ]; then
+			# Wait if we were given a budget: the lock is held for
+			# a few syscalls, so a short sleep almost always
+			# clears it.
 			if [ "$_lk_waited" -lt "$_lk_budget" ]; then
 				sleep 0.05 2>/dev/null || sleep 1
 				_lk_waited=$((_lk_waited + 1))
@@ -351,7 +412,6 @@ lock() {
 			rm -f "$_lk_t"
 			return 1
 		fi
-		rm -f "$_lk_d/.lock"                           # a dead one: break it
 	done
 	rm -f "$_lk_t"
 	return 1
@@ -1906,7 +1966,10 @@ pidly reap        # sweep the whole tracker, closed work included
 and `reap` will not do it for you. It refuses a live claim, an unverifiable
 one, and an expired lease, which needs no clearing because it is already
 takeable. A stale `.lock` needs no clearing either: it names a local process,
-and the next command to want the lock breaks it.
+and the next command to want the lock breaks it. The one exception is a pidly
+killed in the instant it was breaking one: it leaves a `.lock.<pid>.brk`
+beside the `.lock`, and the next command stops and names both files to
+remove by hand rather than risk two writers.
 
 Claiming rewrites line 1, so it is the one operation that is not safe to do
 by hand while other agents are running: `pidly claim` serializes it behind a

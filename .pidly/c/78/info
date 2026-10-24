@@ -1,0 +1,25 @@
+claim:
+needs:
+title: Don't let breaking a dead lock delete a live one
+created: 2026-10-24T10:26:39Z
+updated: 2026-10-24T10:26:39Z
+effort: M
+area: cli
+handoff:
+
+Ported from IDOL's vendored copy (IDOL 1368), where it was found and fixed.
+
+lock() broke a lock whose owner was dead with a bare rm -f .lock. Two
+contenders can both read the dead owner X; if the first breaks the lock
+and publishes its own before the second reaches its rm, that rm deletes
+the first one's live lock and both walk in: two writers on one ticket.
+
+Fix: break X's lock only while holding .lock.X.brk (published with
+link(2) like the lock), re-reading .lock under it and removing it only if
+it still names X. A .brk held by a live process is waited on like a live
+lock; a dead breaker's .brk with the lock gone is litter and is cleared;
+a dead breaker with X's lock still there stops and names both files to
+remove by hand. The generated reference says so.
+
+Done when claim.sh drives the race with parked rm/ln wrappers and pins
+the wedge and litter cases.

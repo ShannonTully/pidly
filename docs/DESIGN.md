@@ -396,7 +396,7 @@ lock() {
 		if kill -0 "$_owner" 2>/dev/null; then
 			rm -f "$_t"; return 1               # a live holder
 		fi
-		rm -f "$_d/.lock"                           # a dead one: break it
+		break_dead "$_d" "$_owner" || return 1      # a dead one: see below
 	done
 	rm -f "$_t"; return 1
 }
@@ -422,7 +422,8 @@ two writers: **an empty lock means in-flight, never abandoned.**
 Three properties matter. The lock is **transient** — held for the microseconds
 of one rewrite, so a repository at rest still has exactly one file per ticket.
 It is **self-healing**: a crash leaves a pid that the next caller finds dead
-and breaks, rather than wedging the ticket forever. And that recovery is **the
+and breaks, rather than wedging the ticket forever (the one exception, a
+process killed while breaking a lock, is below). And that recovery is **the
 same idiom as stale claim detection**, so the system has one liveness
 mechanism rather than two.
 
@@ -430,6 +431,32 @@ The pid in the lock is the `pidly` process's own, not the agent's. A lock is
 alive exactly as long as the command holding it; a claim outlives many.
 
 Measured: 100 concurrent claims on one free ticket, one winner, no leftovers.
+
+**Breaking a dead lock takes a lock of its own.** It used to be a bare
+`rm -f .lock`, and that had a race: two contenders both read the dead owner
+X; the first removes the lock, publishes its own and starts writing; the
+second, arriving late at its `rm`, deletes that live lock and walks in
+beside it (ticket 78). So breaking X's lock means publishing
+`.lock.X.brk` the same way — `link(2)` of our pid file — and, holding it,
+reading `.lock` again and removing it only if it still names X. While
+`.lock.X.brk` is held nothing can replace `.lock`: X is dead and cannot
+unlock, `ln` cannot publish over an existing `.lock`, and every other breaker
+of X is waiting on the same `.brk`. A breaker of another owner Y reads X, not
+Y, and leaves it. So a `.lock` that still names X at the re-read is X's at
+the `rm`.
+
+A `.brk` whose owner is alive is treated like a live lock. One whose owner is
+dead is either litter — the `.lock` naming X is already gone and can never
+come back, so anyone may remove it — or a breaker killed inside its few
+calls, with X's `.lock` still there. That last case stops with a message
+naming both files to remove by hand: breaking the `.brk` in turn would have
+the same race one level down, and a wedge a human clears beats two writers.
+
+Renaming `.lock` aside and reading it there was the other candidate, and it
+is worse: whoever is late moves a live lock aside, and putting it back races
+a third process's `ln`. The `.brk` uses only `link`, `read` and `unlink`, the
+calls the lock already relied on, so nothing new is asked of emulations
+such as proot's link2symlink, where rename is not something to lean on.
 
 **Whether to wait for the lock is the caller's decision.** `claim` returns
 immediately if someone else holds it: there is other work to pick up, and

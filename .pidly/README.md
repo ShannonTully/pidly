@@ -437,7 +437,10 @@ pidly reap        # sweep the whole tracker, closed work included
 and `reap` will not do it for you. It refuses a live claim, an unverifiable
 one, and an expired lease, which needs no clearing because it is already
 takeable. A stale `.lock` needs no clearing either: it names a local process,
-and the next command to want the lock breaks it.
+and the next command to want the lock breaks it. The one exception is a pidly
+killed in the instant it was breaking one: it leaves a `.lock.<pid>.brk`
+beside the `.lock`, and the next command stops and names both files to
+remove by hand rather than risk two writers.
 
 Claiming rewrites line 1, so it is the one operation that is not safe to do
 by hand while other agents are running: `pidly claim` serializes it behind a

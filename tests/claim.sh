@@ -131,5 +131,123 @@ check "a PIDLY_PID that is not running is refused" "$rc" "1"
 check "without leaving the lock behind either" "$(find .pidly/4 -name '.lock*' | wc -l | tr -d ' ')" "0"
 check "and the ticket stays free" "$(line)" "claim:"
 
+echo "breaking a dead lock"
+# Two contenders can both read a dead owner from .lock. If the first breaks
+# it and wins before the second gets to act, a bare rm in the second deletes
+# the first one's live lock and both walk in (ticket 78). Nothing in pidly
+# holds a contender there, so rm and ln wrappers go first on PATH (both are
+# external commands; kill and read are builtins), and a wrapper parks its
+# process on the first call its rule picks out until the test lets it go:
+#   act   the first rm or ln after a failed ln onto .lock: acting on a lock
+#         it found
+#   held  removing its own .lock.<pid> once it has won the lock
+real=$(dirname "$(command -v rm)")
+[ "$(dirname "$(command -v ln)")" = "$real" ] || { no "rm and ln live apart"; exit 1; }
+park() {   # park NAME RULE: a bin dir and a pause dir for one contender
+	mkdir -p "$tmp/bin-$1" "$tmp/pause-$1"
+	for tool in rm ln; do
+		cat > "$tmp/bin-$1/$tool" <<'EOF'
+#!/bin/sh
+last=""
+for a in "$@"; do last=$a; done
+hit=""
+case "$PAUSE_RULE:$0" in
+act:*/rm) case "$*" in */.lock*) hit=1 ;; esac ;;
+act:*/ln) case "$last" in */.lock) ;; */.lock?*) hit=1 ;; esac ;;
+held:*/rm) case "$last" in */.lock.*[!0-9]*) ;; */.lock.[0-9]*) hit=1 ;; esac ;;
+esac
+if [ -n "$hit" ] && mkdir "$PAUSE_DIR/parked" 2>/dev/null; then
+	while [ ! -e "$PAUSE_DIR/go" ]; do sleep 0.01 2>/dev/null || sleep 1; done
+fi
+exec "$REAL_DIR/${0##*/}" "$@"
+EOF
+		chmod +x "$tmp/bin-$1/$tool"
+	done
+}
+# parked_claim NAME RULE TICKET: claim in the background, parking per RULE.
+parked_claim() {
+	park "$1" "$2"
+	( PATH="$tmp/bin-$1:$PATH" PAUSE_RULE=$2 PAUSE_DIR="$tmp/pause-$1" \
+	  REAL_DIR=$real PIDLY_PID=$$ $PIDLY claim "$3" > "$tmp/out-$1" 2>&1 &&
+	  echo 0 > "$tmp/rc-$1" || echo $? > "$tmp/rc-$1" ) &
+}
+wait_parked() {
+	_w=0
+	while [ ! -d "$tmp/pause-$1/parked" ] && [ ! -e "$tmp/rc-$1" ] && [ $_w -lt 3000 ]; do
+		sleep 0.01 2>/dev/null || sleep 1; _w=$((_w+1))
+	done
+	[ -d "$tmp/pause-$1/parked" ]
+}
+dead_pid() { true & _dp=$!; wait "$_dp" || true; echo "$_dp"; }
+locks() { find "$1" -name '.lock*' | sed 's|.*/||' | sort | tr '\n' ' '; }
+fresh() {
+	rm -rf ".pidly/$1" "$tmp"/bin-* "$tmp"/pause-* "$tmp"/out-* "$tmp"/rc-*
+	mkdir ".pidly/$1"
+	printf 'claim:\nneeds:\ntitle: ticket %s\n\nbody\n' "$1" > ".pidly/$1/info"
+}
+
+fresh 5
+dead_pid > .pidly/5/.lock
+parked_claim b act 5
+if wait_parked b; then
+	parked_claim a held 5
+	if wait_parked a; then
+		a_pid=$(cat .pidly/5/.lock)
+		touch "$tmp/pause-b/go"
+		_w=0
+		while [ ! -e "$tmp/rc-b" ] && [ $_w -lt 3000 ]; do
+			sleep 0.01 2>/dev/null || sleep 1; _w=$((_w+1))
+		done
+		check "a late breaker leaves the live lock that replaced a dead one" \
+			"$(cat .pidly/5/.lock 2>/dev/null)" "$a_pid"
+		check "and does not walk in beside its holder" "$(cat "$tmp/rc-b")" "1"
+		case $(cat "$tmp/out-b") in *"being modified by another process"*)
+			ok "it reports the ticket busy" ;;
+		*) no "message was: $(cat "$tmp/out-b")" ;; esac
+	else no "the winner never took the lock: $(cat "$tmp/out-a" 2>/dev/null)"; fi
+else no "the late breaker never reached the dead lock: $(cat "$tmp/out-b" 2>/dev/null)"; fi
+touch "$tmp/pause-a/go" "$tmp/pause-b/go"
+wait
+check "the winner's claim goes through" "$(cat "$tmp/rc-a" 2>/dev/null)" "0"
+check "and no lock file is left" "$(locks .pidly/5)" ""
+
+fresh 5
+dead_pid > .pidly/5/.lock
+out=$(PIDLY_PID=$$ $PIDLY claim 5 2>&1) && rc=0 || rc=$?
+check "a dead lock is still broken" "$rc" "0"
+check "leaving no lock file behind" "$(locks .pidly/5)" ""
+
+# A breaker that died mid-break: its .brk cannot be broken in turn without
+# the same race one level down, so the dead lock is left for a human.
+fresh 5
+owner=$(dead_pid); breaker=$(dead_pid)
+echo "$owner" > .pidly/5/.lock
+echo "$breaker" > ".pidly/5/.lock.$owner.brk"
+out=$(PIDLY_PID=$$ $PIDLY claim 5 2>&1) && rc=0 || rc=$?
+check "a lock whose breaker died mid-break is not broken" "$rc" "1"
+case $out in *"$breaker died breaking it"*) ok "it says the breaker died" ;; *) no "message was: $out" ;; esac
+case $out in *".pidly/5/.lock.$owner.brk"*) ok "and names the file to remove" ;; *) no "message was: $out" ;; esac
+check "the lock still names its dead owner" "$(cat .pidly/5/.lock 2>/dev/null)" "$owner"
+check "the ticket stays free" "$(sed -n 1p .pidly/5/info)" "claim:"
+check "and both files are left" "$(locks .pidly/5)" ".lock .lock.$owner.brk "
+
+# A breaker that died after removing the lock leaves only litter: a .brk for
+# an owner no .lock names any more.
+fresh 5
+owner=$(dead_pid); breaker=$(dead_pid)
+echo "$owner" > .pidly/5/.lock
+echo "$breaker" > ".pidly/5/.lock.$owner.brk"
+parked_claim c act 5
+if wait_parked c; then
+	rm -f .pidly/5/.lock       # what the breaker did before it died
+else no "the claim never reached the dead lock: $(cat "$tmp/out-c" 2>/dev/null)"; fi
+touch "$tmp/pause-c/go"
+wait
+check "a dead breaker's leftover does not block a claim" "$(cat "$tmp/rc-c")" "0"
+case $(cat "$tmp/out-c") in *"died breaking it"*) no "it wedged: $(cat "$tmp/out-c")" ;;
+*) ok "and is not reported as a wedge" ;; esac
+check "and is cleared" "$(locks .pidly/5)" ""
+rm -rf "$tmp"/bin-* "$tmp"/pause-* "$tmp"/out-* "$tmp"/rc-*
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
