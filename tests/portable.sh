@@ -76,7 +76,7 @@ check "the shim refuses what it is meant to" \
 	"$(find . -printf '%f\n' >/dev/null 2>&1 || echo $?)" "2"
 
 $PIDLY new -f handoff=x "first" </dev/null >/dev/null 2>&1 || true
-out=$($PIDLY new "one" </dev/null 2>&1) && rc=0 || rc=$?
+$PIDLY new "one" </dev/null >/dev/null 2>&1 && rc=0 || rc=$?
 check "new works" "$rc" "0"
 $PIDLY new -p 1 "a child" </dev/null >/dev/null
 $PIDLY list >/dev/null && ok "list works" || no "list"

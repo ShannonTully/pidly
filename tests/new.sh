@@ -52,7 +52,7 @@ check "the ticket is dated" "$(sed -n '4s/^created: //p' $f | grep -Ec "$iso")" 
 check "and stamped as just updated" "$(sed -n '5s/^updated: //p' $f | grep -Ec "$iso")" "1"
 check "every declared field gets a slot" "$(sed -n 6p $f)" "effort:"
 check "optional ones too, empty" "$(sed -n 7p $f)" "area:"
-check "an empty body writes no blank line" "$(wc -l < $f)" "7"
+check "an empty body writes no blank line" "$(wc -l < $f | tr -d " ")" "7"
 
 printf 'line one\nline two\n' | $PIDLY new "with body" >/dev/null
 f=.pidly/6/info
@@ -115,7 +115,7 @@ EOF
 out=$($PIDLY new "unvalued" </dev/null 2>&1) && rc=0 || rc=$?
 check "a required field with no value is refused" "$rc" "1"
 case $out in *effort*) ok "and the refusal names it" ;; *) no "message: $out" ;; esac
-check "and no ticket is left behind" "$(find .pidly -name info | wc -l)" "0"
+check "and no ticket is left behind" "$(find .pidly -name info | wc -l | tr -d " ")" "0"
 out=$($PIDLY new -f effort= "empty value" </dev/null 2>&1) && rc=0 || rc=$?
 check "an empty value is no value" "$rc" "1"
 
@@ -152,7 +152,7 @@ check "pidly's own stamps are not -f's to set" "$rc" "1"
 out=$($PIDLY new -f effort="two
 lines" "multiline value" </dev/null 2>&1) && rc=0 || rc=$?
 check "a multi-line value is refused" "$rc" "1"
-check "none of the refusals created anything" "$(find .pidly -name info | wc -l)" "2"
+check "none of the refusals created anything" "$(find .pidly -name info | wc -l | tr -d " ")" "2"
 cd "$tmp"
 
 echo "a number issued after the scan"
@@ -206,7 +206,7 @@ after=$(find .pidly -name info | wc -l)
 check "every parallel creation succeeds" "$((after - before))" "$PIDLY_TEST_RACE"
 dupes=$(find .pidly -mindepth 1 -type d '!' -name c '!' -name '.*' -print | awk -F/ '{print $NF}' | sort | uniq -d | tr -d '\n')
 check "and no number is issued twice" "$dupes" ""
-check "no lock is left behind" "$(find .pidly -name '.lock*' | wc -l)" "0"
+check "no lock is left behind" "$(find .pidly -name '.lock*' | wc -l | tr -d " ")" "0"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

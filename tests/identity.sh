@@ -67,7 +67,7 @@ check "a malformed lease is rejected" "$rc" "1"
 # the pid branch and record a local pid for an agent with no local process,
 # silently — which is what the published PIDLY_AGENT=$SESSION_ID line did.
 sedi '1s/.*/claim:/' .pidly/1/info
-out=$(PIDLY_AGENT= PIDLY_LEASE=1h $PIDLY claim 1 2>&1) && rc=0 || rc=$?
+out=$(PIDLY_AGENT='' PIDLY_LEASE=1h $PIDLY claim 1 2>&1) && rc=0 || rc=$?
 check "an empty agent name is rejected, not a fallback to the pid" "$rc" "1"
 case $out in *PIDLY_AGENT*) ok "the refusal names PIDLY_AGENT" ;; *) no "message: $out" ;; esac
 check "and nothing was claimed" "$(state 1)" "unclaimed"

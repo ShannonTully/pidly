@@ -120,12 +120,20 @@ mkdir -p .pidly/10
 printf 'claim:\nneeds:\ntitle: unreadable\n\nbody\n' > .pidly/10/info
 was=$(cksum < .pidly/10/info)
 chmod 000 .pidly/10/info
-$PIDLY init >/dev/null 2>&1 || true
-chmod 644 .pidly/10/info
-check "is skipped whole rather than rewritten" "$(cksum < .pidly/10/info)" "$was"
-check "so it gains no created line" "$(created 10 | wc -l | tr -d ' ')" "0"
-check "and leaves no half-written file behind" \
-	"$(find .pidly/10 -name 'info.*' | wc -l | tr -d ' ')" "0"
+if [ -r .pidly/10/info ]; then
+	# Root reads through a mode of 000, so there is no unreadable ticket to
+	# test against — common in containers. Say so rather than fail on it.
+	chmod 644 .pidly/10/info
+	printf '  skip  the file stays readable to this user (root?), so there is nothing to skip\n'
+	rm -r .pidly/10
+else
+	$PIDLY init >/dev/null 2>&1 || true
+	chmod 644 .pidly/10/info
+	check "is skipped whole rather than rewritten" "$(cksum < .pidly/10/info)" "$was"
+	check "so it gains no created line" "$(created 10 | wc -l | tr -d ' ')" "0"
+	check "and leaves no half-written file behind" \
+		"$(find .pidly/10 -name 'info.*' | wc -l | tr -d ' ')" "0"
+fi
 check "the tracker is still valid" "$($PIDLY check >/dev/null && echo clean)" "clean"
 
 echo "dating follows a move"

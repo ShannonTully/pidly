@@ -37,7 +37,7 @@ echo "it answers before anything else does"
 # Asking what you are running must work when nothing else does: outside a
 # tracker, which every other command refuses, and on a first install before
 # init has ever run.
-check "there is no tracker here" "$(ls -a | grep -c '^\.pidly$' || true)" "0"
+check "there is no tracker here" "$(if [ -e .pidly ]; then echo 1; else echo 0; fi)" "0"
 out2=$($PIDLY --version) && rc=0 || rc=$?
 check "--version still works outside a tracker" "$rc" "0"
 check "with the same answer" "$out2" "$out"
