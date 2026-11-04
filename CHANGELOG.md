@@ -10,6 +10,10 @@ on-disk format has been lived with by someone who did not write it.
   backslashes in a `gsub` replacement, so the man page and imports come out
   the same under mawk, gawk and BSD awk (79).
 - `init` reports its counts without BSD `wc`'s padding (87).
+- A claim's start time is read from after the last `)` in `/proc/PID/stat`,
+  so a command name with a space in it no longer shifts it (67), and on
+  systems without `/proc` it comes from `ps`, so a recycled pid is caught
+  there too (66).
 - The tests run in CI on Linux and macOS, under gawk too, with shellcheck;
   `tests/run.sh` finds its suites instead of listing them (68).
 - Documentation brought back in line with the tool: every command is listed,
