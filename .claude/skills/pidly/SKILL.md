@@ -49,7 +49,8 @@ PIDLY_AGENT=sub-review-parser PIDLY_LEASE=1h pidly claim 19
 ## Making a ticket
 
 ```sh
-pidly new -f effort=M "Short title"   # body on stdin; -p N for a subtask
+pidly new "Short title"    # body on stdin; -p N for a subtask
+                           # -f name=value for a field .pidly/schema declares
 ```
 
 Not for work you are finishing in the same breath — a ticket opened and

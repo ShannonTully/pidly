@@ -185,18 +185,22 @@ checkout where pidly was never installed, this is the whole interface.
 # every open ticket, at any depth, never descending into finished work
 find .pidly -type d -name c -prune -o -name info -print
 
-# what can I start right now? — two lines per ticket, no bodies read
-find .pidly -type d -name c -prune -o -name info -print | sort -V |
+# what can I start right now? — the header and fields, no bodies read
+find .pidly -type d -name c -prune -o -name info -print |
   while read -r f; do
-    [ -n "$(sed -n '1s/^claim://p' "$f")" ] && continue     # already claimed
+    [ -n "$(sed -n '1s/^claim://p' "$f")" ] && continue     # claimed*
+    awk '$0 == "" { exit } /^defer: *[^ ]/ { found = 1 } END { exit !found }' \
+      "$f" && continue                                       # deferred
     for dep in $(sed -n '2s/^needs://p' "$f"); do
       case "$(find .pidly -type d -name "$dep")" in
-        */c/*) ;; *) continue 2 ;;
+        */c/*) ;; *) continue 2 ;;                           # blocked
       esac
     done
     printf '%s\t%s\n' "$(basename "$(dirname "$f")")" \
       "$(sed -n '3s/^title: //p' "$f")"
   done
+# * A claim whose lease has expired is free to take, which this loop cannot
+#   tell from a live one; `pidly status N` can, and `pidly list` does.
 
 # the body of one ticket, exactly
 f=.pidly/2/info; awk 'b { print } !b && $0 == "" { b = 1 }' "$f"
@@ -216,8 +220,8 @@ sed '1s/.*/claim:/' .pidly/2/info > t && mv t .pidly/2/info
 mkdir -p .pidly/c && mv .pidly/2 .pidly/c/
 ```
 
-Names are unpadded, so `ls` sorts them lexically (`1, 10, 2`). Use `ls -v` or
-`sort -V` when you want numeric order.
+Names are unpadded, so `ls` sorts them lexically (`1, 10, 2`). Pipe through
+`sort -n` when you want numeric order; `find` itself promises no order at all.
 
 Claiming is the one thing not safe to do by hand while other agents are
 running: rewriting a line is read-modify-write, so two agents can both take a

@@ -37,6 +37,14 @@ for opt in $gnuisms; do
 	n=$(cat .pidly/README.md AGENTS.md | grep -c -- "find .*$opt" || true)
 	check "no $opt in a published idiom" "$n" "0"
 done
+# The project README publishes its own by-hand idioms, for a checkout with no
+# pidly in it, and they are held to the same bar.
+for opt in $gnuisms; do
+	n=$(grep -c -- "find .*$opt" "$SUITES/../README.md" || true)
+	check "no $opt in the README's idioms" "$n" "0"
+done
+check "no sort -V in the README, which BSD sort lacks" \
+	"$(grep -c 'sort -V' "$SUITES/../README.md" || true)" "0"
 
 echo "the suites themselves"
 # The suite has to run on the machine someone is porting pidly to, or the
