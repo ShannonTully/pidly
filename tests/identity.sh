@@ -29,8 +29,12 @@ esac
 # the name, so a start time read by position names the wrong field (67).
 sedi '1s/.*/claim:/' .pidly/1/info
 odd="$tmp/a) b c"
-cp "$(command -v sleep)" "$odd"
-"$odd" 30 & oddpid=$!
+# A script rather than a copy of sleep: some sleeps are a multi-call binary
+# that picks what to be from its own name. Run as a script, the process's
+# name is the script's file name.
+printf '#!/bin/sh\nwhile :; do sleep 1; done\n' > "$odd"
+chmod +x "$odd"
+"$odd" & oddpid=$!
 PIDLY_PID=$oddpid $PIDLY claim 1 >/dev/null
 check "a process named with a parenthesis is still live" "$(state 1)" "live"
 if [ -r "/proc/$oddpid/stat" ]; then
