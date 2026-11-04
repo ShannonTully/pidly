@@ -21,6 +21,9 @@ jobs:
         # separately below, so all three dialects are covered.
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    # The suites take about a minute; a hang should fail, with a log, not
+    # hold a runner for hours.
+    timeout-minutes: 15
     env:
       # Hosted runners are small; the locking still gets raced.
       PIDLY_TEST_RACE: 16
@@ -30,12 +33,15 @@ jobs:
           # pidly dates tickets from git history, and the tests exercise it.
           fetch-depth: 0
       - name: Tests
-        run: ./tests/run.sh
+        # pidly reads a body from stdin when it is not a terminal, so a
+        # runner's open stdin must not be what a test waits on.
+        run: ./tests/run.sh < /dev/null
       - name: The tracker and generated files are in step
         run: ./bin/pidly check
 
   gawk:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       PIDLY_TEST_RACE: 16
     steps:
@@ -49,7 +55,9 @@ jobs:
           echo "$RUNNER_TEMP/awk" >> "$GITHUB_PATH"
       - run: awk --version | head -1
       - name: Tests
-        run: ./tests/run.sh
+        # pidly reads a body from stdin when it is not a terminal, so a
+        # runner's open stdin must not be what a test waits on.
+        run: ./tests/run.sh < /dev/null
 
   shellcheck:
     runs-on: ubuntu-latest
