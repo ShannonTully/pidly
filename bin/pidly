@@ -141,7 +141,26 @@ checkout_id() {
 	printf '%s\n' "$_ci_cid"
 }
 
-starttime() { awk '{print $22}' "/proc/$1/stat" 2>/dev/null || true; }
+# When a process started, as digits, or nothing if it cannot be said.
+#
+# From /proc, field 22 of stat counted from after the last ")": field 2 is
+# the command name in parentheses, and a name holding a space or a ")" would
+# shift every field after it (67). Without /proc — macOS, the BSDs — from
+# ps's lstart, as YYYYMMDDhhmmss in local time, which is only ever compared
+# with a value this same machine wrote (66).
+starttime() {
+	if [ -r "/proc/$1/stat" ]; then
+		sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '{ print $20 }' || true
+	else
+		LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null | LC_ALL=C awk '
+			NF == 5 {
+				m = index("JanFebMarAprMayJunJulAugSepOctNovDec", $2)
+				if (m == 0) exit
+				gsub(/:/, "", $4)
+				printf "%04d%02d%02d%s\n", $5, (m + 2) / 3, $3, $4
+			}' || true
+	fi
+}
 
 # Is this process identity still running? Only called when the recorded
 # runtime matches ours — same boot, same namespace, same uid — so our own
@@ -156,7 +175,12 @@ holder_alive() {
 		[ -z "$_ha_start" ] && return 0
 		[ "$(starttime "$_ha_pid")" = "$_ha_start" ]
 	else
-		kill -0 "$_ha_pid" 2>/dev/null
+		kill -0 "$_ha_pid" 2>/dev/null || return 1
+		[ -z "$_ha_start" ] && return 0
+		# A ps that cannot say leaves the pid as the only evidence, which
+		# is what a claim recorded without a start time gets anyway.
+		_ha_now=$(starttime "$_ha_pid")
+		[ -z "$_ha_now" ] || [ "$_ha_now" = "$_ha_start" ]
 	fi
 }
 

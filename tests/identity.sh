@@ -25,6 +25,25 @@ case $held in
 *)     no "claim has no start time or runtime: $held" ;;
 esac
 
+# A process whose name holds ") " shifts every field of /proc/PID/stat after
+# the name, so a start time read by position names the wrong field (67).
+sedi '1s/.*/claim:/' .pidly/1/info
+odd="$tmp/a) b c"
+cp "$(command -v sleep)" "$odd"
+"$odd" 30 & oddpid=$!
+PIDLY_PID=$oddpid $PIDLY claim 1 >/dev/null
+check "a process named with a parenthesis is still live" "$(state 1)" "live"
+if [ -r "/proc/$oddpid/stat" ]; then
+	# The name is the only field that can hold a space, so the fields after
+	# it are fixed: starttime is the 20th after the closing parenthesis.
+	real=$(sed 's/.*) //' "/proc/$oddpid/stat" | awk '{ print $20 }')
+	check "and what it records is the start time, not a field beside it" \
+		"$(sed -n '1s/^claim:[0-9]*\.\([0-9]*\)@.*/\1/p' .pidly/1/info)" "$real"
+fi
+kill "$oddpid" 2>/dev/null || true; wait "$oddpid" 2>/dev/null || true
+check "and dead once it exits" "$(state 1)" "dead"
+sedi '1s/.*/claim:/' .pidly/1/info
+
 # Same pid, different start time: a recycled number must not read as the
 # original process.
 sh -c "PIDLY_PID=\$\$ $PIDLY claim 1 >/dev/null 2>&1" || true
