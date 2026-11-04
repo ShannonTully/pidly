@@ -4524,7 +4524,10 @@ usage() { usage_text >&2; exit 2; }
 # is the same class of fault as 51: a character passing through a layer that
 # quietly reinterprets it.
 roff_escape() {
-	awk '
+	# LC_ALL=C so the em-dash below is three bytes. Under a UTF-8 locale an
+	# awk may read %c 226 as the character U+00E2 and emit it as two bytes
+	# of its own, and the dash then goes through raw.
+	LC_ALL=C awk '
 		# The em-dash by its bytes rather than as a literal, so this does
 		# not depend on the encoding of the script surviving a copy. It is
 		# the only non-ASCII character the usage text uses, and a manual
