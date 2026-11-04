@@ -29,7 +29,7 @@ this trigger asks for.
 
 
 Evidence from 38, 2026-09-18. The trigger has not fired on the mature
-project. Across ../idol's 332 beads issues, priority is set on 331 and 218
+project. Across the downstream project's 332 beads issues, priority is set on 331 and 218
 sit at the default of 2; in 455 logged field changes it was edited exactly
 once, from 2 to 1. A field nobody re-ranks is not a sort key, and a fourth
 header line would be carried forever by every ticket to serve one edit in

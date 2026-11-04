@@ -7,7 +7,7 @@ effort: S
 area: cli
 handoff:
 
-Ported from IDOL's vendored copy (IDOL 1365), where it was found and fixed.
+Ported from a downstream project's vendored copy, where it was found and fixed.
 
 The docs say an agent renews a lease by claiming again, but claim refused
 it: a lease's runtime is `-`, which never matches this machine's, so the

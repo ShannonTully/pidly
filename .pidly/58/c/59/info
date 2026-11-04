@@ -19,7 +19,7 @@ test for `close .n` and `close '*'`.
 
 ## Done, 2026-10-24
 
-Ported from IDOL's vendored copy (IDOL 1367), where `pidly close '*'`
+Ported from a downstream project's vendored copy, where `pidly close '*'`
 moved the whole tracker. ticket_dir refuses anything but [0-9]+ and
 searches with -mindepth 1; reopen resolves the ticket on its own line so
 a failed lookup stops it; new refuses an empty -p ''. tests/args.sh runs

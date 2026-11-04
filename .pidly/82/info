@@ -7,4 +7,4 @@ effort: S
 area: cli
 handoff:
 
-Ported from idol pidly 1523. Since 2acdf20 close empties the claim, but a ticket moved into c/ by hand while claimed keeps it, and reopen brings it back still claimed, so it is not takeable. reopen should empty line 1 under the lock before each lifted mv, as close does, and the guide text should say so.
+Ported from a downstream project's vendored copy. Since 2acdf20 close empties the claim, but a ticket moved into c/ by hand while claimed keeps it, and reopen brings it back still claimed, so it is not takeable. reopen should empty line 1 under the lock before each lifted mv, as close does, and the guide text should say so.

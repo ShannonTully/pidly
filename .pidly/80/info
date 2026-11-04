@@ -7,4 +7,4 @@ effort: S
 area: cli
 handoff:
 
-Found porting idol's fixes (2026-10-24). `needs -a '*' 1` reported "not 'AGENTS.md'", and a file named 2 in the cwd would be accepted as a dependency; `needs -a '' 1` and `new -n '' t` exit 0 without complaint. Split the list without pathname expansion (set -f around it) and refuse an empty argument, as ticket 59 does for single ticket arguments.
+Found porting a downstream project's fixes (2026-10-24). `needs -a '*' 1` reported "not 'AGENTS.md'", and a file named 2 in the cwd would be accepted as a dependency; `needs -a '' 1` and `new -n '' t` exit 0 without complaint. Split the list without pathname expansion (set -f around it) and refuse an empty argument, as ticket 59 does for single ticket arguments.

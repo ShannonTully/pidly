@@ -7,7 +7,7 @@ effort: S
 area: cli
 handoff:
 
-Ported from IDOL's vendored copy (IDOL 1363), where it was found and fixed.
+Ported from a downstream project's vendored copy, where it was found and fixed.
 
 new scans for the highest number before it takes the tracker lock, and
 inside the lock tries mkdir on successive numbers. mkdir only sees

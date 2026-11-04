@@ -16,7 +16,7 @@ Both open and closed tickets, because closed ones are the reason anybody
 keeps a tracker. In pidly a closed ticket is a directory under c/, so this is
 not an extra mode: it is where the file gets written.
 
-The shape of the problem, measured on ../idol, which 38 exists to study and
+The shape of the problem, measured on a downstream project, which 38 exists to study and
 is the only real corpus available:
 
   342 records in .beads/issues.jsonl
@@ -39,7 +39,7 @@ What maps cleanly:
 
 What does not, and these are the decisions:
 
-- ids. beads ids are slugs — idol-jay, idol-xdyn.12.1 — and pidly numbers are
+- ids. beads ids are slugs — proj-jay, proj-xdyn.12.1 — and pidly numbers are
   integers that are never reused. So every ticket is renumbered, every
   dependency has to be rewritten to the new numbers, and the old id has to
   land somewhere or the history stops matching what commit messages and
@@ -92,7 +92,7 @@ Worth splitting into children when picked up: the id and renumbering
 decision, the beads reader, the generic mapping, and whatever second tool
 goes first.
 
-Done when ../idol's 332 beads issues import into a fresh tracker with
+Done when the downstream project's 332 beads issues import into a fresh tracker with
 dependencies and parentage intact, check passes on the result, closed
 tickets are under c/, the old ids are recoverable, and the command reports
 every field it could not place rather than discarding it quietly.
@@ -100,7 +100,7 @@ every field it could not place rather than discarding it quietly.
 
 Constraint from 38, 2026-09-18, and it changes the shape of this command.
 
-.beads/*.jsonl is an export, not the tracker. In ../idol it was last written
+.beads/*.jsonl is an export, not the tracker. In that project it was last written
 2026-08-02 and the tracker kept moving: interactions.jsonl logs 144 changes
 after that date and names 100 issue ids that issues.jsonl does not contain,
 every one of them created after the export. The real tracker is the embedded
@@ -108,7 +108,7 @@ Dolt database; the files are a snapshot someone has to remember to refresh,
 and this one is six weeks behind on the only corpus available.
 
 So reading issues.jsonl and reporting success would silently drop a quarter
-of idol's tickets. A migrate command has to either refuse a stale export or
+of that project's tickets. A migrate command has to either refuse a stale export or
 make the staleness impossible to miss:
 
 - export-state.json carries the export timestamp and issue count. Compare
@@ -134,7 +134,7 @@ Done 2026-09-18, for beads. The other sources in the list are not started,
 and the ticket was right that they are guesses until someone has an export
 to check them against.
 
-Verified on ../idol, the corpus 38 measured: 332 issues in, 332 out, and
+Verified on the downstream project, the corpus 38 measured: 332 issues in, 332 out, and
 every title, description, timestamp, acceptance criteria, note, design,
 label, priority, kind, assignee, open/closed location, renumbered dependency
 and parent-child nesting compared against the source. pidly check calls the
@@ -146,7 +146,7 @@ The decisions the ticket left open, as made:
 - ids. Renumbered 1..N in created_at order, so a tracker imported twice
   numbers the same way and the low numbers are the old work. The beads id is
   kept in an origin: field, because commit messages and external links still
-  say idol-jay. needs: carries numbers only, so nothing points at a name that
+  say proj-jay. needs: carries numbers only, so nothing points at a name that
   no longer resolves.
 - in_progress. Unclaimed, and reported. A claim names a process and that
   process is gone; a claim nobody can verify is the one thing this format
@@ -199,7 +199,7 @@ Two bugs in it are worth naming, because both passed casual reading:
   332 tickets are exactly that case, and the cross-check against python is
   what found both — reading the output would not have.
 
-tests/migrate.sh is 59 assertions on a hand-written corpus, not on ../idol,
+tests/migrate.sh is 59 assertions on a hand-written corpus, not on the downstream project,
 which is not in this repository and will not be. It asserts the corpus still
 contains the escapes it exists to exercise, because an escape that got
 unescaped on its way into the file would make those tests pass without

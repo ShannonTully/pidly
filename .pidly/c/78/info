@@ -7,7 +7,7 @@ effort: M
 area: cli
 handoff:
 
-Ported from IDOL's vendored copy (IDOL 1368), where it was found and fixed.
+Ported from a downstream project's vendored copy, where it was found and fixed.
 
 lock() broke a lock whose owner was dead with a bare rm -f .lock. Two
 contenders can both read the dead owner X; if the first breaks the lock

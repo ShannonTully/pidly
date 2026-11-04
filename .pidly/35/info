@@ -5,8 +5,8 @@ effort: M
 area: format
 created: 2026-09-17T06:47:32Z
 updated: 2026-09-21T23:13:59Z
-handoff: Trigger recorded: clockwork's domain-label routing is a real caller. Still a decision about sets in the format, not a request for a string.
-defer: clockwork cannot route a pidly ticket to an agent without them; a labels field read by convention is the current workaround
+handoff: Trigger recorded: an agent workflow's domain-label routing is a real caller. Still a decision about sets in the format, not a request for a string.
+defer: an agent workflow cannot route a pidly ticket to an agent without them; a labels field read by convention is the current workaround
 
 Deferred. Do not start this without the trigger below.
 
@@ -24,7 +24,7 @@ rather than a convention it cannot see. That makes the bad option less bad,
 not good.
 
 
-Evidence from 38, 2026-09-18. ../idol used beads for sixteen months and its
+Evidence from 38, 2026-09-18. The downstream project used beads for sixteen months and its
 labels amount to one distinct value — feedback-2026-07-22, a dated batch
 marker on 33 issues from a single afternoon's triage. No taxonomy ever
 formed, and nothing was ever filtered across one. The trigger stands and has
@@ -32,13 +32,12 @@ not fired. Keep deferred.
 
 A concrete want, 2026-09-21. This was deferred for lack of one.
 
-clockwork routes a ticket to an agent by domain label — engineering to
-Magister, infrastructure to Quartermaster, and so on down a fixed priority
-list. It is the only routing input there is. A pidly project therefore
+An agent workflow the owner uses routes a ticket to an agent by domain
+label, down a fixed priority list. It is the only routing input there is. A pidly project therefore
 enumerates and dispatches but cannot route, because there is nothing on a
 ticket for Route to read.
 
-The clockwork side works around it for now: internal/pidly reads a project
+That workflow works around it for now: its pidly reader takes a project
 field named "labels", whitespace-separated, if the project declares one. That
 is a convention living in the consumer rather than in the format, which is the
 shape this ticket exists to decide whether to fix.
@@ -49,4 +48,4 @@ string, and two projects will separate them differently. The question here was
 never whether a set can be faked in a string; it is whether the format should
 know about sets. This is a caller that wants one, not an answer.
 
-See 6, and clockwork-city's internal/pidly for what the workaround costs.
+See 6 for the workflow this came from.

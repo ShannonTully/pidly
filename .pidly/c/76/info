@@ -7,7 +7,7 @@ effort: S
 area: docs
 handoff:
 
-Ported from IDOL's vendored copy (IDOL 1364), where it was found and fixed.
+Ported from a downstream project's vendored copy, where it was found and fixed.
 
 The generated docs (AGENTS.md block, .pidly/README.md "## Claiming")
 told agents to claim with `PIDLY_PID=$$ pidly claim 7`. $$ is the shell
