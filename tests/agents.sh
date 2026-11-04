@@ -47,7 +47,7 @@ check "uses an existing CLAUDE.md" "$(count '<!-- pidly:begin -->' CLAUDE.md)" "
 check "and does not create AGENTS.md" "$([ -f AGENTS.md ] && echo yes || echo no)" "no"
 $PIDLY agents -f custom.md >/dev/null
 check "-f targets an explicit file" "$(count '<!-- pidly:begin -->' custom.md)" "1"
-out=$($PIDLY agents -f 2>&1) && rc=0 || rc=$?
+$PIDLY agents -f >/dev/null 2>&1 && rc=0 || rc=$?
 check "-f without a filename is rejected" "$rc" "1"
 
 echo "the shipped reference"

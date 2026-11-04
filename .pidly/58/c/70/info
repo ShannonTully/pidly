@@ -2,7 +2,7 @@ claim:
 needs:
 title: Bring the docs back in line with the tool
 created: 2026-09-24T22:58:18Z
-updated: 2026-09-24T22:58:18Z
+updated: 2026-11-04T17:03:45Z
 effort: M
 area: docs
 handoff:
@@ -20,3 +20,6 @@ handoff:
   tests/portable.sh.
 - VISUAL (read before EDITOR), TMPDIR, and exit 2 for usage versus 1 for a
   refusal are undocumented.
+
+
+Done 2026-11-04: the generators no longer use -f effort=M in a bare example; DESIGN lists all 22 commands, loses the doubled heading, and records 33 as answered; the README loop skips deferred tickets, says what it cannot tell about leases, and drops sort -V, and tests/portable.sh now holds the README to the same bar; VISUAL, EDITOR, TMPDIR and exit statuses 0/1/2 are in the usage text and the man page.

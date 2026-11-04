@@ -1,0 +1,9 @@
+# pidly is POSIX sh, and so are its tests.
+shell=sh
+
+# Idioms the code uses on purpose, everywhere:
+# SC2015  `a && b || c` where c runs if either fails is what is meant.
+# SC1091  the suites source lib.sh and config.sh by a computed path.
+# SC2016  single-quoted $ is literal on purpose: awk programs, sed scripts,
+#         and documentation that shows a command rather than runs it.
+disable=SC2015,SC1091,SC2016

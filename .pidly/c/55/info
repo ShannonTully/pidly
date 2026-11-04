@@ -7,7 +7,7 @@ effort: S
 area: cli
 handoff:
 
-Found 2026-09-21 while migrating ../idol, the corpus this guard was built
+Found 2026-09-21 while migrating a downstream project, the corpus this guard was built
 against.
 
 The guard fires correctly. Its remedy line does not work:
@@ -59,5 +59,5 @@ refuses, and the message says bd export -o does not refresh the count, so
 say bd export -o and give the full path to issues.jsonl. The reference text
 says the same, and tests/migrate.sh covers all three cases.
 
-Not re-run against ../idol: its .beads is gone, so the real corpus was not
+Not re-run against the downstream project: its .beads is gone, so the real corpus was not
 available.

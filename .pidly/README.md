@@ -466,7 +466,8 @@ file, `schema` and the ignore rules. Re-running it refreshes the generated
 files and leaves `schema` alone.
 
 ```sh
-pidly new -f effort=M -f area=cli "Do the thing"     # body from stdin
+pidly new "Do the thing"                 # body from stdin
+pidly new -f effort=M "Do the thing"     # if .pidly/schema declares effort
 ```
 
 `-f` sets a project field. `pidly new` writes a line for **every field the

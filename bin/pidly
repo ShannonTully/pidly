@@ -141,7 +141,26 @@ checkout_id() {
 	printf '%s\n' "$_ci_cid"
 }
 
-starttime() { awk '{print $22}' "/proc/$1/stat" 2>/dev/null || true; }
+# When a process started, as digits, or nothing if it cannot be said.
+#
+# From /proc, field 22 of stat counted from after the last ")": field 2 is
+# the command name in parentheses, and a name holding a space or a ")" would
+# shift every field after it (67). Without /proc — macOS, the BSDs — from
+# ps's lstart, as YYYYMMDDhhmmss in local time, which is only ever compared
+# with a value this same machine wrote (66).
+starttime() {
+	if [ -r "/proc/$1/stat" ]; then
+		sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '{ print $20 }' || true
+	else
+		LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null | LC_ALL=C awk '
+			NF == 5 {
+				m = index("JanFebMarAprMayJunJulAugSepOctNovDec", $2)
+				if (m == 0) exit
+				gsub(/:/, "", $4)
+				printf "%04d%02d%02d%s\n", $5, (m + 2) / 3, $3, $4
+			}' || true
+	fi
+}
 
 # Is this process identity still running? Only called when the recorded
 # runtime matches ours — same boot, same namespace, same uid — so our own
@@ -156,7 +175,12 @@ holder_alive() {
 		[ -z "$_ha_start" ] && return 0
 		[ "$(starttime "$_ha_pid")" = "$_ha_start" ]
 	else
-		kill -0 "$_ha_pid" 2>/dev/null
+		kill -0 "$_ha_pid" 2>/dev/null || return 1
+		[ -z "$_ha_start" ] && return 0
+		# A ps that cannot say leaves the pid as the only evidence, which
+		# is what a claim recorded without a start time gets anyway.
+		_ha_now=$(starttime "$_ha_pid")
+		[ -z "$_ha_now" ] || [ "$_ha_now" = "$_ha_start" ]
 	fi
 }
 
@@ -262,7 +286,9 @@ before() {
 	# Both in the format's own shape: the fast path, which check takes once
 	# per ticket. The sort below is three processes and a command
 	# substitution, and it was being paid for every ticket in the tracker.
+	# shellcheck disable=SC2254 # ISO_GLOB is a pattern, meant as one
 	case $1 in $ISO_GLOB)
+		# shellcheck disable=SC2254
 		case $2 in $ISO_GLOB) iso_before "$1" "$2"; return $? ;; esac ;;
 	esac
 	# Anything else — a hand-written stamp, a value check is about to
@@ -2000,7 +2026,8 @@ file, `schema` and the ignore rules. Re-running it refreshes the generated
 files and leaves `schema` alone.
 
 ```sh
-pidly new -f effort=M -f area=cli "Do the thing"     # body from stdin
+pidly new "Do the thing"                 # body from stdin
+pidly new -f effort=M "Do the thing"     # if .pidly/schema declares effort
 ```
 
 `-f` sets a project field. `pidly new` writes a line for **every field the
@@ -2408,7 +2435,8 @@ PIDLY_AGENT=sub-review-parser PIDLY_LEASE=1h pidly claim 19
 ## Making a ticket
 
 ```sh
-pidly new -f effort=M "Short title"   # body on stdin; -p N for a subtask
+pidly new "Short title"    # body on stdin; -p N for a subtask
+                           # -f name=value for a field .pidly/schema declares
 ```
 
 Not for work you are finishing in the same breath — a ticket opened and
@@ -2862,7 +2890,7 @@ cmd_init() {
 		printf 'x\n' >> "$_ir/.backfilled.$$"
 	done
 	[ -f "$_ir/.backfilled.$$" ] &&
-		{ _added=$(wc -l < "$_ir/.backfilled.$$"); rm -f "$_ir/.backfilled.$$"; }
+		{ _added=$(($(wc -l < "$_ir/.backfilled.$$"))); rm -f "$_ir/.backfilled.$$"; }
 
 	# Date the tickets that predate the timestamps, or that were written by
 	# hand. A ticket nothing can date keeps no line at all: a guess that
@@ -2893,8 +2921,10 @@ cmd_init() {
 		# init's. A ticket that needed no dating is not a failure.
 		if [ "$_did" = yes ]; then printf 'x\n' >> "$_ir/.dated.$$"; fi
 	done
+	# Arithmetic rather than the bare count: BSD wc pads it with spaces,
+	# which would land in the message as "dated       1 ticket(s)" (87).
 	[ -f "$_ir/.dated.$$" ] &&
-		{ _dated=$(wc -l < "$_ir/.dated.$$"); rm -f "$_ir/.dated.$$"; }
+		{ _dated=$(($(wc -l < "$_ir/.dated.$$"))); rm -f "$_ir/.dated.$$"; }
 
 	if [ "$_fresh" = yes ]; then
 		printf 'created %s\n' "$_ir"
@@ -3976,15 +4006,23 @@ json_flat() {
 		while (i <= n && substr(s, i, 1) !~ /[,}\]\t\r\n ]/) i++
 		return substr(s, start, i - start)
 	}
-	# Eight backslashes to double one. The string literal collapses to four,
-	# and gsub reads its replacement again, where two mean one literal — so
-	# the obvious four replaces a backslash with itself and the encoding
-	# stops being reversible.
+	# Literal replacement by index, not gsub. A backslash in a gsub
+	# replacement is read again by gsub, and gawk, mawk and BSD awk disagree
+	# on how many it takes to mean one, so doubling a backslash that way is
+	# right on one awk and silently wrong on the others (79, 87).
+	function rep(s, from, to,   out, k) {
+		out = ""
+		while ((k = index(s, from)) > 0) {
+			out = out substr(s, 1, k - 1) to
+			s = substr(s, k + length(from))
+		}
+		return out s
+	}
 	function enc(v) {
-		gsub(/\\/, "\\\\\\\\", v)
-		gsub(/\n/, "\\n", v)
-		gsub(/\t/, "\\t", v)
-		gsub(/\r/, "", v)
+		v = rep(v, "\\", "\\\\")
+		v = rep(v, "\n", "\\n")
+		v = rep(v, "\t", "\\t")
+		v = rep(v, "\r", "")
 		return v
 	}
 	function emit(path, v) { if (path != "") printf "%s\t%s\n", path, enc(v) }
@@ -4494,6 +4532,8 @@ environment:
   PIDLY_AGENT    an agent with no local process — a cloud session, a CI job.
                  Requires PIDLY_LEASE: nothing else can show it is alive.
   PIDLY_LEASE    how long the claim is good for: 90s, 30m, 2h, 3d.
+  VISUAL, EDITOR what edit opens, VISUAL first, then EDITOR, then vi.
+  TMPDIR         where scratch files go (default: /tmp).
 
 USAGE
 }
@@ -4508,16 +4548,31 @@ usage() { usage_text >&2; exit 2; }
 # is the same class of fault as 51: a character passing through a layer that
 # quietly reinterprets it.
 roff_escape() {
-	awk '
+	# LC_ALL=C so the em-dash below is three bytes. Under a UTF-8 locale an
+	# awk may read %c 226 as the character U+00E2 and emit it as two bytes
+	# of its own, and the dash then goes through raw.
+	LC_ALL=C awk '
 		# The em-dash by its bytes rather than as a literal, so this does
 		# not depend on the encoding of the script surviving a copy. It is
 		# the only non-ASCII character the usage text uses, and a manual
 		# page that holds it raw makes troff warn on every line it is on.
 		BEGIN { sq = sprintf("%c", 39); em = sprintf("%c%c%c", 226, 128, 148) }
+		# Literal replacement by index rather than gsub. How many backslashes
+		# a gsub replacement needs differs between gawk, mawk and BSD awk,
+		# and a man page that comes out with \\(em on one of them is out of
+		# date there forever (79).
+		function rep(s, from, to,   out, k) {
+			out = ""
+			while ((k = index(s, from)) > 0) {
+				out = out substr(s, 1, k - 1) to
+				s = substr(s, k + length(from))
+			}
+			return out s
+		}
 		{
 			# Backslashes first: the escapes below introduce their own.
-			gsub(/\\/, "\\\\e")
-			gsub(em, "\\\\(em")
+			$0 = rep($0, "\\", "\\e")
+			$0 = rep($0, em, "\\(em")
 			c = substr($0, 1, 1)
 			if (c == "." || c == sq) $0 = "\\&" $0
 			print
@@ -4600,9 +4655,17 @@ The project's fields, one stanza each.
 The format, generated by
 .BR "pidly agents" .
 .SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+A refusal: a command that cannot do what was asked, a bad argument to one, or
 .B check
-exits non-zero when it finds something wrong, so it can run in CI. Everything
-else exits non-zero on refusal.
+finding something wrong \(em which is what lets it run in CI.
+.TP
+.B 2
+No command, or one pidly does not know; the usage text is printed.
 .SH SEE ALSO
 .BR mkdir (1),
 .BR mv (1),

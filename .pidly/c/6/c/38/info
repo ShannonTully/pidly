@@ -1,13 +1,13 @@
 claim:
 needs:
-title: Investigate how beads is actually used in ../idol
+title: Investigate how beads is actually used in a downstream project
 effort: M
 area: format
 created: 2026-09-17T06:54:13Z
 updated: 2026-09-18T20:37:59Z
 handoff:
 
-idol is the most mature project on beads and clockwork-city, so it is the
+The downstream project is the most mature one on beads, so it is the
 only evidence available about which bd concepts are load-bearing in
 practice rather than in bd's feature list. 6 cannot be planned honestly
 without it.
@@ -59,7 +59,7 @@ against them, and anything that argues for a change in pidly is its own
 ticket rather than a paragraph here.
 
 
-Answered 2026-09-18, from ../idol/.beads. Every number below is counted from
+Answered 2026-09-18, from the downstream project's .beads. Every number below is counted from
 the files, not from bd's documentation.
 
 FIRST, THE FINDING THAT CHANGES 46: the export is stale and incomplete.
@@ -71,7 +71,7 @@ FIRST, THE FINDING THAT CHANGES 46: the export is stale and incomplete.
 interactions.jsonl kept logging for six weeks after issues.jsonl froze — 144
 entries after the last export — and references 100 issue ids that are not in
 issues.jsonl at all. Every one of those 100 first appears after 2026-08-02,
-so they are issues created since the export, not deletions. idol really has
+so they are issues created since the export, not deletions. The project really has
 around 432 issues; the file a migration would read shows 332.
 
 So .beads/*.jsonl is a snapshot someone has to remember to refresh, and this
@@ -157,8 +157,7 @@ and no issue is started but open. Re-parenting cannot be seen in the export
 at all, since only the current edge is stored — one more thing the snapshot
 cannot tell you and git could.
 
-The 10 memory records are ADR-shaped prose keyed by slug —
-adr-001-logic-ui-extraction-fe-be-split, nav-stack-adr002 — a key/value store
+The 10 memory records are ADR-shaped prose keyed by slug — a key/value store
 bolted to the tracker. They are documents, not tickets, and they belong in
 the repository as documents. An import should report and skip them.
 

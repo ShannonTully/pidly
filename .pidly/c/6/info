@@ -1,239 +1,48 @@
 claim:
 needs: 2
-title: Replace beads in the clockwork workflow
+title: Replace beads in the owner's agent workflow
 effort: L
 area: cli
 created: 2026-09-17T03:06:47Z
 updated: 2026-09-21T23:43:22Z
-handoff: Verified both clockwork.toml edits are gated on the cog change: dropping bd_prefix fails validate.go:80 today, and [project.tracker] would guess a key name clockwork has not chosen. Three lines of work, waiting on clockwork-city.
+handoff:
 defer:
 
-clockwork.toml and the project's skills are wired to bd. Once the format
-and script are stable, map the concepts across, migrate any existing bd
-data, and update the skill prose that names bd.
+The owner's agent workflow, a separate tool shared by several projects, was
+wired to beads (bd): its skills, its commands and its config named bd
+directly. Once the format and script were stable, map the concepts across,
+migrate any existing bd data, and update what names bd.
 
-Not worth planning in detail before the script exists.
+What it turned out to be (2026-09-18 to 2026-09-21). The wiring was not this
+project's: it lived in the workflow tool's own repository and its global
+install, shared by every project on the machine, three of which were actively
+on beads. Rewriting it to say pidly would have switched those projects onto a
+tracker they had not imported. The owner chose to make the workflow
+tracker-agnostic instead: a project names its tracker in config, and an
+absent setting means beads, so nothing that works today breaks.
 
-
-Investigated 2026-09-18. The ticket says "the project's skills", and they are
-not the project's — which changes what this ticket is.
-
-Where the wiring actually is:
-
-  ~/.claude/skills/*/SKILL.md   10 files naming bd
-  ~/.claude/commands/*.md        6 files naming bd
-  clockwork.toml                 bd_prefix, and never_touch **/.beads/**
-
-The 16 files under ~/.claude are the global clockwork install, shared by
-every project on this machine. They hard-code bd commands rather than
-parameterising them — bd ready, bd close, bd dep add, bd dolt push — so there
-is no per-project setting that would make them mean pidly here.
-
-And three other projects are actively on beads, all with a live .beads:
-
-  bowmaster        bd_prefix bo
-  clockwork-city   bd_prefix cc
-  idol             bd_prefix idol
-
-pidly is the only one of the four without .beads. So rewriting the global
-prose to say pidly does not migrate this project — it switches the other
-three onto a tracker they have not imported, which is a way to lose their
-work rather than to move it.
-
-That makes this a decision rather than an edit, and it is the owner's:
-
-- Rewrite the global skills to pidly. Simplest, and breaks three projects
-  until each is migrated. 46 now exists, so migrating them is possible, but
-  it is three imports and three lots of verification, not a side effect of
-  this ticket.
-- Project-scoped copies under pidly/.claude/skills, overriding the global
-  ones here only. Safe and immediate, and it is sixteen copies of prose that
-  will drift from the originals — the copies-go-stale rule this project
-  refuses everywhere else, applied to the one place it would hurt most.
-- Make the global skills tracker-agnostic: they talk about the tracker, and
-  clockwork.toml names which one and what its commands are. Nothing breaks,
-  every project keeps what it has, and pidly stops being a special case. The
-  largest edit, and it is a change to clockwork rather than to pidly — which
-  may mean it belongs in clockwork-city's tracker, not this one.
-
-The third is the right shape. It is also the one this ticket cannot decide
-alone, because it changes a tool this repository does not own.
-
-Not blocked on anything in pidly. 46 landed, so the migration half of this
-ticket is available whenever the direction is settled.
-
-
-Scoped 2026-09-18, after the owner chose to make the skills tracker-agnostic.
-That is the right shape and it is much larger than the prose. Recording what
-it actually costs, because the estimate this ticket was picked up on was
-wrong by an order of magnitude.
-
-The prose is the small half:
-
-  27 files under clockwork-city   118 mentions of bd
-  skills, commands and the Apostle and Factotum definitions
-  plus SPEC.md 11.2, which is where the clockwork.toml schema is written down
-
-The source is clockwork-city, not ~/.claude. install.sh copies skills and
-commands into ~/.clockwork and from there into ~/.claude, so the installed
-copies are output. They are also behind the source today — plan.md and
-planning-and-task-breakdown have a membership-versus-ordering distinction in
-the repository that the installed copies do not — so an edit made in
-~/.claude would be both lost and a clobber of newer work.
-
-The half that is not prose, and the reason this cannot be done here:
-
-  internal/bd      a concrete Client struct, no interface
-  cmd/cog/bd.go    613 lines
-  ~1500 lines total, ~937 references across the Go sources
-  used by convoy, supervisor, lookout, edict, mail, anchor, session, spec
-
-cog does not merely mention bd; it is a beads client. convoy enumerates a
-spec's children with bd.DepList and bd.Dependents and claims issues with
-bd.Update. So a pidly project cannot run a convoy however the prose is
-worded, and changing only the prose would produce documents that describe a
-tracker the tool cannot read — which is worse than the honest coupling that
-is there now.
-
-Doing it properly is: extract a Tracker interface, implement it for beads and
-for pidly, thread it through ten call sites, then the 27 files and the schema.
-That is a feature in clockwork-city, wants a ticket in clockwork-city's own
-tracker, and is not a pidly change at all.
-
-What belongs to this ticket, once clockwork can name a tracker:
-
-  clockwork.toml   [project.tracker] kind = "pidly", absent meaning beads so
-                   bowmaster, clockwork-city and idol keep what they have and
-                   need no edit
-  clockwork.toml   bd_prefix and never_touch **/.beads/**, which pidly has
-                   and does not use
-
-Nothing was changed in clockwork-city. Blocked there, not here.
-
-Migration trialled 2026-09-21 against ../idol, the first project to move.
-
-Done as a dry run into a scratch tracker, not into idol: the import is the
-half that can be verified without committing anyone to anything.
-
-  bd export -o .beads/issues.jsonl      445 issues, 12 memories
-  pidly migrate beads ../idol/.beads --anyway
-  imported 445 tickets: 14 open, 431 closed
-  pidly check -> ok: 445 tickets, exit 0
-
-Fidelity checked against bd rather than taken on trust:
-
-  bd count            445    pidly              445
-  bd list open         12    pidly open          14
-                            = 12 + the 2 deferred, imported open as documented
-
-  needs renumbered     438 needs 441 440 439, from bd's ids
-  origin preserved     idol-6d5c, idol-xdyn.8 — commit messages still resolve
-  hierarchy kept       epic idol-xdyn -> 193, children nested, depth 6
-  bodies intact        full description, scope and test-integration prose
-
-Nothing was reported as a closed parent holding open work, and no in_progress
-claims needed dropping. Two edge kinds are named as not carried — 15
-discovered-from and 3 related — and neither is in the README's mapping table.
-Not wrong, just undocumented; both are reported rather than dropped quietly.
-
-Two things this turned up, neither of them about idol:
-
-The staleness guard's remedy cannot clear the guard. Filed as 55. It is why
-this import needed --anyway despite the export being minutes old.
-
-.beads/issues.jsonl was 7 weeks behind in idol before this — Aug 2 against an
-interaction log written today, 104 tickets missing. That is exactly the
-scenario migrate was built to refuse, found in the wild on the first project
-tried. The guard earned itself here.
-
-What this does NOT do, and the reason nothing was installed into idol:
-
-cog is still a beads client. A migrated idol would have a tracker convoy
-cannot read, so importing it today buys a second tracker to keep in step
-rather than a migration. The import is additive — .beads stays, bd keeps
-working — so the sequencing is free: idol can move whenever clockwork can
-name a tracker, and this run shows the import itself is not the risk.
-
-Still blocked on clockwork-city. Unchanged by this.
-
-Checked 2026-09-21 whether the two clockwork.toml edits can land ahead of the
-cog change. Neither can, and the reasons are in clockwork-city's sources
-rather than in judgement:
-
-  internal/config/load.go:60   toml.DecodeFile, and md.Undecoded() is never
-                               consulted — an unknown key is silently ignored
-  internal/config/validate.go:80
-                               if p.BdPrefix == "" -> "[project] bd_prefix is
-                               empty" as a validation issue
-
-So:
-
-Dropping bd_prefix = "pi" **breaks validation today**. cog requires the key of
-every project, whether or not that project has a beads database. The key stops
-being required as part of the same change that teaches cog to name a tracker —
-it is not a separate cleanup that can go first.
-
-Adding [project.tracker] kind = "pidly" is safe in the sense that nothing
-rejects it: the decoder ignores what it has no field for. That is exactly what
-makes it the wrong thing to write now. It would validate, do nothing, and
-commit this repository to a key name the clockwork ticket has not chosen yet.
-If that ticket picks a different shape, pidly is left carrying a dead key that
-check cannot see and validate will not complain about — a copy that drifts,
-which is the one thing this project refuses everywhere else.
-
-never_touch "**/.beads/**" is the only piece that is genuinely free: it is a
-glob in a list, nothing reads it structurally, and pidly has no .beads. Left
-in place anyway — it is inert, and removing one of three coupled lines just to
-show movement on the ticket would make the remaining two harder to find.
-
-Ticket 6 is finishable in one sitting once cog can name a tracker, and not
-before. The estimate stands: the pidly half is three lines.
-
-Done 2026-09-21. The clockwork work landed, so this ticket's own three lines
-could land with it.
-
-In clockwork-city, on branch tracker-interface:
-
-  dc23e78  extract a Tracker interface
-  a33c0f4  implement it for pidly, and let a project name one
-  c505f0c  document [project.tracker] in SPEC 11.2
-
-The estimate on this ticket was wrong, and worth correcting for next time.
-"a concrete Client struct, no interface" was true of internal/bd and false of
-everything above it: convoy, supervisor, messaging, approval and spec each
-already declared a narrow bdClient interface, and lookout takes a pre-fetched
-count specifically to avoid the concrete type. The extraction was mostly
-naming the union of what was already there. ~937 references was a grep count,
-not a work estimate; the real change was 27 files and no behaviour change.
-
-internal/pidly reads the tracker as files rather than shelling out, which is
-what this format asks for — the find-and-sed column in the guide is exactly
-that promise — and a 445-ticket tracker answers in 0.58s. Only mutations
-shell out, for the lock.
+That was a change to the other tool rather than to pidly, and it landed
+there: a Tracker interface, implemented for beads and for pidly, the latter
+reading tickets as files rather than shelling out (a 445-ticket tracker
+answers in 0.58s), with only mutations going through the script for the lock.
+This repository's own half was three config lines, done once that landed.
 
 Two things do not map, and are refused rather than faked:
 
   assignee   a claim names a process that can be verified; writing a person
              into it would invent the unverifiable claim this format refuses
   labels     no home here, so routing by domain label does not reach a pidly
-             project unless it declares a labels field of its own
+             project unless it declares a labels field of its own (see 35)
 
-Priority and kind DO map, because migrate writes fields of those names when
-importing from beads. Reading them back is symmetric, and idol's imported
-epic keeps its P1 and its type through the round trip.
+Priority and kind do map, because migrate writes fields of those names when
+importing from beads.
 
-Finding, in cog rather than here: `cog spec` enumerated children with DepList
-alone, which works under beads only because a spec records its children as
-down-dependencies there. Against a real beads epic whose children are native
-parent-child, `cog spec show idol-xdyn` said "(no children — not a valid
-convoy target)" about five ready children. Fixed by unioning the three edge
-kinds as convoy already did, which repairs the beads path too.
+A migration was trialled against a downstream project's beads tracker as a
+dry run into a scratch tracker: 445 issues in, 445 out, pidly check clean,
+needs renumbered, beads ids kept so old commit messages still resolve, and
+hierarchy kept to depth 6. It turned up 55 (the staleness guard's remedy
+could not clear the guard), and an export seven weeks behind its tracker,
+which is exactly what migrate's guard exists to refuse.
 
-This repository is now a pidly project as far as clockwork is concerned:
-bd_prefix and the .beads boundary are gone from clockwork.toml, and
-[project.tracker] kind = "pidly" is in. `cog config validate` passes and
-`cog spec show 29` agrees with `pidly tree`.
-
-Not migrated: bowmaster, clockwork-city and idol stay on beads, which costs
-them nothing — an absent [project.tracker] means beads. idol's import is
-proven (see above) and can happen whenever its owner wants it.
+Not migrated: the other projects stay on beads, which costs them nothing.
+The import is proven and can happen whenever each owner wants it.

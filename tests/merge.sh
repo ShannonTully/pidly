@@ -59,7 +59,7 @@ git add -A && git commit -qm "D adds 3"
 git checkout -q branch-c
 git merge branch-d >/dev/null 2>&1 && rc=0 || rc=$?
 check "distinct numbers merge cleanly" "$([ "$rc" -eq 0 ] && echo merged || echo refused)" "merged"
-check "both tickets survive" "$(find .pidly -name info | wc -l)" "3"
+check "both tickets survive" "$(find .pidly -name info | wc -l | tr -d " ")" "3"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

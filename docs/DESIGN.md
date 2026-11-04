@@ -171,7 +171,7 @@ the body where they are read. What survives is the rule `check` enforces
 anyway: a directory inside a ticket that is neither a number nor `c` is
 invalid, because the tree scan reads it as a phantom ticket.
 
-## Names## Names
+## Names
 
 **A ticket's name is one number, unique across the whole project, never
 zero-padded and never reused.** Parentage is not in the name; it's the path.
@@ -916,9 +916,9 @@ are read until something has actually been chosen.
 Deliberately thin, and deliberately optional.
 
 `pidly` is a POSIX shell script — `init`, `new`, `claim`, `release`,
-`status`, `close`, `reopen`, `edit`, `list`, `tree`, `check`, `reap`,
-`agents`. It is
-not a runtime dependency of the format; it's an ergonomics layer. The acceptance
+`status`, `reap`, `edit`, `set`, `needs`, `fields`, `close`, `reopen`,
+`reparent`, `list`, `field`, `show`, `tree`, `check`, `agents`, `claude`,
+`man` and `migrate`. It is not a runtime dependency of the format; it's an ergonomics layer. The acceptance
 test for every command is that a person could have done the same thing with
 `mkdir`, `mv` and a text editor, and the repository would be byte-identical.
 
@@ -1291,11 +1291,12 @@ section is where reasoning goes and the tracker is where work does.
   ticket, but nothing can confirm a remote agent is alive right now — that
   needs a shared medium updating in real time, which is a server. The
   remaining question is only whether lease durations want tuning per project.
-- **A canonical name for a subagent's claim** (ticket 33)**.** Whether a Claude Code
-  subagent gets a `CLAUDE_CODE_SESSION_ID` distinct from its parent's was
-  never verified — one `echo` from inside a subagent settles it. If it is
-  distinct it is the natural `PIDLY_AGENT` value, and the convention gets a
-  generated name instead of a hand-written one.
+- **A canonical name for a subagent's claim** (answered; ticket 33)**.**
+  Checked 2026-09-18: a Claude Code subagent shares every identity variable
+  with its parent, `CLAUDE_CODE_SESSION_ID` included, so there is nothing to
+  generate a name from. The convention stands — a subagent picks a name and
+  passes it as `PIDLY_AGENT` with a lease. Worth revisiting only if the
+  harness starts giving subagents an id of their own.
 - **Body conventions** (ticket 37)**.** The body is free markdown. Whether acceptance criteria
   deserve structure is open; the trigger is agents guessing wrong about when a
   ticket is done.

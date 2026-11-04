@@ -2,7 +2,7 @@ claim:
 needs:
 title: Check process start time where there is no /proc
 created: 2026-09-24T22:58:01Z
-updated: 2026-09-24T22:58:01Z
+updated: 2026-11-04T17:15:27Z
 effort: M
 area: cli
 handoff:
@@ -12,3 +12,6 @@ ignores the recorded start time, so on macOS and the BSDs a reused pid
 looks like a live claim — the case the pid.starttime scheme exists to
 catch. `ps -o lstart= -p PID` or similar could restore it; at the least,
 document the weaker guarantee in the README.
+
+
+Done 2026-11-04: without /proc, starttime reads ps -o lstart= as YYYYMMDDhhmmss and holder_alive compares it, so a recycled pid reads dead there too. Checked by running a copy of the script with the /proc branches disabled: a live claim reads live, the same pid with another start time reads dead.

@@ -7,7 +7,11 @@ printf 'concurrency tests use %s processes' "$PIDLY_TEST_RACE"
 [ -f ../.env ] && printf ' (from .env)'
 printf '; override with PIDLY_TEST_RACE\n'
 rc=0
-for t in init.sh new.sh merge.sh claim.sh handoff.sh identity.sh close.sh args.sh edit.sh reap.sh times.sh paths.sh views.sh set.sh schema.sh portable.sh claude.sh agents.sh man.sh cost.sh newer.sh version.sh packaging.sh migrate.sh; do
+# Every *.sh here is a suite except this runner and the two files the suites
+# source. Found rather than listed, so a new suite cannot be skipped by
+# forgetting to add it here (68).
+for t in *.sh; do
+	case $t in run.sh | lib.sh | config.sh) continue ;; esac
 	printf '\n=== %s ===\n' "$t"
 	./"$t" || rc=1
 done

@@ -7,4 +7,4 @@ effort: S
 area: cli
 handoff:
 
-Ported from idol pidly 1524. Since ticket 78, a pidly killed mid-break leaves .lock.<pid>.brk, and if .lock still names the dead owner the next command stops and asks for both to be removed by hand. check flags a .lock held by a dead pid but says nothing about the .brk; have it name the file and the cleanup.
+Ported from a downstream project's vendored copy. Since ticket 78, a pidly killed mid-break leaves .lock.<pid>.brk, and if .lock still names the dead owner the next command stops and asks for both to be removed by hand. check flags a .lock held by a dead pid but says nothing about the .brk; have it name the file and the cleanup.

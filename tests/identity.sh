@@ -25,6 +25,29 @@ case $held in
 *)     no "claim has no start time or runtime: $held" ;;
 esac
 
+# A process whose name holds ") " shifts every field of /proc/PID/stat after
+# the name, so a start time read by position names the wrong field (67).
+sedi '1s/.*/claim:/' .pidly/1/info
+odd="$tmp/a) b c"
+# A script rather than a copy of sleep: some sleeps are a multi-call binary
+# that picks what to be from its own name. Run as a script, the process's
+# name is the script's file name.
+printf '#!/bin/sh\nwhile :; do sleep 1; done\n' > "$odd"
+chmod +x "$odd"
+"$odd" & oddpid=$!
+PIDLY_PID=$oddpid $PIDLY claim 1 >/dev/null
+check "a process named with a parenthesis is still live" "$(state 1)" "live"
+if [ -r "/proc/$oddpid/stat" ]; then
+	# The name is the only field that can hold a space, so the fields after
+	# it are fixed: starttime is the 20th after the closing parenthesis.
+	real=$(sed 's/.*) //' "/proc/$oddpid/stat" | awk '{ print $20 }')
+	check "and what it records is the start time, not a field beside it" \
+		"$(sed -n '1s/^claim:[0-9]*\.\([0-9]*\)@.*/\1/p' .pidly/1/info)" "$real"
+fi
+kill "$oddpid" 2>/dev/null || true; wait "$oddpid" 2>/dev/null || true
+check "and dead once it exits" "$(state 1)" "dead"
+sedi '1s/.*/claim:/' .pidly/1/info
+
 # Same pid, different start time: a recycled number must not read as the
 # original process.
 sh -c "PIDLY_PID=\$\$ $PIDLY claim 1 >/dev/null 2>&1" || true
@@ -67,7 +90,7 @@ check "a malformed lease is rejected" "$rc" "1"
 # the pid branch and record a local pid for an agent with no local process,
 # silently — which is what the published PIDLY_AGENT=$SESSION_ID line did.
 sedi '1s/.*/claim:/' .pidly/1/info
-out=$(PIDLY_AGENT= PIDLY_LEASE=1h $PIDLY claim 1 2>&1) && rc=0 || rc=$?
+out=$(PIDLY_AGENT='' PIDLY_LEASE=1h $PIDLY claim 1 2>&1) && rc=0 || rc=$?
 check "an empty agent name is rejected, not a fallback to the pid" "$rc" "1"
 case $out in *PIDLY_AGENT*) ok "the refusal names PIDLY_AGENT" ;; *) no "message: $out" ;; esac
 check "and nothing was claimed" "$(state 1)" "unclaimed"

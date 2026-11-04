@@ -1,0 +1,68 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch supersedes the run before it.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu's awk is mawk, macOS's is BSD awk; gawk is checked
+        # separately below, so all three dialects are covered.
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    # The suites take about a minute; a hang should fail, with a log, not
+    # hold a runner for hours.
+    timeout-minutes: 15
+    env:
+      # Hosted runners are small; the locking still gets raced.
+      PIDLY_TEST_RACE: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # pidly dates tickets from git history, and the tests exercise it.
+          fetch-depth: 0
+      - name: Tests
+        # pidly reads a body from stdin when it is not a terminal, so a
+        # runner's open stdin must not be what a test waits on.
+        run: ./tests/run.sh < /dev/null
+      - name: The tracker and generated files are in step
+        run: ./bin/pidly check
+
+  gawk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PIDLY_TEST_RACE: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Put gawk first on PATH as awk
+        run: |
+          sudo apt-get install -y gawk
+          mkdir -p "$RUNNER_TEMP/awk" && ln -s "$(command -v gawk)" "$RUNNER_TEMP/awk/awk"
+          echo "$RUNNER_TEMP/awk" >> "$GITHUB_PATH"
+      - run: awk --version | head -1
+      - name: Tests
+        # pidly reads a body from stdin when it is not a terminal, so a
+        # runner's open stdin must not be what a test waits on.
+        run: ./tests/run.sh < /dev/null
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        # Settings are in .shellcheckrc.
+        run: shellcheck -S warning bin/pidly tests/*.sh

@@ -7,7 +7,7 @@ effort: S
 area: cli
 handoff:
 
-Reported from IDOL against 0.1.0; reproduced on 0bc4fcb.
+Reported from a downstream project against 0.1.0; reproduced on 0bc4fcb.
 
 `edit -a`, `edit -b` and `new` read the body from stdin and take empty
 stdin as an empty body. Each one reports success and exits 0:
@@ -19,7 +19,7 @@ stdin as an empty body. Each one reports success and exits 0:
   body it refuses correctly.
 - `new T </dev/null` creates a ticket with no body.
 
-How it bit: IDOL's agent instructions say to run pidly with `</dev/null`.
+How it bit: that project's agent instructions say to run pidly with `</dev/null`.
 An agent that also piped a body in wrote
 `printf 'note\n' | pidly edit -a 7 </dev/null`. The later redirect
 replaces the pipe, pidly said `7 updated`, and the closing notes on two

@@ -115,7 +115,7 @@ has "a memory record is not a ticket" "$out" "1 memory record(s) skipped"
 check "and did not become one" "$(grep -rl '^origin: adr-1$' .pidly --include=info | grep -c . || true)" "0"
 
 echo "the registry is filled, so no number is reissued"
-check "one entry per ticket" "$(ls .pidly/.n | grep -c .)" "5"
+check "one entry per ticket" "$(find .pidly/.n -type f | wc -l | tr -d ' ')" "5"
 n=$($PIDLY new "after the import" </dev/null | awk '{print $1}')
 check "and the next ticket does not collide" "$n" "6"
 cd "$tmp"

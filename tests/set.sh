@@ -35,7 +35,6 @@ check "and leaves a bare key, not a trailing space" \
 	"$(grep -c '^handoff: $' .pidly/1/info || true)" "0"
 check "the ticket is still readable to check" "$($PIDLY check >/dev/null 2>&1 && echo ok)" "ok"
 
-before=$(sed -n 's/^updated: //p' .pidly/2/info)
 sedi 's/^updated: .*/updated: 2020-01-01T00:00:00Z/' .pidly/2/info
 $PIDLY set 2 effort M >/dev/null
 hasnt "writing a field is activity, so updated moves" \
@@ -79,7 +78,7 @@ out=$($PIDLY fields)
 has "the migration reports what it added" "$out" "3     + handoff area"
 hasnt "and leaves the ticket that already had it alone" "$out" "1     +"
 check "every ticket now has the slot" \
-	"$(grep -l '^area' .pidly/1/info .pidly/c/2/info .pidly/3/info | wc -l)" "3"
+	"$(grep -l '^area' .pidly/1/info .pidly/c/2/info .pidly/3/info | wc -l | tr -d " ")" "3"
 check "a closed ticket is migrated too" "$(grep -c '^area:$' .pidly/c/2/info || true)" "1"
 check "the value a ticket already had is untouched" \
 	"$(sed -n 's/^area: //p' .pidly/1/info)" "cli"
