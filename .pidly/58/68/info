@@ -1,11 +1,11 @@
-claim:ccr-08409db2@- 2026-11-04T20:55:07Z
+claim:
 needs:
 title: Run the tests in CI on Linux and macOS
 created: 2026-09-24T22:58:16Z
-updated: 2026-11-04T16:55:07Z
+updated: 2026-11-04T18:34:17Z
 effort: M
 area: cli
-handoff:
+handoff: Linux, gawk and shellcheck green in CI. macOS job never gets a runner (queued, cancelled at 15m); see body. Next: confirm macOS runners are available to the account, then read the first macOS log.
 
 There is no CI. Add a GitHub workflow that runs tests/run.sh on
 ubuntu-latest and macos-latest (with PIDLY_TEST_RACE lowered), plus
@@ -14,3 +14,6 @@ have never run on a Mac.
 
 Also make tests/run.sh find the *.sh suites itself rather than list them, so
 a new suite cannot be skipped by forgetting to add it.
+
+
+Done 2026-11-04 except one thing: .github/workflows/test.yml runs the suites on ubuntu (mawk), under gawk, and shellcheck, all green, plus pidly check; run.sh finds its suites. The macos-latest job has never completed: two early runs got a runner and ran 50+ minutes without finishing (cancelled; GitHub keeps no log for those), and every run since sat queued with no runner and was cancelled at 15 minutes, a rerun included. Jobs now have timeout-minutes: 15 and stdin from /dev/null, so if a runner does pick one up and it hangs, it fails with a log.

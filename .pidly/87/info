@@ -1,11 +1,11 @@
-claim:ccr-08409db2@- 2026-11-04T20:55:07Z
+claim:
 needs:
 title: Make the test suite pass on macOS
 created: 2026-10-24T21:42:57Z
-updated: 2026-11-04T16:55:07Z
+updated: 2026-11-04T18:34:17Z
 effort: M
 area: cli
-handoff:
+handoff: All 11 known macOS failures addressed; unverified on a Mac. Run tests/run.sh on one, or get the CI macOS job a runner (68).
 
 Found running tests/run.sh on macOS (2026-10-24, after 85 and 86): 11 failures left.
 
@@ -15,3 +15,6 @@ Found running tests/run.sh on macOS (2026-10-24, after 85 and 86): 11 failures l
 - the shapes a regex gets wrong: `a literal backslash-n stays two characters` gets empty output.
 
 The last two need a look; they may be more BSD awk/sed differences in the script, not the tests.
+
+
+Progress 2026-11-04: the six unpadded wc -l comparisons are piped through tr -d " "; init counts with arithmetic so BSD wc padding no longer breaks "dated 1 ticket(s)"; the backslash-n failure was 79 (gsub replacement), fixed; the three /proc failures are 66, fixed with ps -o lstart=. Everything passes locally under original-awk (BWK) and with /proc disabled for liveness, but nothing has run on a real Mac since: CI macOS jobs do not get a runner (see 68).
