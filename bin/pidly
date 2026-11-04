@@ -262,7 +262,9 @@ before() {
 	# Both in the format's own shape: the fast path, which check takes once
 	# per ticket. The sort below is three processes and a command
 	# substitution, and it was being paid for every ticket in the tracker.
+	# shellcheck disable=SC2254 # ISO_GLOB is a pattern, meant as one
 	case $1 in $ISO_GLOB)
+		# shellcheck disable=SC2254
 		case $2 in $ISO_GLOB) iso_before "$1" "$2"; return $? ;; esac ;;
 	esac
 	# Anything else — a hand-written stamp, a value check is about to
@@ -2862,7 +2864,7 @@ cmd_init() {
 		printf 'x\n' >> "$_ir/.backfilled.$$"
 	done
 	[ -f "$_ir/.backfilled.$$" ] &&
-		{ _added=$(wc -l < "$_ir/.backfilled.$$"); rm -f "$_ir/.backfilled.$$"; }
+		{ _added=$(($(wc -l < "$_ir/.backfilled.$$"))); rm -f "$_ir/.backfilled.$$"; }
 
 	# Date the tickets that predate the timestamps, or that were written by
 	# hand. A ticket nothing can date keeps no line at all: a guess that
@@ -2893,8 +2895,10 @@ cmd_init() {
 		# init's. A ticket that needed no dating is not a failure.
 		if [ "$_did" = yes ]; then printf 'x\n' >> "$_ir/.dated.$$"; fi
 	done
+	# Arithmetic rather than the bare count: BSD wc pads it with spaces,
+	# which would land in the message as "dated       1 ticket(s)" (87).
 	[ -f "$_ir/.dated.$$" ] &&
-		{ _dated=$(wc -l < "$_ir/.dated.$$"); rm -f "$_ir/.dated.$$"; }
+		{ _dated=$(($(wc -l < "$_ir/.dated.$$"))); rm -f "$_ir/.dated.$$"; }
 
 	if [ "$_fresh" = yes ]; then
 		printf 'created %s\n' "$_ir"
@@ -3976,15 +3980,23 @@ json_flat() {
 		while (i <= n && substr(s, i, 1) !~ /[,}\]\t\r\n ]/) i++
 		return substr(s, start, i - start)
 	}
-	# Eight backslashes to double one. The string literal collapses to four,
-	# and gsub reads its replacement again, where two mean one literal — so
-	# the obvious four replaces a backslash with itself and the encoding
-	# stops being reversible.
+	# Literal replacement by index, not gsub. A backslash in a gsub
+	# replacement is read again by gsub, and gawk, mawk and BSD awk disagree
+	# on how many it takes to mean one, so doubling a backslash that way is
+	# right on one awk and silently wrong on the others (79, 87).
+	function rep(s, from, to,   out, k) {
+		out = ""
+		while ((k = index(s, from)) > 0) {
+			out = out substr(s, 1, k - 1) to
+			s = substr(s, k + length(from))
+		}
+		return out s
+	}
 	function enc(v) {
-		gsub(/\\/, "\\\\\\\\", v)
-		gsub(/\n/, "\\n", v)
-		gsub(/\t/, "\\t", v)
-		gsub(/\r/, "", v)
+		v = rep(v, "\\", "\\\\")
+		v = rep(v, "\n", "\\n")
+		v = rep(v, "\t", "\\t")
+		v = rep(v, "\r", "")
 		return v
 	}
 	function emit(path, v) { if (path != "") printf "%s\t%s\n", path, enc(v) }
@@ -4514,10 +4526,22 @@ roff_escape() {
 		# the only non-ASCII character the usage text uses, and a manual
 		# page that holds it raw makes troff warn on every line it is on.
 		BEGIN { sq = sprintf("%c", 39); em = sprintf("%c%c%c", 226, 128, 148) }
+		# Literal replacement by index rather than gsub. How many backslashes
+		# a gsub replacement needs differs between gawk, mawk and BSD awk,
+		# and a man page that comes out with \\(em on one of them is out of
+		# date there forever (79).
+		function rep(s, from, to,   out, k) {
+			out = ""
+			while ((k = index(s, from)) > 0) {
+				out = out substr(s, 1, k - 1) to
+				s = substr(s, k + length(from))
+			}
+			return out s
+		}
 		{
 			# Backslashes first: the escapes below introduce their own.
-			gsub(/\\/, "\\\\e")
-			gsub(em, "\\\\(em")
+			$0 = rep($0, "\\", "\\e")
+			$0 = rep($0, em, "\\(em")
 			c = substr($0, 1, 1)
 			if (c == "." || c == sq) $0 = "\\&" $0
 			print

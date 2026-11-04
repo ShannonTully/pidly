@@ -2,7 +2,7 @@ claim:
 needs:
 title: Make pidly man portable to mawk, which doubles the backslash in \(em
 created: 2026-10-24T10:29:00Z
-updated: 2026-10-24T21:43:29Z
+updated: 2026-11-04T17:01:19Z
 effort: S
 area: cli
 handoff:
@@ -11,3 +11,6 @@ Found porting idol's fixes (2026-10-24). Under mawk, the default awk on Debian a
 
 
 Also BSD awk (macOS, 20200816): `pidly check` there reports docs/pidly.1 out of date for the same \\(em doubling (seen 2026-10-24).
+
+
+Fixed 2026-11-04: roff_escape and the migrate JSON encoder replace literally by index() instead of gsub, so no backslash goes through a gsub replacement. Tests and pidly check now pass identically under mawk, gawk and original-awk (BWK, which macOS ships).

@@ -1,8 +1,8 @@
-claim:
+claim:ccr-08409db2@- 2026-11-04T20:55:07Z
 needs:
 title: Make the test suite pass on macOS
 created: 2026-10-24T21:42:57Z
-updated: 2026-10-24T21:42:57Z
+updated: 2026-11-04T16:55:07Z
 effort: M
 area: cli
 handoff:
