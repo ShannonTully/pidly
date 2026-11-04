@@ -5,6 +5,9 @@
 # bin/pidly, which tests/packaging.sh checks, and .SRCINFO must agree with
 # this file. The sha256 cannot be real until the tag is pushed; the README's
 # release steps say how to fill it in.
+#
+# awk rather than gawk: the script runs on any POSIX awk, and on Arch awk is
+# a virtual package that gawk, mawk and onetrue-awk all provide.
 
 pkgname=pidly
 pkgver=0.1.0
@@ -13,7 +16,7 @@ pkgdesc='File-based issue tracker that needs no server or database'
 arch=('any')
 url='https://github.com/ShannonTully/pidly'
 license=('MIT')
-depends=('sh' 'coreutils' 'findutils' 'gawk' 'grep' 'sed')
+depends=('sh' 'coreutils' 'findutils' 'awk' 'grep' 'sed')
 optdepends=('git: dating older tickets from history when pidly init adopts them')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('UNRELEASED')

@@ -269,6 +269,11 @@ would be state that can disagree with the files. What a version is for is
 letting a person say what they are running, and letting a package name
 something — which is why it lives in the script and nowhere else.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the rules the code keeps and the
+checks to run, and [CHANGELOG.md](CHANGELOG.md) for what has changed.
+
 ## Licence
 
 MIT — see [LICENSE](LICENSE). `bin/pidly` carries an `SPDX-License-Identifier`
